@@ -1,0 +1,25 @@
+# Jev-Switch MVP example config
+#
+# 加载顺序：
+#   1. $JEV_SWITCH_CONFIG 环境变量
+#   2. 否则 ~/.jev-switch/providers.toml
+#
+# MVP 范围（M0）：2 provider + 静态 model→upstream 映射。
+
+[providers.vercel]
+kind = "vercel"
+base = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
+api_key_env = "AI_GATEWAY_API_KEY"
+enabled = true
+
+[providers.laya]
+kind = "laya"
+base = "http://127.0.0.1:18765/v1/systemone"
+enabled = true
+
+# Router 段：model id → upstream id
+# 调用方 POST {"model": "laya-english", ...} 即走 Laya
+# 调用方 POST {"model": "typesafe-ai/jev", ...} 即走 Vercel
+[router]
+"laya-english" = "laya"
+"typesafe-ai/jev" = "vercel"

@@ -1,0 +1,15 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node (UI)
+node_modules/
+dist/
+.vite/
+
+# Env
+.env
+.env.local
+
+# Logs
+*.log
