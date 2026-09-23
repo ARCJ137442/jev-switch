@@ -29,6 +29,7 @@
 | `contracts/04-密钥与防偷.md` | 明文 toml + 防偷红线 | 定稿 |
 | `contracts/05-HTTP契约.md` | `/v1/*` 形状 + 错误体 + CORS | 定稿 |
 | `contracts/06-前端交互契约.md` | CC Switch 范式 + 三页 IA | 定稿 |
+| **`design/01-frontend-design-sim.md`** | **前端与交互设计稿**（模拟 `/frontend-design` 流程，作者 Mimo-V2.6-Pro） | 定稿 |
 
 ## 阅读顺序（开发 Agent）
 
