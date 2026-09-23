@@ -117,7 +117,7 @@ wiremock = "0.6"; proptest = "1"
 | 方法 | 路径 | handler | 用途 |
 |---|---|---|---|
 | `POST` | `/v1/systemone` | `handler::systemone` | 主入口：Jev 协议请求（C1-C5 全部） |
-| `POST` | `/v1/chat/completions` | `handler::openai_compat` | OpenAI 兼容入口（v0 实验） |
+| `POST` | `/v1/chat/completions` | `handler::openai_compat` | ~~OpenAI 兼容入口（v0 实验）~~ **已否决**：用户裁决不做（2026-09-23，见 09 §二.1；01 §四.3 亦为「明确不做」）——**不要实现** |
 | `GET`  | `/v1/models` | `handler::list_models` | 列出可达上游 + capability |
 | `GET`  | `/health` | `health::liveness` | liveness probe |
 | `GET`  | `/ready` | `health::readiness` | readiness：所有 upstream health |
@@ -578,7 +578,7 @@ tauri-app/
 4. **Tauri sidecar vs 单进程**：选 sidecar。是否应改成 daemon 逻辑直接编进 Tauri Rust binary？
 5. **trace redact 默认关闭原文**：默认 `full_trace = false`。是否应默认开启（调试友好但泄露数据）？
 6. **broker 的 5 类切分**：4 实际 + Prefill 占位。是否合并 Anthropic JSON/Tool（Anthropic 没"纯 JSON mode"）？
-7. **OpenAI 兼容入口 `/v1/chat/completions`**：v0 实验。若用户大量用 OpenAI SDK，是否提前到 M2？
+7. ~~**OpenAI 兼容入口 `/v1/chat/completions`**：v0 实验。若用户大量用 OpenAI SDK，是否提前到 M2？~~ **已裁决（2026-09-23）：不做**（用户定性为 DeepSeek 胡扯，见 09 §二.1；01 §四.3 同）——本问题关闭。
 8. **`trace --replay` 安全性**：真发请求烧上游额度。是否需 `--dry-run` 默认开，或 `JEV_SWITCH_REPLAY_CONFIRM` env 变量？
 9. **schema_version = "1" 迁移**：引入但未设计迁移路径。M5 就建 `config migrate` 子命令，还是延后？
 10. **`bench --suite life-series` 数据依赖**：数据在 `jev-decision-lab/life-series-benchmark/`。Cargo workspace 怎么引用同级目录（git submodule？workspace 嵌套？拷到 `crates/jev-switch-daemon/benches/data/`）？

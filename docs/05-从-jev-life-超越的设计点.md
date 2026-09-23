@@ -395,8 +395,6 @@ OpenRouter / Vercel 这种"已经是 Jev"的网关不在它的视野里。
 
 **Jev-Switch 升级**：M1 本地 daemon → M6 React Web 控制面板 → M7 Tauri 桌面。
 
-**Jev-Switch 升级**：M1 本地 daemon → M6 React Web 控制面板 → M7 Tauri 桌面。
-
 ```rust
 // rs/src/main.rs —— 本地 daemon 入口
 #[tokio::main]
@@ -592,7 +590,4 @@ Metrics 三页）。配置文件位置约定（与 LM Studio / CC Switch 一致�
 
 ## 接下来要做的事
 
-1. `rs/` 下 `cargo init --lib` + axum + tokio + reqwest
-2. 按编号完成第六节 5 个子任务（可多 subAgent 并行）
-3. 写 `docs/04-架构设计-from-sys1-借鉴.md`
-4. M1 启 5 类 upstream + capability 矩阵，wiremock 集成测试
+> **（历史待办，已由后续计划取代）** 本文写作时的清单：第 1、3 项已随 `v0.1.0-mvp` 完成；其余以 `08-CONTRACT` §4 施工计划与 `07-REVIEW` §7 意见清单为准。

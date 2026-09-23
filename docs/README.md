@@ -2,7 +2,7 @@
 
 > **本仓库**：`https://github.com/ARCJ137442/jev-switch`（private）  
 > **定位**：**Jev-Switch = 本地 Jev 协议多上游路由器**（Rust 后端 + React 前端 + 未来 Tauri）  
-> **当前阶段**：`v0.1.0-mvp` 已封存 → **Phase 0 契约正文已完成** → 待并行后端 A / 前端 B
+> **当前阶段**：`v0.1.0-mvp` 已封存 + P0 三修已合（`6af3a47`）→ **Phase 0 契约正文 + 前端设计稿齐备** → 待裁决并行后端 A / 前端 B
 
 ## 核心定位（一句话）
 
