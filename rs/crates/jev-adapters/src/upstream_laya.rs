@@ -1,4 +1,4 @@
-//! Laya 本地后端上游实现（M0.5）
+//! Laya 本地后端上游实现（M0.5 · P0-1 迁入 jev-adapters）
 //!
 //! 参考 jev-decision-lab `decision-bricks.ts::createLayaRuntime`：
 //! - POST `http://127.0.0.1:18765/v1/systemone`
@@ -8,8 +8,8 @@
 //!
 //! 与 Vercel 不同：Laya 完全透传；不需要任何 capability 翻译。
 
-use crate::protocol::SystemOneRequest;
-use crate::upstream::{Capabilities, JevError, Upstream};
+use jev_core::upstream::{Capabilities, JevError, Upstream};
+use jev_protocol::SystemOneRequest;
 use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
@@ -45,7 +45,7 @@ impl Upstream for LayaUpstream {
     }
 
     fn capabilities(&self) -> Capabilities {
-        crate::upstream::capabilities_of("laya")
+        jev_core::upstream::capabilities_of("laya")
             .expect("laya capability is hardcoded; this is a bug if missing")
     }
 
@@ -85,7 +85,7 @@ impl Upstream for LayaUpstream {
 
         if !status.is_success() {
             let body_text = String::from_utf8_lossy(&raw_bytes).to_string();
-            let retryable = crate::upstream::is_retryable_status("laya", status.as_u16());
+            let retryable = jev_core::upstream::is_retryable_status("laya", status.as_u16());
             return Err(JevError::Upstream {
                 upstream_id: self.id.clone(),
                 status: status.as_u16(),
@@ -125,6 +125,6 @@ mod tests {
     async fn laya_construction_ok() {
         let u = LayaUpstream::new("http://127.0.0.1:18765/v1/systemone".into()).unwrap();
         assert_eq!(u.id(), "laya");
-        assert!(u.capabilities().supports(crate::upstream::QuestionType::Noul));
+        assert!(u.capabilities().supports(jev_protocol::QuestionType::Noul));
     }
 }

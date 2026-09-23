@@ -1,4 +1,4 @@
-//! Upstream trait + Capability table（M0.3 + M0.4）
+//! Upstream trait + Capability table（M0.3 + M0.4 · P0-1 迁入 jev-core）
 //!
 //! 参考 03-上游类别与协议兼容矩阵 §2.3 capability 表（精简为 M0 范围：C2 Vercel + C5 Laya）。
 //! 参考 04-架构设计 §2.4 关键 trait。
@@ -9,9 +9,13 @@
 //!   在外层 `translate.rs` 处理。
 //! - 使用 Rust 1.75+ 的 native `async fn` in trait，无需 `async_trait`。
 
-use crate::protocol::SystemOneRequest;
+use jev_protocol::SystemOneRequest;
 use serde_json::Value;
 use thiserror::Error;
+
+// P0-1：QuestionType 随协议类型迁入 jev-protocol（DecisionQuestion::question_type() 需要它），
+// 这里重导出以保持 `jev_core::upstream::QuestionType` 路径不变。
+pub use jev_protocol::QuestionType;
 
 /// 上游错误分类。`retryable` 标志由调用方（router / handler）决定是否重试。
 #[derive(Debug, Error)]
@@ -73,26 +77,6 @@ impl JevError {
             JevError::Capability { .. } => 422,
             JevError::BadResponse { .. } => 502,
             JevError::Config { .. } => 500,
-        }
-    }
-}
-
-/// 问题类型枚举（capability 用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum QuestionType {
-    Choice,
-    Score,
-    Noul,
-    Boolean,
-}
-
-impl QuestionType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            QuestionType::Choice => "choice",
-            QuestionType::Score => "score",
-            QuestionType::Noul => "noul",
-            QuestionType::Boolean => "boolean",
         }
     }
 }

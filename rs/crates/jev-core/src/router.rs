@@ -1,8 +1,8 @@
-//! 简单 Router（M0.6）
+//! 简单 Router（M0.6 · P0-1 迁入 jev-core）
 //!
 //! MVP 策略：静态 `model → upstream` 映射（来自 config.toml）。
 //! capability 校验由 handler 在转发前调用 `check_capability`，不匹配转 422
-//! （见 main.rs `systemone_handler`）。
+//! （见 daemon `systemone_handler`）。
 //!
 //! 参考 06- §阶段 5 Router。
 
@@ -99,9 +99,7 @@ impl Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::SystemOneRequest;
-    use crate::upstream::QuestionType;
-
+    use jev_protocol::SystemOneRequest;
 
     /// Mock upstream for router unit tests.
     struct MockUpstream {

@@ -1,7 +1,11 @@
-//! Config 加载（M0.8）
+//! Config 加载（M0.8 · P0-1 迁入 jev-switch-daemon）
 //!
 //! 路径：`JEV_SWITCH_CONFIG` 环境变量，或默认 `~/.jev-switch/providers.toml`。
 //! 内容：2 个 provider + `[router] mapping` 段。
+//!
+//! 相对路径基准：`JEV_SWITCH_CONFIG` 若是相对路径，按**启动 cargo/二进制时的
+//! 进程 CWD**（工作区命令约定为仓库根）解析 —— 不是 manifest 目录、不是
+//! 配置文件自身位置。拆 workspace 不改变此基准（CWD 由调用方决定）。
 //!
 //! MVP 简化：
 //! - 单文件（不分 server/observability/cli 等段）
@@ -55,6 +59,7 @@ impl Config {
     /// 加载 config 文件。
     ///
     /// 路径优先：`JEV_SWITCH_CONFIG` 环境变量 → 否则 `~/.jev-switch/providers.toml`。
+    /// 相对路径按进程 CWD 解析（见模块文档）。
     pub fn load_default() -> Result<Self, ConfigError> {
         let path = std::env::var("JEV_SWITCH_CONFIG")
             .map(PathBuf::from)

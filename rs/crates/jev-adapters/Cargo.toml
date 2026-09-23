@@ -1,0 +1,18 @@
+[package]
+name = "jev-adapters"
+description = "Jev-Switch 上游适配：Vercel AI Gateway + Laya 本地 Jev"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+jev-protocol = { workspace = true }
+jev-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

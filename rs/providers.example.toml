@@ -4,6 +4,10 @@
 #   1. $JEV_SWITCH_CONFIG 环境变量
 #   2. 否则 ~/.jev-switch/providers.toml
 #
+# 相对路径基准：按启动进程时的 CWD 解析（工作区约定 = 仓库根，如
+# `JEV_SWITCH_CONFIG="rs\providers.example.toml"`），不是本文件/manifest 所在目录。
+# cargo workspace 拆分（rs/Cargo.toml → crates/*）不改变该基准。
+#
 # MVP 范围（M0）：2 provider + 静态 model→upstream 映射。
 
 [providers.vercel]

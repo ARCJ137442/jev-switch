@@ -1,6 +1,6 @@
-//! Jev-Switch MVP 入口（M0.9）
+//! Jev-Switch MVP 入口（M0.9 · P0-1 迁入 jev-switch-daemon）
 //!
-//! 整合：protocol / upstream / translate / router / config / axum HTTP server。
+//! 整合：jev-protocol / jev-core / jev-adapters / config / axum HTTP server。
 //!
 //! 路由：
 //! - `POST /v1/systemone` — 主入口：Jev 协议请求
@@ -10,12 +10,6 @@
 //! 错误映射：JevError → HTTP 状态码由 JevError::http_status() 决定。
 
 mod config;
-mod protocol;
-mod router;
-mod translate;
-mod upstream;
-mod upstream_laya;
-mod upstream_vercel;
 
 use anyhow::Context;
 use axum::{
@@ -26,17 +20,18 @@ use axum::{
     Json, Router,
 };
 use config::{Config, ConfigError};
-use protocol::{SystemOneRequest, SystemOneResponse};
-use router::Router as JevRouter;
+use jev_adapters::{upstream_laya::LayaUpstream, upstream_vercel::VercelUpstream};
+use jev_core::{
+    router::Router as JevRouter,
+    upstream::{JevError, Upstream},
+};
+use jev_protocol::{SystemOneRequest, SystemOneResponse};
 use serde::Serialize;
 use serde_json::json;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
-use upstream::{JevError, Upstream};
-use upstream_laya::LayaUpstream;
-use upstream_vercel::VercelUpstream;
 
 #[derive(Clone)]
 struct AppState {

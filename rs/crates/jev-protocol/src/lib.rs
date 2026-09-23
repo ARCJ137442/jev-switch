@@ -1,4 +1,4 @@
-//! Jev 协议类型（M0.2）
+//! Jev 协议类型（M0.2 · P0-1 迁入 jev-protocol，零 IO）
 //!
 //! 参考 04-架构设计 §1.1：与 sys1 共享的 serde 类型。
 //! 这里把整个 `SystemOneRequest` / `SystemOneResponse` / `DecisionQuestion` / `DecisionAnswer`
@@ -10,6 +10,9 @@
 //! - `DecisionAnswer` **宽容**：所有字段都可选，Jev-Switch 在边界把上游响应尽量
 //!   归一为标准 Jev shape 给调用方。
 //! - `criteria` 用 `serde_json::Value` 兼容 dict 和 list 两种 Jev 提交习惯。
+//!
+//! 分层约束（contracts/02 §3）：本 crate 零 IO —— 只允许 serde / serde_json，
+//! 禁止厂商字段名、URL、header、axum、reqwest。
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -33,6 +36,30 @@ pub struct SystemOneResponse {
     pub answers: BTreeMap<String, DecisionAnswer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<serde_json::Value>,
+}
+
+/// 问题类型枚举（capability 用）。
+///
+/// P0-1 注：原先定义在 `upstream.rs`（core 层），拆分时随
+/// `DecisionQuestion::question_type()` 一并迁入协议层（零 IO 枚举，
+/// core 经 `jev_core::upstream::QuestionType` 重导出，路径不变）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QuestionType {
+    Choice,
+    Score,
+    Noul,
+    Boolean,
+}
+
+impl QuestionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            QuestionType::Choice => "choice",
+            QuestionType::Score => "score",
+            QuestionType::Noul => "noul",
+            QuestionType::Boolean => "boolean",
+        }
+    }
 }
 
 /// 单个问题（请求侧）。
@@ -81,12 +108,12 @@ impl DecisionQuestion {
     }
 
     /// 问题类型 → capability 校验枚举（handler 转发前调 `Router::check_capability`）。
-    pub fn question_type(&self) -> crate::upstream::QuestionType {
+    pub fn question_type(&self) -> QuestionType {
         match self {
-            DecisionQuestion::Choice { .. } => crate::upstream::QuestionType::Choice,
-            DecisionQuestion::Score { .. } => crate::upstream::QuestionType::Score,
-            DecisionQuestion::Noul { .. } => crate::upstream::QuestionType::Noul,
-            DecisionQuestion::Boolean { .. } => crate::upstream::QuestionType::Boolean,
+            DecisionQuestion::Choice { .. } => QuestionType::Choice,
+            DecisionQuestion::Score { .. } => QuestionType::Score,
+            DecisionQuestion::Noul { .. } => QuestionType::Noul,
+            DecisionQuestion::Boolean { .. } => QuestionType::Boolean,
         }
     }
 

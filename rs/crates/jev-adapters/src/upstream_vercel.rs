@@ -1,18 +1,18 @@
-//! Vercel AI Gateway 上游实现（M0.5 + M0.7 翻译层落点）
+//! Vercel AI Gateway 上游实现（M0.5 + M0.7 翻译层落点 · P0-1 迁入 jev-adapters）
 //!
 //! 参考 jev-decision-lab `decision-bricks.ts::VercelGatewayJevRuntime`：
 //! - POST 到 `https://ai-gateway.vercel.sh/v4/ai/evaluation-model`
 //! - Headers: `Authorization: Bearer <AI_GATEWAY_API_KEY>` + 4 个 `ai-*` header
-//! - `noul` → `boolean` 翻译在入口（`translate::normalize_request_for_vercel`）
-//! - `boolean: true/false` → `noul` 在出口（`translate::build_jev_response_from_vercel`）
+//! - `noul` → `boolean` 翻译在入口（`jev_core::translate::normalize_request_for_vercel`）
+//! - `boolean: true/false` → `noul` 在出口（`jev_core::translate::build_jev_response_from_vercel`）
 //! - Vercel 不报 `usage`：写 `None`
 //!
 //! 不变量：调用方在 handler 层只看到 Jev 标准 `type: noul`；Vercel 看到的永远是
 //! `type: boolean`（除非原本就是 choice / score）。
 
-use crate::protocol::{SystemOneRequest, VercelResponse};
-use crate::translate::{build_jev_response_from_vercel, normalize_request_for_vercel};
-use crate::upstream::{Capabilities, JevError, Upstream};
+use jev_core::translate::{build_jev_response_from_vercel, normalize_request_for_vercel};
+use jev_core::upstream::{Capabilities, JevError, Upstream};
+use jev_protocol::{SystemOneRequest, VercelResponse};
 use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
@@ -68,7 +68,7 @@ impl Upstream for VercelUpstream {
 
     fn capabilities(&self) -> Capabilities {
         // Capability 与 `capabilities_of("vercel")` 一致：直接查表。
-        crate::upstream::capabilities_of("vercel")
+        jev_core::upstream::capabilities_of("vercel")
             .expect("vercel capability is hardcoded; this is a bug if missing")
     }
 
@@ -124,7 +124,7 @@ impl Upstream for VercelUpstream {
 
         if !status.is_success() {
             let body_text = String::from_utf8_lossy(&raw_bytes).to_string();
-            let retryable = crate::upstream::is_retryable_status("vercel", status.as_u16());
+            let retryable = jev_core::upstream::is_retryable_status("vercel", status.as_u16());
             return Err(JevError::Upstream {
                 upstream_id: self.id.clone(),
                 status: status.as_u16(),
@@ -155,7 +155,7 @@ impl Upstream for VercelUpstream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::DecisionQuestion;
+    use jev_protocol::DecisionQuestion;
     use std::collections::BTreeMap;
 
     #[tokio::test]

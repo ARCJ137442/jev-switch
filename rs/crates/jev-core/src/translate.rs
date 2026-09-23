@@ -1,4 +1,4 @@
-//! Vercel `noul` ↔ `boolean` 翻译层（M0.7）
+//! Vercel `noul` ↔ `boolean` 翻译层（M0.7 · P0-1 迁入 jev-core）
 //!
 //! 参考 03-上游类别与协议兼容矩阵 §2.4：
 //! - 入站：Jev `type: noul` → Vercel `type: boolean`（仅重命名 type，criteria 保持）。
@@ -13,7 +13,7 @@
 //! 出站调 `build_jev_response_from_vercel`，调用方视角的 request/response 始终保持
 //! Jev 标准形态，协议差异对调用方不可见。
 
-use crate::protocol::{DecisionAnswer, DecisionQuestion, SystemOneRequest, SystemOneResponse};
+use jev_protocol::{DecisionAnswer, DecisionQuestion, SystemOneRequest, SystemOneResponse};
 use std::collections::BTreeMap;
 
 /// 把 Jev 请求翻译成 Vercel 形态。
@@ -45,7 +45,7 @@ pub fn normalize_request_for_vercel(req: SystemOneRequest) -> SystemOneRequest {
 ///   优先级取值（修复：早期实现丢弃 Vercel 的 `probability` 字段，恒用假值 0.95/0.05）。
 /// - choice / score / 未知 type：best-effort 字段平移。
 pub fn build_jev_response_from_vercel(
-    raw: &crate::protocol::VercelResponse,
+    raw: &jev_protocol::VercelResponse,
     original_request: &SystemOneRequest,
 ) -> SystemOneResponse {
     let mut answers: BTreeMap<String, DecisionAnswer> = BTreeMap::new();
@@ -121,7 +121,7 @@ pub fn build_jev_response_from_vercel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{VercelAnswer, VercelResponse};
+    use jev_protocol::{VercelAnswer, VercelResponse};
     use std::collections::BTreeMap;
 
     fn make_original_noul_request() -> SystemOneRequest {

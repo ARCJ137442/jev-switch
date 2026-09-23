@@ -1,11 +1,34 @@
-[package]
-name = "jev-switch"
+# Jev-Switch cargo workspace（P0-1 拆分：纯搬家，语义不变）
+#
+# 结构：
+#   crates/jev-protocol       — 协议类型（零 IO，仅 serde/serde_json）
+#   crates/jev-core           — router + Upstream trait + translate（无 axum / reqwest）
+#   crates/jev-adapters       — vercel / laya 上游适配（reqwest + async-trait）
+#   crates/jev-switch-daemon  — axum daemon（bin：main + config）
+#
+# 常用命令（从仓库根执行）：
+#   cargo test --manifest-path rs/Cargo.toml --workspace
+#   cargo run   --manifest-path rs/Cargo.toml        # default-members 指向 daemon
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+# 裸 `cargo run/build`（virtual manifest）默认只构建 daemon bin
+default-members = ["crates/jev-switch-daemon"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-description = "Jev-Switch MVP: Jev 协议多上游路由器"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/ARCJ137442/jev-switch"
 
-[dependencies]
+[workspace.dependencies]
+# 内部 crate
+jev-protocol = { path = "crates/jev-protocol", version = "0.1.0" }
+jev-core = { path = "crates/jev-core", version = "0.1.0" }
+jev-adapters = { path = "crates/jev-adapters", version = "0.1.0" }
+
+# 外部 crate（版本与拆分前 rs 单包保持一致）
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -18,6 +41,3 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
 tower-http = { version = "0.6", features = ["cors"] }
-
-[dev-dependencies]
-tokio = { version = "1", features = ["full", "test-util"] }

@@ -1,5 +1,7 @@
-# Rust
+# Rust — cargo workspace（rs/Cargo.toml [workspace]）构建产物统一在 rs/target/；
+# 无匹配（CARGO_TARGET_DIR 覆盖、crates 内手工 cargo build）也一并兜住。
 target/
+**/target/
 **/*.rs.bk
 
 # Node (UI)
