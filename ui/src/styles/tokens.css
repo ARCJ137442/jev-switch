@@ -61,3 +61,44 @@
   outline: 2px solid var(--primary-bright);
   outline-offset: 2px;
 }
+
+/* ── 深色变体（块 2）：CC Switch 色系深色版 — 同结构镜像，正文全 ≥4.5:1。
+   实测对比度表：docs/design/02 §5 落地色板（浅/深）。 */
+[data-theme='dark'] {
+  --bg: #141417;
+  --panel: #1c1c20;
+  --soft: #232329;
+
+  /* ink 15.5 / muted 6.6 / subtle 5.3（panel）· 5.7（bg）· 4.9（soft） */
+  --ink: #f4f4f5;
+  --ink-muted: #a1a1ab;
+  --ink-subtle: #8f8f99;
+
+  --border: #2e2e34;
+  /* 文字蓝提亮到 #4d9dff（6.1 on panel）；实底保持 CC 蓝 #0060DF（白字 5.62） */
+  --primary: #4d9dff;
+  --primary-fill: #0060df;
+  --primary-fill-hover: #0a72e8; /* 白字 4.58 ≥4.5 */
+  --primary-bright: #59a8ff;
+  --primary-wash: rgba(89, 168, 255, 0.14);
+  --overlay: rgba(0, 0, 0, 0.62);
+
+  /* 状态：深色反相 300 档文字 on 950 档底 — pill 9.96/10.8/8.3 */
+  --ok: #5eead4;
+  --ok-bg: #052e26;
+  --ok-dot: #10b981;
+  --warn: #fcd34d;
+  --warn-bg: #2e2208;
+  --warn-dot: #f59e0b;
+  --danger: #fca5a5;
+  --danger-bg: #3f1519;
+  --danger-fill: #dc2626; /* 白字 4.83 — 实底双主题同值 */
+  --danger-dot: #ef4444;
+  --info: #7dd3fc;
+  --info-bg: #0c2f47;
+
+  --edge: #4d9dff;
+  --edge-idle: #4b4b55; /* 默认边=装饰（同浅色豁免标注） */
+
+  color-scheme: dark;
+}

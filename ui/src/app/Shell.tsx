@@ -103,6 +103,24 @@ function ShellFrame({ route, children }: ShellProps) {
     return () => setAuthErrorHandler(null);
   }, []);
 
+  /* 主题切换（块 2）：data-theme 由 main.tsx 首帧初始化；此处只读当前值 + 翻转持久化 */
+  const [theme, setThemeState] = useState<'light' | 'dark'>(
+    () =>
+      (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light') as
+        | 'light'
+        | 'dark',
+  );
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem('jev_theme', next);
+    } catch {
+      /* 隐私模式 → 仅本会话生效 */
+    }
+    setThemeState(next);
+  };
+
   const daemonTone: BadgeTone =
     server.status === 'ok' ? 'ok' : server.status === 'error' ? 'danger' : 'muted';
   const daemonLabel =
@@ -155,14 +173,31 @@ function ShellFrame({ route, children }: ShellProps) {
             })}
           </nav>
         </div>
-        {/* 顶栏第二行：daemon 状态胶囊 · masked-key hint · 版本 */}
+        {/* 顶栏第二行：daemon 状态胶囊 · masked-key hint · 版本 · 主题切换 */}
         <div className="border-t border-border">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-1.5 font-mono text-[10px] uppercase tracking-widest">
             <StatusBadge tone={daemonTone} aria-live="polite">
               {daemonLabel}
             </StatusBadge>
-            <span className="text-inkMuted">masked-key</span>
-            <span className="text-inkMuted tabular">v{pkg.version}</span>
+            <span className="flex items-center gap-3">
+              <span className="text-inkMuted">masked-key</span>
+              <span className="text-inkMuted tabular">v{pkg.version}</span>
+              {/* 主题切换钮：mono 工具感文字钮（块 2） */}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={
+                  theme === 'dark'
+                    ? 'Switch to light theme (当前：深色)'
+                    : 'Switch to dark theme (当前：浅色)'
+                }
+                aria-pressed={theme === 'dark'}
+                className="inline-flex items-center gap-1 rounded-ctl border border-border bg-panel px-2 py-0.5 text-inkMuted transition-colors hover:border-primaryBright hover:bg-soft hover:text-primary"
+              >
+                <span aria-hidden>{theme === 'dark' ? '☾' : '☀'}</span>
+                <span>{theme === 'dark' ? 'DARK' : 'LIGHT'}</span>
+              </button>
+            </span>
           </div>
         </div>
       </header>

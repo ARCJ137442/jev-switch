@@ -4,6 +4,25 @@ import App from './App';
 import './styles/tokens.css';
 import './index.css';
 
+/* 主题初始值（块 2）：localStorage['jev_theme'] 优先，否则遵 prefers-color-scheme。
+   在首帧渲染前写 data-theme，避免浅→深闪烁。 */
+function initTheme(): void {
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem('jev_theme');
+  } catch {
+    /* 隐私模式等 → 走系统偏好 */
+  }
+  const theme =
+    stored === 'dark' || stored === 'light'
+      ? stored
+      : window.matchMedia?.('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+  document.documentElement.dataset.theme = theme;
+}
+initTheme();
+
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('#root not found');
 
