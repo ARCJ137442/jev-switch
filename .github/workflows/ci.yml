@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: cargo test (workspace)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo test — 默认 features
+        run: cargo test --manifest-path rs/Cargo.toml --workspace
+      - name: cargo test — ts-rs features + 生成物 diff 门禁
+        run: |
+          cargo test --manifest-path rs/Cargo.toml --workspace --features ts-rs
+          git diff --exit-code -- ui/src/generated rs/crates/jev-protocol/bindings \
+            || { echo "::error::ts-rs 生成物与提交不一致 — 请跑 cargo test --features ts-rs 后提交 ui/src/generated"; exit 1; }
+
+  frontend:
+    name: npm lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: npm install
+        run: npm install --prefix ui
+      - name: tsc --noEmit
+        run: npm run lint --prefix ui
+      - name: vite build
+        run: npm run build --prefix ui
