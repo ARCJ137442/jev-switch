@@ -1,5 +1,6 @@
 import { getBase } from '../api';
 import { PROVIDERS_FIXTURE } from '../fixtures/providers.mock';
+import { ROUTES_FIXTURE } from '../fixtures/routes.mock';
 
 /**
  * Admin API 客户端（contracts/05 §2 形状字面）。
@@ -176,6 +177,141 @@ export async function probeProvider(id: string): Promise<ProbeResponse> {
   }
   const encoded = encodeURIComponent(id);
   return request<ProbeResponse>(`/v1/admin/providers/${encoded}/probe`, { method: 'POST' });
+}
+
+/* ---------- routes（contracts/03 §2 / contracts/05 GET·PUT /v1/admin/routes） ---------- */
+
+export interface Route {
+  left: string;
+  match: 'exact' | 'prefix';
+  right: string;
+  upstream_model?: string;
+  priority: number;
+  sticky?: 'none' | 'session';
+  on_error?: 'next' | 'fail';
+}
+
+export interface RoutesResponse {
+  routes: Route[];
+}
+
+/** 带 400 语义的 admin 错误（环 → cycleEdges 供 UI 标红） */
+export class AdminApiError extends Error {
+  readonly status: number;
+  readonly cycleEdges?: string[];
+  constructor(message: string, status: number, cycleEdges?: string[]) {
+    super(message);
+    this.name = 'AdminApiError';
+    this.status = status;
+    this.cycleEdges = cycleEdges;
+  }
+}
+
+/** 边的稳定标识：left => right（UI 假定该对唯一） */
+export function edgeKey(left: string, right: string): string {
+  return `${left}=>${right}`;
+}
+
+/** 归一化：固定键序 + 默认值（保证 JSON 深比较/UNSAVED 判定稳定） */
+export function normalizeRoute(r: Route): Route {
+  const out: Route = {
+    left: r.left,
+    match: r.match === 'prefix' ? 'prefix' : 'exact',
+    right: r.right,
+    priority: typeof r.priority === 'number' && Number.isFinite(r.priority) ? r.priority : 10,
+    sticky: r.sticky === 'session' ? 'session' : 'none',
+    on_error: r.on_error === 'fail' ? 'fail' : 'next',
+  };
+  if (typeof r.upstream_model === 'string' && r.upstream_model.length > 0) {
+    out.upstream_model = r.upstream_model;
+  }
+  return out;
+}
+
+/** 本地环检（design/01 §6.2：PUT 前检环；服务端 400 时同样返回边键集合） */
+export function findCyclicEdgeKeys(routes: Route[]): string[] {
+  const cycle = findCycle(routes);
+  if (cycle === null) return [];
+  const keys: string[] = [];
+  for (let i = 0; i < cycle.length; i++) {
+    keys.push(edgeKey(cycle[i], cycle[(i + 1) % cycle.length]));
+  }
+  return keys;
+}
+
+function findCycle(routes: Route[]): string[] | null {
+  const adj = new Map<string, string[]>();
+  for (const r of routes) {
+    const arr = adj.get(r.left) ?? [];
+    arr.push(r.right);
+    adj.set(r.left, arr);
+  }
+  const WHITE = 0;
+  const GREY = 1;
+  const BLACK = 2;
+  const color = new Map<string, number>();
+  const stack: string[] = [];
+
+  const dfs = (u: string): string[] | null => {
+    color.set(u, GREY);
+    stack.push(u);
+    for (const v of adj.get(u) ?? []) {
+      const c = color.get(v) ?? WHITE;
+      if (c === GREY) return stack.slice(stack.indexOf(v));
+      if (c === WHITE) {
+        const got = dfs(v);
+        if (got !== null) return got;
+      }
+    }
+    stack.pop();
+    color.set(u, BLACK);
+    return null;
+  };
+
+  for (const u of adj.keys()) {
+    if ((color.get(u) ?? WHITE) === WHITE) {
+      const got = dfs(u);
+      if (got !== null) return got;
+    }
+  }
+  return null;
+}
+
+/** mock 内存态 */
+let mockRoutes: Route[] = ROUTES_FIXTURE.map(normalizeRoute);
+
+export async function listRoutes(): Promise<RoutesResponse> {
+  if (adminMode === 'mock') {
+    await delay(80);
+    return { routes: mockRoutes.map((r) => ({ ...r })) };
+  }
+  return request<RoutesResponse>('/v1/admin/routes');
+}
+
+export async function putRoutes(routes: Route[]): Promise<RoutesResponse> {
+  const normalized = routes.map(normalizeRoute);
+  // 环 = 400（contracts/05：DAG 含环则 400）— mock 服务端校验，环边键回传供标红
+  const cycleEdges = findCyclicEdgeKeys(normalized);
+  if (cycleEdges.length > 0) {
+    throw new AdminApiError('路由成环，已拒绝写入', 400, cycleEdges);
+  }
+  if (adminMode === 'mock') {
+    await delay(150);
+    mockRoutes = normalized.map((r) => ({ ...r }));
+    return { routes: mockRoutes.map((r) => ({ ...r })) };
+  }
+  try {
+    return await request<RoutesResponse>('/v1/admin/routes', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ routes: normalized }),
+    });
+  } catch (e) {
+    // 真 API 400 环错误消息含「环」时按 AdminApiError 上抛（H3 后按 A7 实际文案对齐）
+    const msg = (e as Error).message;
+    if (msg.includes('环')) throw new AdminApiError(msg, 400, findCyclicEdgeKeys(normalized));
+    throw e;
+  }
 }
 
 /* ---------- toml 片段解析（贴 toml Tab） ---------- */
