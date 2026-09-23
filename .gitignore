@@ -20,3 +20,8 @@ Thumbs.db
 # 临时 / 本地产物
 *.log
 .tmp/
+
+# Tauri 桌面壳（src-tauri 独立工程）构建产物与 sidecar 暂存二进制
+src-tauri/target/
+src-tauri/binaries/*.exe
+src-tauri/gen/

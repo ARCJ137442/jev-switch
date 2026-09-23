@@ -1,0 +1,33 @@
+# Jev-Switch 桌面壳 —— 独立 Cargo 工程（**不加入 rs/ workspace**，避免与 daemon
+# 工作区及并行前端线互相干扰）。任务 #44 · docs/12 §四-线3。
+#
+# 形态：Tauri 2 壳（窗口 + 托盘 + 单实例）+ sidecar（打包进资源的 jev-switch.exe）
+# webview 直载 http://127.0.0.1:11435 —— daemon ServeDir 同源托管 ui/dist，local 态免 token。
+
+[package]
+name = "jev-switch-shell"
+version = "0.1.0"
+edition = "2021"
+description = "Jev-Switch 桌面壳（Tauri 2 · Windows 优先）"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ARCJ137442/jev-switch"
+
+# 产物名与 tauri.conf.json productName / mainBinaryName 对齐
+[[bin]]
+name = "jev-switch"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

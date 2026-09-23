@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "jev-switch",
+  "mainBinaryName": "jev-switch",
+  "version": "0.1.0",
+  "identifier": "io.github.arcj137442.jevswitch",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "npm run build --prefix ui",
+    "frontendDist": "./shell"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Jev-Switch",
+        "url": "waiting.html",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "externalBin": ["binaries/jev-switch-daemon"],
+    "resources": {
+      "../ui/dist": "ui/dist"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}

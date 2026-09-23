@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jev-Switch 启动中</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #101010;
+        color: #f5f5f5;
+        font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+      }
+      main {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+      }
+      .mark {
+        width: 96px;
+        height: 96px;
+        background: #000;
+        border: 1px solid #2a2a2a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 58px;
+        font-weight: 700;
+        letter-spacing: 0;
+        user-select: none;
+      }
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      #status {
+        margin: 0;
+        font-size: 13px;
+        color: #a8a8a8;
+        font-family: Consolas, "Courier New", monospace;
+      }
+      .spinner {
+        width: 22px;
+        height: 22px;
+        border: 2px solid #2e2e2e;
+        border-top-color: #f5f5f5;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      footer {
+        position: fixed;
+        bottom: 16px;
+        font-size: 11px;
+        color: #5c5c5c;
+        font-family: Consolas, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">J</div>
+      <h1>Jev-Switch</h1>
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="status">正在启动本地守护进程…（轮询 127.0.0.1:11435/health）</p>
+    </main>
+    <footer>sidecar daemon · local 态 · 127.0.0.1:11435</footer>
+    <script>
+      // 就绪轮询在 Rust 侧完成（跨源 fetch 会被 daemon CORS 白名单挡住）；
+      // Rust 通过 eval 更新 #status，200 后 location 切入控制台 UI。
+    </script>
+  </body>
+</html>
