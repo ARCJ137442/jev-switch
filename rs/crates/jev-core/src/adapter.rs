@@ -75,23 +75,84 @@ pub trait UpstreamAdapter: Send + Sync {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   RetryPolicy（A6 · 07 P1-3 / contracts/02 §3 分层允许项）
+   ══════════════════════════════════════════════════════════════════ */
+
+/// 同候选内重试策略。
+///
+/// - **顺序（写死）**：先同候选退避重试，耗尽后才交给 failover（`on_error=next`
+///   跨候选）。`on_error=fail` **首错即返** —— 不做同候选重试也不 failover
+///   （contracts/03 §4「第一次错误即返回」字面）。
+/// - 仅 `JevError::retryable()` 为 true 的错误进入重试（429/5xx/Timeout/Network；
+///   本地类上游 `retryable_status=[0]` → 恒 false → **不重试**）。
+/// - 退避：第 n 次失败后 sleep `backoff_base * 2^(n-1)`（n 从 1 起，指数封顶防溢出）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetryPolicy {
+    /// 单候选最大实发次数（含首次）；`1` = 不重试。
+    pub max_attempts: u32,
+    /// 首次退避基数。
+    pub backoff_base: std::time::Duration,
+}
+
+impl RetryPolicy {
+    pub fn new(max_attempts: u32, backoff_base: std::time::Duration) -> Self {
+        Self {
+            max_attempts: max_attempts.max(1),
+            backoff_base,
+        }
+    }
+
+    /// 不重试（单发即交 failover）。
+    pub fn no_retry() -> Self {
+        Self {
+            max_attempts: 1,
+            backoff_base: std::time::Duration::ZERO,
+        }
+    }
+
+    /// 第 `attempt` 次（1-based）失败后的退避时长。
+    pub fn backoff_after(&self, attempt: u32) -> std::time::Duration {
+        let exp = attempt.saturating_sub(1).min(16); // 指数封顶 2^16，防溢出
+        self.backoff_base.saturating_mul(1u32 << exp)
+    }
+}
+
+impl Default for RetryPolicy {
+    /// 生产默认：单候选最多 3 次实发，退避 200ms / 400ms 指数。
+    fn default() -> Self {
+        Self {
+            max_attempts: 3,
+            backoff_base: std::time::Duration::from_millis(200),
+        }
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════
    Registry（contracts/02 §2：register / invoke 传参永久冻结）
    ══════════════════════════════════════════════════════════════════ */
 
 /// 上游注册表 + 调度入口。
 ///
 /// - `register`：装配期注册（编译期 trait 同构，Q1=A；非运行时热插拔）
-/// - `invoke`：DAG 选路 + 按候选 failover（A4 daemon 循环的内核化），
-///   `upstream_calls` 如实 = 实发次数
+/// - `invoke`：DAG 选路 + **同候选退避重试** + 按候选 failover（A4 daemon 循环的
+///   内核化），`upstream_calls` 如实 = 实发次数
 pub struct Registry {
     router: Router,
+    retry: RetryPolicy,
 }
 
 impl Registry {
     /// 以路由边（`[[routes]]` 合并结果）建注册表；上游经 `register` 逐个挂载。
+    /// 重试策略 = [`RetryPolicy::default`]（3 次 / 200ms 指数退避）。
     pub fn new(edges: Vec<RouteEdge>) -> Self {
+        Self::with_retry(edges, RetryPolicy::default())
+    }
+
+    /// 自定义同候选重试策略（测试可传 [`RetryPolicy::no_retry`] 隔离 failover 语义）。
+    pub fn with_retry(edges: Vec<RouteEdge>, retry: RetryPolicy) -> Self {
         Self {
             router: Router::new(edges, HashMap::new()),
+            retry,
         }
     }
 
@@ -105,14 +166,19 @@ impl Registry {
         &self.router
     }
 
+    /// 当前重试策略。
+    pub fn retry_policy(&self) -> &RetryPolicy {
+        &self.retry
+    }
+
     /// 执行一次 Jev 决策 —— 签名冻结（参数/返回类型 = contracts/02 §2 字面；
     /// `async` 见模块文档偏差备案 1）。
     ///
-    /// 行为（contracts/03 §4）：
+    /// 行为（contracts/03 §4 + 07 P1-3）：
     /// - 无匹配边 / 全悬空 → [`JevError::UnknownModel`] / [`JevError::UnknownUpstream`]（404）
     /// - capability 不匹配 → 跳过该候选（不计入失败语义、不实发）
-    /// - `on_error=next` 且 `JevError::retryable()` → 试下一候选；
-    ///   `fail` / 不可重试 → 第一错即返
+    /// - **顺序**：`on_error=fail` 首错即返；`next` 时先同候选按 [`RetryPolicy`]
+    ///   退避重试，耗尽 → 下一候选；不可重试错误 → 即返
     /// - 全败 → 返回最后错误（调用方按 `http_status()` 映射）
     /// - 成功 → `upstream_calls = 实发次数`
     pub async fn invoke(
@@ -171,19 +237,36 @@ impl Registry {
             let mut attempt_req = req.clone();
             attempt_req.model = item.candidate.upstream_model.clone();
 
-            upstream_calls += 1; // 实发计数（capability 跳过不计）
-            match upstream.evaluate(attempt_req).await {
-                Ok(mut resp) => {
-                    resp.upstream_calls = Some(upstream_calls); // 如实 = 实发次数
-                    return Ok(resp);
-                }
-                Err(e) => {
-                    let retry_next = e.retryable() && item.on_error == OnError::Next;
-                    if retry_next {
-                        last_err = Some(e);
-                        continue; // on_error=next → 下一候选
+            // ── 同候选内：退避重试（A6）──
+            let mut attempt: u32 = 0;
+            loop {
+                attempt += 1;
+                upstream_calls += 1; // 实发计数（capability 跳过不计）
+                match upstream.evaluate(attempt_req.clone()).await {
+                    Ok(mut resp) => {
+                        resp.upstream_calls = Some(upstream_calls); // 如实 = 实发次数
+                        return Ok(resp);
                     }
-                    return Err(e); // fail 首错即返 / 不可重试即返
+                    Err(e) => {
+                        // on_error=fail：第一次错误即返回（不同候选也不换、同候选也不重试）
+                        if item.on_error == OnError::Fail {
+                            return Err(e);
+                        }
+                        // 可重试 && 同候选还有预算 → 退避后再试**同一**候选
+                        if e.retryable() && attempt < self.retry.max_attempts {
+                            let delay = self.retry.backoff_after(attempt);
+                            if !delay.is_zero() {
+                                tokio::time::sleep(delay).await;
+                            }
+                            continue;
+                        }
+                        // 重试耗尽 / 不可重试：
+                        if e.retryable() {
+                            last_err = Some(e);
+                            break; // on_error=next → 下一候选（跨候选 failover）
+                        }
+                        return Err(e); // 不可重试 → 即返（400/422/BadResponse…）
+                    }
                 }
             }
         }
@@ -234,7 +317,14 @@ mod tests {
 
     enum Mode {
         Ok,
+        /// 恒 429（retryable=true —— vercel 类）。
         Err429,
+        /// 第 1 次 429、之后成功（A6 同候选重试成功路径）。
+        Err429OnceThenOk,
+        /// 前 2 次 429、之后成功（A6 退避耗尽/failover 顺序路径）。
+        Err429TwiceThenOk,
+        /// 429 但按本地类映射 retryable=false（laya 语义 —— 不重试不 failover）。
+        LocalErr429,
         Err400,
         BadResponse,
     }
@@ -248,8 +338,16 @@ mod tests {
             self.cap.clone()
         }
         async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, JevError> {
-            self.handle.calls.fetch_add(1, Ordering::SeqCst);
+            let n = self.handle.calls.fetch_add(1, Ordering::SeqCst) + 1; // 1-based
             self.handle.seen.lock().unwrap().push(req.model.clone());
+            let rate_limited = |retryable: bool| {
+                Err(JevError::Upstream {
+                    upstream_id: self.id.clone(),
+                    status: 429,
+                    body: "rate limited".into(),
+                    retryable,
+                })
+            };
             match self.mode {
                 Mode::Ok => Ok(JevResponse {
                     model: Some(req.model),
@@ -260,12 +358,38 @@ mod tests {
                     cost_usd: None,
                     extra: BTreeMap::new(),
                 }),
-                Mode::Err429 => Err(JevError::Upstream {
-                    upstream_id: self.id.clone(),
-                    status: 429,
-                    body: "rate limited".into(),
-                    retryable: true,
-                }),
+                Mode::Err429 => rate_limited(true),
+                Mode::Err429OnceThenOk => {
+                    if n == 1 {
+                        rate_limited(true)
+                    } else {
+                        Ok(JevResponse {
+                            model: Some(req.model),
+                            answers: BTreeMap::new(),
+                            usage: None,
+                            upstream_calls: Some(1),
+                            latency_ms: None,
+                            cost_usd: None,
+                            extra: BTreeMap::new(),
+                        })
+                    }
+                }
+                Mode::Err429TwiceThenOk => {
+                    if n <= 2 {
+                        rate_limited(true)
+                    } else {
+                        Ok(JevResponse {
+                            model: Some(req.model),
+                            answers: BTreeMap::new(),
+                            usage: None,
+                            upstream_calls: Some(1),
+                            latency_ms: None,
+                            cost_usd: None,
+                            extra: BTreeMap::new(),
+                        })
+                    }
+                }
+                Mode::LocalErr429 => rate_limited(false),
                 Mode::Err400 => Err(JevError::Upstream {
                     upstream_id: self.id.clone(),
                     status: 400,
@@ -345,18 +469,22 @@ mod tests {
 
     #[tokio::test]
     async fn register_then_invoke_hits_and_counts_calls() {
-        let mut reg = Registry::new(vec![
-            {
-                let mut e = edge("jev", "vercel", 10);
-                e.upstream_model = Some("typesafe-ai/jev".into());
-                e
-            },
-            {
-                let mut e = edge("jev", "laya", 30);
-                e.upstream_model = Some("laya-english".into());
-                e
-            },
-        ]);
+        // A4 failover 语义隔离：钉 no-retry（同候选重试由 A6 专测覆盖）
+        let mut reg = Registry::with_retry(
+            vec![
+                {
+                    let mut e = edge("jev", "vercel", 10);
+                    e.upstream_model = Some("typesafe-ai/jev".into());
+                    e
+                },
+                {
+                    let mut e = edge("jev", "laya", 30);
+                    e.upstream_model = Some("laya-english".into());
+                    e
+                },
+            ],
+            RetryPolicy::no_retry(),
+        );
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Mode::Err429);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Mode::Ok);
         reg.register(v1);
@@ -495,5 +623,128 @@ mod tests {
             probability: None,
         }); // 类型在场（编译期）
         assert_eq!(ctx.status, 200);
+    }
+
+    /* ════════════════════════════════════════════════════════
+       A6 · RetryPolicy（同候选退避 → 耗尽再跨候选）
+       ════════════════════════════════════════════════════════ */
+
+    #[test]
+    fn retry_policy_backoff_formula() {
+        let p = RetryPolicy::new(5, std::time::Duration::from_millis(100));
+        assert_eq!(p.backoff_after(1), std::time::Duration::from_millis(100));
+        assert_eq!(p.backoff_after(2), std::time::Duration::from_millis(200));
+        assert_eq!(p.backoff_after(3), std::time::Duration::from_millis(400));
+        // max_attempts 下限 1；no_retry 零退避
+        assert_eq!(RetryPolicy::new(0, std::time::Duration::ZERO).max_attempts, 1);
+        assert_eq!(RetryPolicy::no_retry().max_attempts, 1);
+        // 指数封顶防溢出
+        let big = RetryPolicy::new(100, std::time::Duration::from_secs(1));
+        let _ = big.backoff_after(99);
+    }
+
+    /// 同候选内重试成功：429 → 退避 → 200，**不触碰**次候选；upstream_calls=2。
+    #[tokio::test(start_paused = true)]
+    async fn same_candidate_retry_succeeds_before_failover() {
+        let mut reg = Registry::with_retry(
+            vec![edge("jev", "a", 10), edge("jev", "b", 30)],
+            RetryPolicy::new(3, std::time::Duration::from_secs(1)),
+        );
+        let (v1, h1) = fake("a", &[QuestionType::Boolean], Mode::Err429OnceThenOk);
+        let (v2, h2) = fake("b", &[QuestionType::Noul], Mode::Ok);
+        reg.register(v1);
+        reg.register(v2);
+
+        let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("retry then ok");
+        assert_eq!(h1.calls.load(Ordering::SeqCst), 2, "同候选：429 后重试 1 次成功");
+        assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "未耗尽 → 不跨候选");
+        assert_eq!(resp.upstream_calls, Some(2), "如实 = 实发 2 次");
+    }
+
+    /// 顺序写死：**先同候选重试、耗尽后才跨候选** ——
+    /// a 恒 429（max_attempts=2 → a 实发恰 2 次）后才轮到 b 成功；
+    /// 终态计数 a=2, b=1 唯一蕴含顺序 [a, a, b]（b 成功即返回，之后不会再有 a）。
+    #[tokio::test(start_paused = true)]
+    async fn retry_exhausted_then_cross_candidate_order() {
+        let mut reg = Registry::with_retry(
+            vec![edge("jev", "a", 10), edge("jev", "b", 30)],
+            RetryPolicy::new(2, std::time::Duration::from_secs(1)),
+        );
+        let (v1, h1) = fake("a", &[QuestionType::Boolean], Mode::Err429);
+        let (v2, h2) = fake("b", &[QuestionType::Noul], Mode::Ok);
+        reg.register(v1);
+        reg.register(v2);
+
+        let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("failover after retry");
+        assert_eq!(h1.calls.load(Ordering::SeqCst), 2, "同候选重试至耗尽（预算 2）");
+        assert_eq!(h2.calls.load(Ordering::SeqCst), 1, "耗尽后才跨候选");
+        assert_eq!(resp.upstream_calls, Some(3), "2 同候选 + 1 跨候选实发");
+    }
+
+    /// 退避时长按公式累加：虚拟时间下 10s + 20s = 30s（base=10s，两次失败后成功）。
+    #[tokio::test(start_paused = true)]
+    async fn backoff_uses_virtual_time_exponential_schedule() {
+        let base = std::time::Duration::from_secs(10);
+        let mut reg = Registry::with_retry(
+            vec![edge("jev", "a", 10)],
+            RetryPolicy::new(3, base),
+        );
+        let (v1, h1) = fake("a", &[QuestionType::Boolean], Mode::Err429TwiceThenOk);
+        reg.register(v1);
+
+        let t0 = tokio::time::Instant::now();
+        let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("3rd attempt ok");
+        let elapsed = t0.elapsed();
+        assert_eq!(h1.calls.load(Ordering::SeqCst), 3);
+        assert_eq!(resp.upstream_calls, Some(3));
+        assert_eq!(
+            elapsed,
+            base + base * 2,
+            "第 1 次失败退避 base、第 2 次退避 2*base"
+        );
+    }
+
+    /// 本地类上游（JevError::retryable()=false）：**不重试、不 failover**、
+    /// 次候选零触碰；429 非 retryable → 透传 429（非 503）。
+    #[tokio::test]
+    async fn local_style_upstream_429_not_retried_not_failed_over() {
+        let mut reg = Registry::with_retry(
+            vec![edge("jev", "local", 10), edge("jev", "b", 30)],
+            RetryPolicy::new(5, std::time::Duration::from_millis(1)), // 预算再大也不用
+        );
+        let (v1, h1) = fake("local", &[QuestionType::Noul], Mode::LocalErr429);
+        let (v2, h2) = fake("b", &[QuestionType::Noul], Mode::Ok);
+        reg.register(v1);
+        reg.register(v2);
+
+        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
+        assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "本地不重试");
+        assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "retryable=false 也不 failover");
+        assert_eq!(err.http_status(), 429, "非 retryable → 透传上游码（非 503）");
+        assert!(!err.retryable());
+    }
+
+    /// on_error=fail：首错即返 —— 即使策略给了重试预算也不重试（契约字面）。
+    #[tokio::test(start_paused = true)]
+    async fn on_error_fail_skips_same_candidate_retry_too() {
+        let mut reg = Registry::with_retry(
+            vec![
+                RouteEdge {
+                    on_error: OnError::Fail,
+                    ..edge("jev", "a", 10)
+                },
+                edge("jev", "b", 30),
+            ],
+            RetryPolicy::new(3, std::time::Duration::from_secs(1)),
+        );
+        let (v1, h1) = fake("a", &[QuestionType::Boolean], Mode::Err429OnceThenOk);
+        let (v2, h2) = fake("b", &[QuestionType::Noul], Mode::Ok);
+        reg.register(v1);
+        reg.register(v2);
+
+        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
+        assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "fail：第一次错误即返回，零重试");
+        assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(err.http_status(), 503);
     }
 }

@@ -386,6 +386,8 @@ mod tests {
         Ok200,
         /// 可重试 429（vercel 类 retryable_status 含 429）。
         Err429,
+        /// 第 1 次 429、之后成功（A6 同候选重试路径）。
+        Err429OnceThenOk,
         /// 不可重试 400。
         Err400,
         /// 上游响应形态非法 → BadResponse（502；A5 起反序列化在 adapter 内）。
@@ -414,21 +416,32 @@ mod tests {
             self.cap.clone()
         }
         async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, JevError> {
-            self.handle.calls.fetch_add(1, Ordering::SeqCst);
+            let n = self.handle.calls.fetch_add(1, Ordering::SeqCst) + 1; // 1-based
             self.handle.seen_models.lock().unwrap().push(req.model.clone());
-            match self.behave {
-                Behave::Ok200 => serde_json::from_str(r#"{"answers":{}}"#).map_err(|e| {
-                    JevError::BadResponse {
-                        upstream_id: self.id.clone(),
-                        message: e.to_string(),
-                    }
-                }),
-                Behave::Err429 => Err(JevError::Upstream {
+            let ok = || serde_json::from_str::<JevResponse>(r#"{"answers":{}}"#).map_err(|e| {
+                JevError::BadResponse {
+                    upstream_id: self.id.clone(),
+                    message: e.to_string(),
+                }
+            });
+            let rate429 = || {
+                Err(JevError::Upstream {
                     upstream_id: self.id.clone(),
                     status: 429,
                     body: "rate limited".into(),
                     retryable: true,
-                }),
+                })
+            };
+            match self.behave {
+                Behave::Ok200 => ok(),
+                Behave::Err429 => rate429(),
+                Behave::Err429OnceThenOk => {
+                    if n == 1 {
+                        rate429()
+                    } else {
+                        ok()
+                    }
+                }
                 Behave::Err400 => Err(JevError::Upstream {
                     upstream_id: self.id.clone(),
                     status: 400,
@@ -519,8 +532,10 @@ mod tests {
     }
 
     /// 验收 ①：同 model "jev" 双候选，首候选 429 → 落次候选成功且 upstream_calls>=2。
+    /// （A6 隔离：钉 no-retry 纯测 failover 语义；同候选重试见 wiremock/A6 专测）
     #[tokio::test]
     async fn failover_429_falls_to_second_candidate_with_upstream_calls() {
+        use jev_core::adapter::RetryPolicy;
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::Err429);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
 
@@ -528,7 +543,7 @@ mod tests {
         e1.upstream_model = Some("typesafe-ai/jev".into());
         let mut e2 = edge("jev", "laya", 30);
         e2.upstream_model = Some("laya-english".into());
-        let mut reg = Registry::new(vec![e1, e2]);
+        let mut reg = Registry::with_retry(vec![e1, e2], RetryPolicy::no_retry());
         reg.register(v1);
         reg.register(v2);
 
@@ -647,6 +662,18 @@ mod tests {
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         // 无 upstream_model 改写 → 沿用原 model
         assert_eq!(h1.seen_models.lock().unwrap().as_slice(), &["laya-english"]);
+    }
+
+    /// A6：daemon 装配路径（`Registry::new` 默认 RetryPolicy）自带同候选重试 ——
+    /// 单候选首错 429 → 默认预算内二次成功，upstream_calls=2，无需 failover。
+    #[tokio::test(start_paused = true)]
+    async fn daemon_default_registry_retries_same_candidate() {
+        let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::Err429OnceThenOk);
+        let mut reg = Registry::new(vec![edge("jev", "vercel", 10)]); // 默认策略
+        reg.register(v1);
+        let resp = run_request(&reg, noul_request("jev")).await.expect("retry then ok");
+        assert_eq!(h1.calls.load(Ordering::SeqCst), 2, "默认策略同候选重试");
+        assert_eq!(resp.upstream_calls, Some(2));
     }
 
     /// CORS 白名单 origin 字面量冻结（vite dev 两种打开方式）。

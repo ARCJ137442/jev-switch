@@ -41,3 +41,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
 tower-http = { version = "0.6", features = ["cors"] }
+# A6：P1-3 wiremock 验收（workspace 级；A8 集成基座另议）
+wiremock = "0.6"
