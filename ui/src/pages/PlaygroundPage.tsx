@@ -75,7 +75,8 @@ export function PlaygroundPage() {
     setActiveExampleId(ex.id);
     setStateJson(JSON.stringify(ex.payload.state, null, 2));
     setQuestionsJson(JSON.stringify(ex.payload.questions, null, 2));
-    setModel(ex.payload.model);
+    // UI-1：样例与模型选择解耦 — 切样例**不**改用户的 model 选择；
+    // payload.model 仅作初始默认值记录（初始 model 见 useState DEFAULT）。
   };
 
   return (
