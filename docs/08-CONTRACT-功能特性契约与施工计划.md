@@ -3,7 +3,7 @@
 > **作者**：Mimo-V2.6-Pro（对齐会话定稿）  
 > **日期**：2026-09-23  
 > **上游评审**：`07-REVIEW-v0.1.0-mvp.md`（P0/P1/P2 清单仍然有效）  
-> **状态**：**对齐完成，可开工**。本文件是前后端唯一共识；与 `07-` 冲突时以本文件的「对齐定稿」为准。  
+> **状态**：**Phase 0 契约正文已完成**（见 `contracts/`）。本文件是前后端唯一共识；与 `07-` 冲突时以本文件「对齐定稿」为准，细则以 `contracts/` 正文为准。  
 > **读者**：后续开发本仓库的 Agent。先读本文件，再读 `07-`，再动代码。
 
 ---
@@ -43,11 +43,12 @@
 
 **为什么以 DAG 为正名**：二部图表达不了「`jev` → 别名 `jev-fast` → vercel」这类中间层，也表达不了前缀折叠后的派生 id；先定 DAG 语义再套最简 UI，是 Q1「可扩展性优先」在路由层的同构要求。
 
-## 2. 六份契约（阶段 0 交付物清单）
+## 2. 六份契约（阶段 0 交付物）→ **已写入 `docs/contracts/`**
 
-> 执行时**每一份都是独立可审文件**，可再拆到 `docs/contracts/`。下文是**必须覆盖的条款**，不是已写好的正文。
+> **Phase 0 已完成**：六份正文见 [`contracts/00-INDEX.md`](./contracts/00-INDEX.md)。下列清单已全部落入正文；实现阶段只勾「验收/实现」项。
+> 覆盖对照：`01-协议`→2.1 · `02-扩展点`→2.2 · `03-路由`→2.3 · `04-密钥`→2.4 · `05-HTTP`→2.5 · `06-前端交互`→2.6。
 
-### 2.1 协议契约（对齐 jev-life / TypeSafe）
+### 2.1 协议契约（对齐 jev-life / TypeSafe）→ `contracts/01-协议契约.md`
 - [ ] 内核形状以 TypeSafe `/v1/systemone` 为真值
 - [ ] `criteria` **必填** + 三形态强类型（map / list / `{true,false}`）
 - [ ] `Answer` 判别联合；**布尔答案无 `confidence`**
@@ -58,7 +59,7 @@
 - [ ] 导出 `noul_probability()`
 - [ ] 导出 JSON Schema 或 ts-rs 生成物，**UI 不得手写第二份类型**
 
-### 2.2 扩展点契约（serde 同构 · Q1=A）
+### 2.2 扩展点契约（serde 同构 · Q1=A）→ `contracts/02-扩展点契约.md`
 - [ ] 冻结 trait 签名（冻结后改签名 = 破坏性变更）：
 
 ```rust
@@ -78,14 +79,14 @@ pub trait UpstreamAdapter: Send + Sync {
 - [ ] **黄金测试**：外部 crate 自定义怪异字段（如 `{"verdict":"yes","odds":0.8}`）→ 实现两 trait → **零改内核**注册 → `POST /v1/systemone` 换 model 即命中
 - [ ] **红线**：加提供商若需改 core 的 match / 函数传参 / 往 Response 塞厂商字段 → **设计失败，打回**
 
-### 2.3 路由契约（DAG · §1）
+### 2.3 路由契约（模型路由 DAG · §1）→ `contracts/03-路由契约.md`
 - [ ] `[[routes]]` 字段（DAG 边）：`left` / `match=exact|prefix` / `right` / `upstream_model` / `priority` / `sticky` / `on_error=next|fail`；命名可再开放 `from`/`to` 以支持多跳
 - [ ] `Router::select(req, ctx) -> Vec<Candidate>`（有序候选，不是单 Upstream）
 - [ ] 同模型多候选 failover；`upstream_calls` 如实计数
 - [ ] 文件 ↔ DAG UI 双向等价（改任意一边，另一边一致）
 - [ ] 参考：`sub2api` `CompositeModelRoute` + `SelectAccountForModelWithExclusions`
 
-### 2.4 配置与密钥契约（Q4=b · Q5=a · Q6 防偷强化）
+### 2.4 配置与密钥契约（Q4=b · Q5=a · Q6 防偷强化）→ `contracts/04-密钥与防偷.md`
 - [ ] 真值源 = `~/.jev-switch/providers.toml`（或 `JEV_SWITCH_CONFIG`）
 - [ ] 密钥默认档：**明文 toml + `.gitignore` + 文件权限 0600**（信任开发者）
 - [ ] **UI 只出密文**：掩码或末 4 位；真实值禁止回传给前端、禁止进 `console`/tracing/错误体
@@ -101,7 +102,7 @@ pub trait UpstreamAdapter: Send + Sync {
 - [ ] UI 启动与保存前比对 toml mtime/hash；外部修改 → 横幅「配置已在外部修改」+ **重载 / 覆盖** 二选一（默认重载）
 - [ ] 单一事实源：禁止 UI 内嵌第二份 `PROVIDERS` 常量当权威（展示也从 `/v1/models` 或 admin 配置 API 拉）
 
-### 2.5 HTTP 契约（消灭 `37b4242` 类漂移）
+### 2.5 HTTP 契约（消灭 `37b4242` 类漂移）→ `contracts/05-HTTP契约.md`
 - [ ] `POST /v1/systemone` → `SystemOneResponse`
 - [ ] `GET /v1/models` → **定死一种**形状（建议 OpenAI 风 `object/data`，或 `{models,upstreams}`，二选一写进契约并生成 TS）
 - [ ] `GET /health`
@@ -109,7 +110,7 @@ pub trait UpstreamAdapter: Send + Sync {
 - [ ] 错误体统一 `{error, upstream, retryable}`
 - [ ] CORS：M1 起 origin 白名单，禁止长期 `very_permissive()`
 
-### 2.6 前端交互契约（Q2=A+B · 走 `/frontend-design`）
+### 2.6 前端交互契约（Q2=A+B · 走 `/frontend-design`）→ `contracts/06-前端交互契约.md`
 - [ ] **强制**调用 `/frontend-design` 产出综合前端与交互设计；视觉与交互向 **CC Switch** 靠
 - [ ] 信息架构三页：**Providers** / **Routing** / **Playground**
 - [ ] Providers：CC Switch 式卡片 + 启停开关 + 密钥表单（**密文**）+ Probe 按钮 + 最近延迟/错误
@@ -166,8 +167,8 @@ priority = 40
 ## 4. 施工计划（Q3=契约 → 并行 AB → 合流）
 
 ```text
-阶段 0  契约（本文件条款展开为可审正文）     ← 当前
-        ↓ 契约评审通过
+阶段 0  契约正文 docs/contracts/01–06       ✅ 2026-09-23 完成（Mimo-V2.6-Pro）
+        ↓
 阶段 1  并行 AB
         ├─ 后端 A：P0-1 workspace+lib → P0-2 probability bug → P0-3 协议
         │          → P1-1 DAG 路由 → P1-2/5 ProtocolAdapter+黄金测试 → P1-3 重试
@@ -199,7 +200,7 @@ priority = 40
 | 里程碑 | 定义 |
 |---|---|
 | `v0.1.0-mvp` | 已封存（demo 合格） |
-| `v0.2.0-contract` | 六份契约正文合入 |
+| `v0.2.0-contract` | **已达成**：六份契约正文合入 `docs/contracts/` |
 | `v0.3.0-lib` | P0-1/2/3 完成，可被 path-dep |
 | `v0.4.0-router` | **模型路由 DAG** + Providers UI + 黄金测试通过 |
 | `v0.5.0-stable` | 合流联调、测试稳定 → 具备做 C（Tauri）的前置 |

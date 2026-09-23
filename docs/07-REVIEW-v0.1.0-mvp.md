@@ -1,5 +1,7 @@
 # Jev-Switch 全方位评审 — v0.1.0-mvp
 
+**作者（Author）：Mimo-V2.6-Pro**
+
 > **作者**：Mimo-V2.6-Pro  
 > **评审时间**：2026-09-23（增补 v1.1：UI 配置 / DAG 路由管理（默认二部图视图）/ serde 式扩展 / frontend-design）  
 > **对齐结论**：Q1=A 编译期 trait；Q2=A+B 先、稳定后 C；Q3=契约→并行 AB→合流；Q4=b 明文 toml+UI 密文；Q5=a 文件为准。详见 `08-CONTRACT-功能特性契约与施工计划.md`。  

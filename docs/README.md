@@ -1,42 +1,72 @@
 # Jev-Switch 文档索引
 
-> 本仓库 `H:\A137442\Develop\AI\Jev\Jev-Switch` 是 **Jev-Switch** 的**规划与文档仓库**。代码与原型在同级的 `jev-decision-lab/`（`H:\A137442\Develop\AI\Jev\jev-decision-lab\`）。
+> **本仓库**：`https://github.com/ARCJ137442/jev-switch`（private）  
+> **定位**：**Jev-Switch = 本地 Jev 协议多上游路由器**（Rust 后端 + React 前端 + 未来 Tauri）  
+> **当前阶段**：`v0.1.0-mvp` 已封存 → **Phase 0 契约正文已完成** → 待并行后端 A / 前端 B
+
+## 核心定位（一句话）
+
+> **Jev 原生入口 × 多上游切换 × 桥接模式** —— 与 LM Studio / CC Switch 同生态位。
 
 ## 文档列表
 
 | 文件 | 内容 | 状态 |
 |---|---|---|
-| `01-Jev-Switch-原始计划书-DeepSeek.md` | DeepSeek 起草的 Jev-Switch 原始计划书（4 条需求 + 调研快照 + 战略判断 + MVP + 风险） | baseline |
-| `02-Jev-Switch-新版计划书.md` | 经过深度调研、与本仓库已有代码对齐后的新版计划书（v2.1） | 现行版 |
-| `03-上游类别与协议兼容矩阵.md` | 5 类上游（TypeSafe 云 / 第三方网关 / LLM-broker / 本地独立服务 / 真 Jev 模型）的协议兼容差异 | 待写 |
-| `04-架构设计-from-sys1-借鉴.md` | 借鉴 sys1 (Rust/axum) + 我们的 jev-decision-lab 实测，Rust 后端 + React 前端的具体设计 | 待写 |
-| `05-从-jev-life-超越的设计点.md` | 我们的目标比 jev-life 原 TypeScript 网关青出于蓝的具体技术点 | 待写 |
+| `01-Jev-Switch-原始计划书-DeepSeek.md` | DeepSeek 原始计划书（4 条需求 + 调研 + MVP + 风险） | baseline |
+| `02-Jev-Switch-新版计划书.md` | v2.1：5 类上游 + 桥接模式 + M1–M7 | 现行规划 |
+| `03-上游类别与协议兼容矩阵.md` | C1–C5 字段矩阵 + Vercel noul→boolean | 已写 |
+| `04-架构设计-from-sys1-借鉴.md` | Rust workspace 三 crate + React + Tauri | 已写 |
+| `05-从-jev-life-超越的设计点.md` | 相对 jev-life 的 5 个超越点 | 已写 |
+| `06-MVP-实现计划.md` | M0 十一步施工清单 | 已执行（见 PROGRESS） |
+| `PROGRESS.md` | `v0.1.0-mvp` 进度快照与实测 | 封存 |
+| **`07-REVIEW-v0.1.0-mvp.md`** | **全方位评审**（作者 **Mimo-V2.6-Pro**） | **定稿** |
+| **`08-CONTRACT-功能特性契约与施工计划.md`** | **对齐定稿 Q1–Q6 + 施工计划**（作者 **Mimo-V2.6-Pro**） | **定稿** |
+| **`contracts/00-INDEX.md`** | **六份契约正文入口**（作者 **Mimo-V2.6-Pro**） | **Phase 0 完成** |
+| `contracts/01-协议契约.md` | Jev 内核类型与不变量 | 定稿 |
+| `contracts/02-扩展点契约.md` | serde 同构：冻结 trait + 黄金测试 | 定稿 |
+| `contracts/03-路由契约.md` | **模型路由 DAG**（二部图 = 最简形式） | 定稿 |
+| `contracts/04-密钥与防偷.md` | 明文 toml + 防偷红线 | 定稿 |
+| `contracts/05-HTTP契约.md` | `/v1/*` 形状 + 错误体 + CORS | 定稿 |
+| `contracts/06-前端交互契约.md` | CC Switch 范式 + 三页 IA | 定稿 |
 
-## 核心定位（一句话）
+## 阅读顺序（开发 Agent）
 
-> **Jev-Switch = 本地运行的 Jev 协议多上游路由器，与 LM Studio / CC Switch 同生态位，独特价值是 "Jev 原生入口 × 多上游切换 × 桥接模式"。**
+1. `08-CONTRACT`（对齐定稿，不可再开）
+2. `contracts/00-INDEX` → 01–06 正文
+3. `07-REVIEW`（为何这么定 + P0/P1/P2）
+4. `02`–`06` 历史规划（冲突以 07/08/contracts 为准）
+5. `PROGRESS`（MVP 实测基线）
 
-## 阅读顺序
+## 对齐定稿速查
 
-1. 先读 `01-` 原始计划书（baseline，DeepSeek 著）
-2. 再读 `02-` 新版计划书（v2.1，含 5 类上游定义 + 桥接模式）
-3. 具体技术决策看 `03-/04-/05-` 主题文档（待写）
+| Q | 决定 |
+|---|---|
+| Q1 | serde 同构 = **编译期 trait**；内核与传参零改 |
+| Q2 | 先 **A+B**（交互+视觉靠 CC Switch），稳定后再 **C**（Tauri） |
+| Q3 | **契约 → 并行 AB → 双剑合璧** |
+| Q4 | 密钥明文 toml + `.gitignore`；**UI 必须密文** |
+| Q5 | **以文件为准**；外部修改 → 重载/覆盖 |
+| Q6 | 防偷强化：上游 key 不出 daemon；无读回明文 API |
 
-## 与 jev-decision-lab 的关系
+## 路由形态
 
-- **Jev-Switch**（本仓库）：规划与文档
-- **jev-decision-lab**（同级）：**种子原型 + 调研数据**
-  - TS 实现 4 Runtime（local-qwen / openrouter / vercel / laya）
-  - 实测 5 provider × 4 version × 12 题
-  - 实测 80 篇 × 14 标签 life-series benchmark
-  - 已有 7 commits + GitHub 私有仓库
-- **后续**：jev-decision-lab 的 Rust 重写 + UI 在 `Jev-Switch/rs/` 和 `Jev-Switch/ui/`
+**模型路由 DAG**（主词，可多跳、边上带 priority/sticky/on_error）；  
+**二部图 = 其中最简单的形式**，作默认查看/编辑视图，实践后再定是否升级通用 DAG 视图。详见 `contracts/03-路由契约.md`。
 
-## 生态参考
+## 代码布局
 
-- `alvarobartt/sys1`（Rust + axum 单后端 Jev）— 借鉴目标
-- `Yinsongxu/LLM2Jev`（Python prefill-only，133 stars）— C4 实现
-- `antTing/jev-accounts-hub`（Go TypeSafe 单 provider 多账户）— 互补
-- `ARCJ137442/jev-life`（TypeScript LLM-Jev broker）— broker 设计参考
-- `farion1231/cc-switch`（Tauri LLM 路由）— 桌面应用形态参考
-- `heyjunpenn/awesome-jev`（640 项生态列表）
+```
+rs/     Rust 后端（MVP：protocol / translate / upstream / router / axum daemon）
+ui/     React UI（Playground 已可跑；Providers/Routing 页待 B 阶段）
+docs/   本目录
+```
+
+## 与生态
+
+- 协议真值：TypeSafe + `jev-life/src/shared/types.ts`
+- 路由参考：`Wei-Shaw/sub2api`
+- 桌面形态参考：`farion1231/cc-switch`
+- 种子数据：`jev-decision-lab`
+- 参考实现：`alvarobartt/sys1`、`Yinsongxu/LLM2Jev`
+
+— 索引维护：Mimo-V2.6-Pro
