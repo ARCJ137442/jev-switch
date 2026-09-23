@@ -6,16 +6,17 @@
  * - id: machine-readable slug
  * - label: 显示在 chip 上
  * - description: 鼠标 hover title
- * - payload: SystemOneRequest (model + state + questions)
+ * - payload: JevRequest (model + state + questions)
+ * 题型仅契约入站三变体 choice/score/noul（contracts/01 §1 — 无 boolean）。
  */
 
-import type { SystemOneRequest } from './api';
+import type { JevRequest } from './api';
 
 export interface ExamplePayload {
   id: string;
   label: string;
   description: string;
-  payload: SystemOneRequest;
+  payload: JevRequest;
 }
 
 const DEFAULT_MODEL_LAYA = 'laya-english';

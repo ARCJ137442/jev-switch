@@ -1,65 +1,127 @@
 /**
  * Jev-Switch API client — talks to the Rust daemon at `BASE` (derived from `PORT`).
  *
- * Types are aligned with rs/src/protocol.rs (planned per docs/06-MVP-实现计划.md §阶段 2).
- * The Rust endpoint `POST /v1/systemone` accepts `SystemOneRequest` and returns
- * `SystemOneResponse` (defined in rs/src/protocol.rs).
+ * TODO(B5): 以 ui/src/generated 生成类型替换（ts-rs，contracts/05 §4）。
+ * 本文件协议类型为 contracts/01 手写临时版，逐字段对齐
+ * `rs/crates/jev-protocol`（A2 `fc91ffa`）。
+ * `POST /v1/systemone` 收 `JevRequest`，回 `JevResponse`。
  */
 
-export type QuestionType = 'choice' | 'score' | 'noul' | 'boolean';
+/* ══════════════════════════════════════════════════════════════════
+   协议类型（contracts/01 — B4 手写版）
+   TODO(B5): 以 ui/src/generated 生成类型替换
+   ══════════════════════════════════════════════════════════════════ */
+
+/** 对外判别值仅三变体（§1：`boolean` 不是合法输入，收下按 noul 归一） */
+export type QuestionType = 'choice' | 'score' | 'noul';
 
 export interface ChoiceQuestion {
   type: 'choice';
   instructions: string;
+  /** Map 形态（§3） */
   criteria: Record<string, string>;
 }
 
 export interface ScoreQuestion {
   type: 'score';
   instructions: string;
+  /** 有序档位 List（§3） */
   criteria: string[];
 }
 
 export interface NoulQuestion {
   type: 'noul';
   instructions: string;
-  criteria: Record<string, string>;
+  /** Bool 恰两键（§3） */
+  criteria: { true: string; false: string };
 }
 
-export interface BooleanQuestion {
-  type: 'boolean';
-  instructions: string;
-  criteria: Record<string, string>;
-}
+/** Question 判别联合（§3）。入站 `boolean` 由后端归一为 noul（§1） */
+export type Question = ChoiceQuestion | ScoreQuestion | NoulQuestion;
 
-export type DecisionQuestion = ChoiceQuestion | ScoreQuestion | NoulQuestion | BooleanQuestion;
+/** criteria 三形态（§3）：Map（choice）/ List（score）/ Bool（noul） */
+export type Criteria =
+  | Record<string, string>
+  | string[]
+  | { true: string; false: string };
 
-export interface SystemOneRequest {
+/** JevRequest（§2） */
+export interface JevRequest {
   model: string;
-  state: Record<string, unknown>;
-  questions: Record<string, DecisionQuestion>;
+  /** 必填；任意 JSON — 允许 null / 标量 / 对象（§2） */
+  state: unknown;
+  questions: Record<string, Question>;
 }
 
-export interface SystemOneAnswer {
-  /** 判别联合 tag（契约 01 §4）；防御渲染：缺省时走旧扁平逻辑 */
-  type?: string;
-  choice?: string;
-  score?: number;
-  noul?: number;
-  /** Vercel 方言键（契约 01 §4 — 双键并存时都保留） */
+/* ── Answer（§4 判别联合，`type` 必有） ── */
+
+export interface ChoiceAnswer {
+  type: 'choice';
+  choice: string;
+  /** 必填，完整分布 */
+  probabilities: Record<string, number>;
+  /** 分布集中度，≠ 最高项概率 */
+  confidence: number;
+}
+
+export interface ScoreAnswer {
+  type: 'score';
+  score: number;
+  probabilities: Record<string, number>;
+  confidence: number;
+}
+
+/**
+ * 布尔族（§4）：概率本身就是置信度 — **无 confidence 字段**。
+ * wire `type` 由 Rust `NoulAnswer.kind` rename 而来（"noul" | "boolean"）；
+ * 请求侧写出恒 `"noul"`（§6），回答侧保留上游方言（Vercel 可回 `"boolean"`）。
+ * 双键并存时都保留（§6）；取值顺序冻结 `probability > noul`（noul_probability）。
+ * 双缺 = 未验到（≠ 0.0，渲染须能区分）。
+ */
+export interface NoulAnswer {
+  type: 'noul' | 'boolean';
+  /** 官方 / OpenRouter 键 */
+  noul?: number | null;
+  /** Vercel 键 — 必须保留，禁止吞掉 */
   probability?: number | null;
-  boolean?: boolean;
-  confidence?: number | null;
-  probabilities?: Record<string, number> | null;
 }
 
-export interface SystemOneResponse {
-  model: string;
-  answers: Record<string, SystemOneAnswer>;
-  usage?: unknown;
-  upstream?: string;
-  latency_ms?: number;
+export type Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer;
+
+/** token 用量（§5）：读容忍 camel / snake 双拼写，写出统一 snake（显示用 snake） */
+export interface Usage {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  reasoning_tokens?: number | null;
+  /** camel 别名（仅读容忍；写出恒 snake） */
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  reasoningTokens?: number | null;
 }
+
+/**
+ * JevResponse（§5）。
+ * - `model?` 可缺省；`usage?` 可缺省
+ * - `upstream_calls?` 缺省按 1；`latency_ms?`；`cost_usd` null ≠ 0（未知显示 `—`）
+ * - `extra` flatten：providerMetadata 等未知顶层键在此。
+ *   **无正式 `upstream` 字段** — 后端不产出；旧 `upstream?: string` 已删
+ *   （顶层同名键只会作为 extra 以 unknown 透传）。
+ */
+export interface JevResponse {
+  model?: string;
+  answers: Record<string, Answer>;
+  usage?: Usage;
+  upstream_calls?: number;
+  latency_ms?: number;
+  cost_usd?: number | null;
+  /** flatten extra（contracts/01 §5）— providerMetadata 等 */
+  [extra: string]: unknown;
+}
+
+/** @deprecated 过渡别名 — 主名 `JevRequest`（contracts/01；rs 同款 alias） */
+export type SystemOneRequest = JevRequest;
+/** @deprecated 过渡别名 — 主名 `JevResponse`（contracts/01；rs 同款 alias） */
+export type SystemOneResponse = JevResponse;
 
 /** GET /v1/models → data 条目（contracts/05 §2 冻结形状，H1 收口直读） */
 export interface ModelInfo {
@@ -136,7 +198,36 @@ export async function fetchModels(): Promise<ModelsResponse> {
   return (await res.json()) as ModelsResponse;
 }
 
-export async function postSystemOne(req: SystemOneRequest): Promise<SystemOneResponse> {
+/** ErrorBody（contracts/05 §3 统一错误体，redact 后透出） */
+export interface ErrorBody {
+  error: string;
+  upstream?: string | null;
+  retryable?: boolean;
+}
+
+/**
+ * `/v1/systemone` 错误 — 携带 status + ErrorBody 三字段，
+ * 供 UI 按 design/01 §7 分型文案（422 capability / 503 retryable）。
+ */
+export class SystemOneError extends Error {
+  readonly status: number;
+  readonly upstream: string | null;
+  readonly retryable: boolean;
+  constructor(
+    message: string,
+    status: number,
+    upstream: string | null = null,
+    retryable = false,
+  ) {
+    super(message);
+    this.name = 'SystemOneError';
+    this.status = status;
+    this.upstream = upstream;
+    this.retryable = retryable;
+  }
+}
+
+export async function postSystemOne(req: JevRequest): Promise<JevResponse> {
   const res = await fetch(`${getBase()}/v1/systemone`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -150,13 +241,20 @@ export async function postSystemOne(req: SystemOneRequest): Promise<SystemOneRes
     throw new Error(`bad JSON (status ${res.status}): ${text.slice(0, 200)}`);
   }
   if (!res.ok) {
-    const message =
-      body && typeof body === 'object' && 'error' in body
-        ? String((body as { error: unknown }).error)
-        : `HTTP ${res.status}`;
-    throw new Error(message);
+    if (body && typeof body === 'object' && 'error' in body) {
+      const eb = body as Partial<ErrorBody>;
+      if (typeof eb.error === 'string') {
+        throw new SystemOneError(
+          eb.error,
+          res.status,
+          typeof eb.upstream === 'string' ? eb.upstream : null,
+          eb.retryable === true,
+        );
+      }
+    }
+    throw new Error(`HTTP ${res.status}`);
   }
-  return body as SystemOneResponse;
+  return body as JevResponse;
 }
 
 export const DEFAULT_MODEL_OPTIONS = [
