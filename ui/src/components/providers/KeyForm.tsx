@@ -7,9 +7,9 @@ interface Props {
 }
 
 /**
- * Replace key 内联表单（design/01 §6.1 + 契约 04 §2）：
+ * Replace key 内联表单（v2 设计系统 + 契约 04 §2）：
  * 仅 password 式输入（浏览器原生掩码），无 Show 明文按钮；
- * 保存成功后表单收起，由 toast 反馈「密钥已保存，仅显示掩码」。
+ * 「只存掩码」的解释收进 input 的 title tooltip，不常驻界面（渐进披露）。
  */
 export function KeyForm({ onSave, onCancel }: Props) {
   const { t } = useI18n();
@@ -31,15 +31,23 @@ export function KeyForm({ onSave, onCancel }: Props) {
     }
   };
 
+  const btn: React.CSSProperties = {
+    fontSize: 'var(--text-sm)',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    color: 'var(--text)',
+    padding: '0.35rem 0.7rem',
+  };
+
   return (
     <form
       onSubmit={(e) => void submit(e)}
-      className="flex flex-wrap items-center gap-2 border-t border-border bg-soft px-4 py-2.5"
+      className="flex flex-wrap items-center gap-2 px-4 py-3"
+      style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-hover)' }}
     >
-      <label className="flex items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-          {t('key.newKey')}
-        </span>
+      <label className="flex items-center gap-2" style={{ fontSize: 'var(--text-sm)' }}>
+        <span style={{ color: 'var(--text-muted)' }}>{t('key.newKey')}</span>
         <input
           type="password"
           value={value}
@@ -48,14 +56,30 @@ export function KeyForm({ onSave, onCancel }: Props) {
           autoComplete="new-password"
           spellCheck={false}
           autoFocus
-          className="h-8 w-56 border border-border bg-panel px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+          title={t('key.maskedHint')}
+          className="h-8 w-56 px-2"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-sm)',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            color: 'var(--text)',
+          }}
           aria-label="new api key (masked input only, no plaintext reveal)"
         />
       </label>
       <button
         type="submit"
         disabled={saving || value.length === 0}
-        className="h-8 border border-primaryFill bg-primaryFill px-2.5 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
+        className="disabled:cursor-not-allowed disabled:opacity-50"
+        style={{
+          ...btn,
+          background: 'var(--accent)',
+          borderColor: 'var(--accent)',
+          color: '#fff',
+          fontWeight: 600,
+        }}
       >
         {saving ? t('common.saving') : t('common.save')}
       </button>
@@ -63,13 +87,11 @@ export function KeyForm({ onSave, onCancel }: Props) {
         type="button"
         onClick={onCancel}
         disabled={saving}
-        className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-inkMuted hover:border-primaryBright hover:text-ink disabled:opacity-50"
+        className="disabled:opacity-50"
+        style={btn}
       >
         {t('common.cancel')}
       </button>
-      <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-        {t('key.maskedHint')}
-      </span>
     </form>
   );
 }

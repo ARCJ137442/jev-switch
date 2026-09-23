@@ -13,14 +13,16 @@ import { EXAMPLES, type ExamplePayload } from '../examples';
 import { useI18n } from '../i18n';
 
 /**
- * Playground 页 — 保留原单页 DNA（jevplayground 黑白等宽），
- * 双栏 Input/Output + 示例 chips + Run Jev（design/01 §6.3 × TeamSense 面板圆角）。
- * 导航 / daemon 灯 / footer 已上移至 Shell。
+ * Playground 页（v2 设计系统 · docs/design/UI-AUDIT-2026-09-23.md）：
+ * 控制台内页定位 —— 页标题 --text-2xl（与其他三页一致），长说明收进标题旁 `?` tooltip，
+ * 删掉营销 hero / MVP badge / 常驻 Endpoint 技术面板，curl 示例默认折叠（渐进披露）。
+ * 双栏 Input/Output + 示例 chips + Run Jev（Cmd/Ctrl+Enter）。
  */
 export function PlaygroundPage() {
   const { t } = useI18n();
   const [model, setModel] = useState<string>(DEFAULT_MODEL_OPTIONS[0].value);
   const [serverModels, setServerModels] = useState<ModelEntry[]>([]);
+  const [showCurl, setShowCurl] = useState(false);
   const server = useServerStatus();
 
   // Inputs — lifted up so example chips can rewrite them
@@ -81,80 +83,95 @@ export function PlaygroundPage() {
     // payload.model 仅作初始默认值记录（初始 model 见 useState DEFAULT）。
   };
 
+  const card: React.CSSProperties = {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+  };
+
   return (
-    <div className="bg-bg text-ink">
-      {/* Hero — 大标题, 等宽字体, 主蓝点缀（B4） */}
-      <section className="border-b border-border">
-        <div className="mx-auto max-w-7xl px-6 py-12 md:py-16">
-          <div className="max-w-3xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded border border-border bg-panel px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primaryFill" />
-              MVP · M0.10
-            </div>
-            <h1 className="font-mono text-4xl font-semibold leading-[1.05] tracking-tightest text-ink md:text-5xl">
-              One protocol.{' '}
-              <span className="text-primary">Every upstream.</span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-inkMuted">
-              {t('pg.heroLead')}
-            </p>
-          </div>
-        </div>
-      </section>
+    <div className="mx-auto max-w-7xl px-6 py-8">
+      {/* 页标题 —— 长说明不常驻占屏，收进 `?` tooltip（审查报告 §Hero 收敛） */}
+      <div className="mb-6 flex items-center gap-2">
+        <h1 className="font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
+          {t('shell.navPlayground')}
+        </h1>
+        <span
+          role="note"
+          tabIndex={0}
+          aria-label={t('pg.heroLead')}
+          title={t('pg.heroLead')}
+          className="inline-flex h-5 w-5 cursor-help items-center justify-center"
+          style={{
+            borderRadius: '50%',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            color: 'var(--text-muted)',
+            fontSize: 'var(--text-xs)',
+          }}
+        >
+          ?
+        </span>
+      </div>
 
       {/* Main playground — 双栏 */}
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Left column — model + endpoint */}
-          <aside className="flex flex-col gap-4 lg:col-span-1">
-            <ModelSelect
-              options={modelOptions}
-              value={model}
-              onChange={setModel}
-              serverReachable={server.status === 'ok'}
-            />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Left column — model */}
+        <aside className="flex flex-col gap-4 lg:col-span-1">
+          <ModelSelect
+            options={modelOptions}
+            value={model}
+            onChange={setModel}
+            serverReachable={server.status === 'ok'}
+          />
+        </aside>
 
-            {/* Endpoint box — TeamSense 面板三段 */}
-            <section className="overflow-hidden rounded-card border border-border bg-panel">
-              <header className="border-b border-border px-4 py-2.5">
-                <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
-                  Endpoint
-                </h2>
-              </header>
-              <div className="space-y-2 px-4 py-3 font-mono text-xs">
-                <Row label="POST" value="/v1/systemone" />
-                <Row label="GET" value="/v1/models" />
-                <Row label="GET" value="/health" />
-                <div className="mt-2 border-t border-border pt-2 text-inkMuted">
-                  base = <span className="text-ink">{BASE}</span>
-                </div>
-              </div>
-            </section>
-          </aside>
+        {/* Right column — TestPanel + example chips */}
+        <div className="flex flex-col gap-4 lg:col-span-2">
+          <ExampleChips examples={EXAMPLES} onPick={onPickExample} activeId={activeExampleId} />
 
-          {/* Right column — TestPanel + example chips */}
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <ExampleChips examples={EXAMPLES} onPick={onPickExample} activeId={activeExampleId} />
+          <TestPanel
+            model={model}
+            stateJson={stateJson}
+            questionsJson={questionsJson}
+            onStateChange={setStateJson}
+            onQuestionsChange={setQuestionsJson}
+          />
 
-            <TestPanel
-              model={model}
-              stateJson={stateJson}
-              questionsJson={questionsJson}
-              onStateChange={setStateJson}
-              onQuestionsChange={setQuestionsJson}
-            />
-
-            {/* Quick start hint */}
-            <section className="overflow-hidden rounded-card border border-border bg-panel px-4 py-3">
-              <div className="mb-2 flex items-baseline justify-between">
-                <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
-                  {t('pg.quickStart')}
-                </h2>
-                <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-                  curl
-                </span>
-              </div>
-              <pre className="overflow-x-auto border border-border bg-soft p-3 font-mono text-xs leading-relaxed text-ink">
+          {/* Quick start — curl 默认折叠（渐进披露，不一上来糊一屏代码） */}
+          <section className="fade-in overflow-hidden px-4 py-3" style={card}>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-semibold" style={{ fontSize: 'var(--text-sm)' }}>
+                {t('pg.quickStart')}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCurl((v) => !v)}
+                aria-expanded={showCurl}
+                style={{
+                  fontSize: 'var(--text-sm)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--accent)',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                {showCurl ? t('pg.hideCurl') : t('pg.showCurl')}
+              </button>
+            </div>
+            {showCurl && (
+              <pre
+                className="fade-in mt-3 overflow-x-auto p-3 leading-relaxed"
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
+                  background: 'var(--surface-hover)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--text)',
+                }}
+              >
 {`curl -X POST ${BASE}/v1/systemone \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -169,19 +186,10 @@ export function PlaygroundPage() {
     }
   }'`}
               </pre>
-            </section>
-          </div>
+            )}
+          </section>
         </div>
-      </main>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <span className="w-10 text-inkMuted">{label}</span>
-      <span className="text-ink">{value}</span>
+      </div>
     </div>
   );
 }

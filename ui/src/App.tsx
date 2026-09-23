@@ -1,22 +1,21 @@
 import { Shell, useHashRoute } from './app/Shell';
 import { I18nProvider } from './i18n';
-import { HomePage } from './pages/HomePage';
+import { DashboardPage } from './pages/DashboardPage';
 import { ProvidersPage } from './pages/ProvidersPage';
 import { RoutingPage } from './pages/RoutingPage';
 import { PlaygroundPage } from './pages/PlaygroundPage';
 
 /**
- * 路由分发（块 5 起四页 IA）：
- * `/#/home`（默认）· `/#/providers` · `/#/routing` · `/#/playground`。
- * 壳（导航 / daemon 灯 / 冲突横幅 / footer）统一在 Shell；i18n Provider 包最外。
+ * 路由分发（v2.0 重构：Dashboard 首页 + Providers/Routing/Playground）
+ * `/#/` 或 `/#/dashboard`（默认）· `/#/providers` · `/#/routing` · `/#/playground`
  */
 export default function App() {
   const route = useHashRoute();
   return (
     <I18nProvider>
       <Shell route={route}>
-        {route === 'home' ? (
-          <HomePage />
+        {route === 'home' || route === 'dashboard' ? (
+          <DashboardPage />
         ) : route === 'providers' ? (
           <ProvidersPage />
         ) : route === 'routing' ? (

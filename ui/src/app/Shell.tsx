@@ -3,7 +3,6 @@ import { BASE, fetchHealth } from '../api';
 import { setAuthErrorHandler } from '../api/admin';
 import { ConflictBanner } from '../components/ConflictBanner';
 import { AdminLogin } from '../components/AdminLogin';
-import { StatusBadge, type BadgeTone } from '../components/ui/StatusBadge';
 import { FeedbackProvider, useConflictControl, useToast } from './feedback';
 import { useI18n } from '../i18n';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
@@ -12,10 +11,10 @@ import pkg from '../../package.json';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
 
-export type Route = 'home' | 'providers' | 'routing' | 'playground';
+export type Route = 'home' | 'dashboard' | 'providers' | 'routing' | 'playground';
 
-const ROUTES: readonly Route[] = ['home', 'providers', 'routing', 'playground'];
-const DEFAULT_ROUTE: Route = 'home';
+const ROUTES: readonly Route[] = ['home', 'dashboard', 'providers', 'routing', 'playground'];
+const DEFAULT_ROUTE: Route = 'dashboard';
 
 function parseHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, '').split(/[?#]/)[0];
@@ -77,8 +76,8 @@ interface ShellProps {
   children: ReactNode;
 }
 
-const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navHome' | 'shell.navProviders' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
-  { route: 'home', labelKey: 'shell.navHome', href: '#/home' },
+const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navDashboard' | 'shell.navProviders' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
+  { route: 'dashboard', labelKey: 'shell.navDashboard', href: '#/dashboard' },
   { route: 'providers', labelKey: 'shell.navProviders', href: '#/providers' },
   { route: 'routing', labelKey: 'shell.navRouting', href: '#/routing' },
   { route: 'playground', labelKey: 'shell.navPlayground', href: '#/playground' },
@@ -108,8 +107,6 @@ function ShellFrame({ route, children }: ShellProps) {
     return () => setAuthErrorHandler(null);
   }, []);
 
-  const daemonTone: BadgeTone =
-    server.status === 'ok' ? 'ok' : server.status === 'error' ? 'danger' : 'muted';
   const daemonLabel =
     server.status === 'ok'
       ? t('shell.daemonOk')
@@ -127,52 +124,83 @@ function ShellFrame({ route, children }: ShellProps) {
           }}
         />
       )}
-      {/* 顶栏第一行：logo + 三页导航（激活 = panel 底 + 边 + 微影，TeamSense aria-current 手法） */}
-      <header className="border-b border-border bg-bg">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-3">
-          <a
-            href="#/home"
-            className="flex items-center gap-2 font-mono text-base font-semibold tracking-tight text-ink"
-          >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-primaryFill text-sm font-bold text-white">
-              J
+      {/* 顶栏（v2.0 单行）：logo + 导航 + 右侧状态/切换。
+          旧版第二行的 masked-key / endpoint / file=truth 等技术债文案已删
+          （审查报告 §1 冗余说明文字）。 */}
+      <header
+        className="border-b"
+        style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+      >
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-3">
+          <div className="flex items-center gap-6">
+            <a
+              href="#/dashboard"
+              className="flex items-center gap-2 font-semibold"
+              style={{ fontSize: 'var(--text-base)', color: 'var(--text)' }}
+            >
+              <span
+                className="inline-flex h-6 w-6 items-center justify-center font-bold text-white"
+                style={{
+                  background: 'var(--accent)',
+                  borderRadius: 'var(--radius)',
+                  fontSize: 'var(--text-sm)',
+                }}
+              >
+                J
+              </span>
+              <span>Jev-Switch</span>
+            </a>
+            <nav aria-label="primary" className="flex items-center gap-1">
+              {NAV.map((item) => {
+                const active =
+                  item.route === route || (item.route === 'dashboard' && route === 'home');
+                return (
+                  <a
+                    key={item.route}
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    className="px-3 py-1.5 transition-colors"
+                    style={{
+                      fontSize: 'var(--text-sm)',
+                      borderRadius: 'var(--radius)',
+                      fontWeight: active ? 600 : 400,
+                      color: active ? 'var(--text)' : 'var(--text-muted)',
+                      background: active ? 'var(--surface-hover)' : 'transparent',
+                    }}
+                  >
+                    {t(item.labelKey)}
+                  </a>
+                );
+              })}
+            </nav>
+          </div>
+          <div className="flex items-center gap-3">
+            <span
+              className="inline-flex items-center gap-2"
+              style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
+              aria-live="polite"
+              title={daemonLabel}
+            >
+              <span
+                className={server.status === 'ok' ? '' : 'status-danger'}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background:
+                    server.status === 'ok'
+                      ? 'var(--success)'
+                      : server.status === 'error'
+                        ? 'var(--danger)'
+                        : 'var(--text-subtle)',
+                  display: 'inline-block',
+                }}
+                aria-hidden
+              />
+              <span className="tabular">v{pkg.version}</span>
             </span>
-            <span>Jev-Switch</span>
-          </a>
-          <nav aria-label="primary" className="flex items-center gap-1">
-            {NAV.map((item) => {
-              const active = item.route === route;
-              return (
-                <a
-                  key={item.route}
-                  href={item.href}
-                  aria-current={active ? 'page' : undefined}
-                  className={
-                    'rounded-ctl border px-3 py-1.5 text-sm transition-colors ' +
-                    (active
-                      ? 'border-border bg-panel font-medium text-ink shadow-sm'
-                      : 'border-transparent text-inkMuted hover:bg-soft hover:text-ink')
-                  }
-                >
-                  {t(item.labelKey)}
-                </a>
-              );
-            })}
-          </nav>
-        </div>
-        {/* 顶栏第二行：daemon 状态胶囊 · masked-key hint · 版本 · 主题切换 · 语言切换 */}
-        <div className="border-t border-border">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-1.5 font-mono text-[10px] uppercase tracking-widest">
-            <StatusBadge tone={daemonTone} aria-live="polite">
-              {daemonLabel}
-            </StatusBadge>
-            <span className="flex items-center gap-3">
-              <span className="text-inkMuted">masked-key</span>
-              <span className="text-inkMuted tabular">v{pkg.version}</span>
-              {/* 主题 + 语言切换（块 2/3 建，块 5 抽共享组件 — 首页操作区同源渲染） */}
-              <ThemeToggle />
-              <LangToggle />
-            </span>
+            <ThemeToggle />
+            <LangToggle />
           </div>
         </div>
       </header>
@@ -185,10 +213,18 @@ function ShellFrame({ route, children }: ShellProps) {
       {/* 页面 */}
       <main className="flex-1">{children}</main>
 
-      {/* footer endpoint 行（design/01 §5）— bg 底上用 muted 保 ≥4.5 */}
-      <footer className="border-t border-border bg-bg">
-        <div className="mx-auto max-w-7xl px-6 py-3 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-          endpoint {endpointLabel} · /v1/systemone · file=truth
+      {/* footer：只留 endpoint 一项（可 hover 看全），去掉 file=truth 等内部术语 */}
+      <footer className="border-t" style={{ borderColor: 'var(--border)' }}>
+        <div
+          className="mx-auto max-w-7xl px-6 py-3"
+          style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--text-subtle)',
+            fontFamily: 'var(--font-mono)',
+          }}
+          title="Daemon endpoint · POST /v1/systemone"
+        >
+          {endpointLabel}
         </div>
       </footer>
 

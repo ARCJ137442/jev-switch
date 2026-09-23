@@ -10,10 +10,22 @@ interface Props {
   onClose: () => void;
 }
 
+/** 表单控件（mono 仅用于 id / 数字值） */
+const control: CSSProperties = {
+  height: '2rem',
+  width: '100%',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  background: 'var(--surface-hover)',
+  padding: '0 0.5rem',
+  fontSize: 'var(--text-sm)',
+  color: 'var(--text)',
+};
+
 /**
- * 边检视器浮层（design/01 §6.2 / 契约 03 §6 × TeamSense Dialog 圆角）：
+ * 边检视器浮层（design/01 §6.2 / 契约 03 §6）：
  * priority / upstream_model / sticky / on_error 四字段 + Delete。
- * 选中面板描边 = 主蓝（CC Switch border-active 手法）。
+ * 选中面板描边 = 主色；键盘 Backspace/Delete 提示改为 Delete 按钮 title（渐进披露）。
  */
 export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Props) {
   const { t } = useI18n();
@@ -30,21 +42,43 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
 
   return (
     <div
-      className="absolute z-20 w-64 overflow-hidden rounded-card border border-primary bg-panel shadow-md"
-      style={style}
+      className="absolute z-20 w-64 overflow-hidden"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--accent)',
+        borderRadius: 'var(--radius)',
+        boxShadow: 'var(--shadow-lg)',
+        ...style,
+      }}
       onClick={(e) => e.stopPropagation()}
       role="dialog"
       aria-label={`edge ${route.left} to ${route.right}`}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="min-w-0 truncate font-mono text-xs text-ink tabular" title={`${route.left} → ${route.right}`}>
+      <header
+        className="flex items-center justify-between gap-2 px-3 py-2"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        <span
+          className="min-w-0 truncate tabular"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--text)',
+          }}
+          title={`${route.left} → ${route.right}`}
+        >
           {route.left} → {route.right}
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label="close inspector"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center font-mono text-xs text-inkSubtle hover:text-ink"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center"
+          style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--text-subtle)',
+            background: 'transparent',
+          }}
         >
           ×
         </button>
@@ -56,7 +90,8 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             type="number"
             value={prio}
             onChange={(e) => commitPrio(e.target.value)}
-            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink tabular"
+            className="tabular"
+            style={{ ...control, fontFamily: 'var(--font-mono)' }}
             aria-label="priority"
           />
         </Field>
@@ -70,7 +105,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             }}
             placeholder="typesafe-ai/jev"
             spellCheck={false}
-            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+            style={{ ...control, fontFamily: 'var(--font-mono)' }}
             aria-label="upstream model"
           />
         </Field>
@@ -78,7 +113,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
           <select
             value={route.sticky ?? 'none'}
             onChange={(e) => onPatch({ sticky: e.target.value as 'none' | 'session' })}
-            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink"
+            style={control}
             aria-label="sticky"
           >
             <option value="none">none</option>
@@ -89,7 +124,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
           <select
             value={route.on_error ?? 'next'}
             onChange={(e) => onPatch({ on_error: e.target.value as 'next' | 'fail' })}
-            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink"
+            style={control}
             aria-label="on error"
           >
             <option value="next">next</option>
@@ -98,17 +133,28 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
         </Field>
       </div>
 
-      <footer className="flex items-center justify-between border-t border-border px-3 py-2">
+      <footer
+        className="flex items-center justify-end px-3 py-2"
+        style={{ borderTop: '1px solid var(--border)' }}
+      >
+        {/* 键盘删除提示改为 title（原常驻文字已删） */}
         <button
           type="button"
           onClick={onDelete}
-          className="h-8 border border-dangerFill bg-dangerFill px-2 font-mono text-xs text-white hover:bg-dangerBg hover:text-danger"
+          title={t('edge.backspaceHint')}
+          style={{
+            height: '2rem',
+            padding: '0 0.75rem',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 500,
+            border: '1px solid var(--danger)',
+            borderRadius: 'var(--radius)',
+            background: 'var(--danger)',
+            color: '#fff',
+          }}
         >
           {t('common.delete')}
         </button>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-          {t('edge.backspaceHint')}
-        </span>
       </footer>
     </div>
   );
@@ -125,14 +171,18 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
+      <span className="flex items-baseline justify-between gap-2">
+        <span
+          style={{
+            fontSize: 'var(--text-xs)',
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+          }}
+        >
           {label}
         </span>
         {hint && (
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-            {hint}
-          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>{hint}</span>
         )}
       </span>
       {children}

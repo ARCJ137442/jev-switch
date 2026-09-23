@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { AdminProvider, ProbeResponse } from '../../api/admin';
 import { KeyForm } from './KeyForm';
 import { ProbeButton } from './ProbeButton';
-import { StatusBadge } from '../ui/StatusBadge';
 import { useI18n, type MessageKey } from '../../i18n';
 
 interface Props {
@@ -14,47 +13,48 @@ interface Props {
   onDelete: (provider: AdminProvider) => void;
 }
 
-/** 状态点语义（B1）：点用 500-600 档（非文本 ≥3:1），文字由 StatusBadge 700 档承载 */
-function statusDotClass(provider: AdminProvider, probe: ProbeResponse | null): string {
-  if (probe === null) return provider.enabled ? 'bg-inkSubtle' : 'bg-border';
-  if (!probe.ok) return 'bg-dangerDot';
-  if (provider.enabled && probe.latency_ms >= 1000) return 'bg-warnDot';
-  return provider.enabled ? 'bg-okDot' : 'bg-inkSubtle';
-}
+type Health = 'ok' | 'warn' | 'danger' | 'off' | 'unknown';
 
-function statusTone(provider: AdminProvider, probe: ProbeResponse | null): 'ok' | 'warn' | 'danger' | 'muted' {
-  if (probe === null) return provider.enabled ? 'muted' : 'muted';
+/** 健康判定（v2 §3.2 健康灯前置）：probe 结果 × enabled → 一个状态 */
+function healthOf(provider: AdminProvider, probe: ProbeResponse | null): Health {
+  if (!provider.enabled) return 'off';
+  if (probe === null) return 'unknown';
   if (!probe.ok) return 'danger';
-  if (provider.enabled && probe.latency_ms >= 1000) return 'warn';
-  return provider.enabled ? 'ok' : 'muted';
+  return probe.latency_ms >= 1000 ? 'warn' : 'ok';
 }
 
-function statusLabelKey(provider: AdminProvider, probe: ProbeResponse | null): MessageKey {
-  if (probe === null) return provider.enabled ? 'card.untested' : 'card.disabled';
-  if (!probe.ok) return 'card.probeFailed';
-  if (provider.enabled && probe.latency_ms >= 1000) return 'card.degraded';
-  return provider.enabled ? 'card.healthy' : 'card.disabled';
-}
+const HEALTH_COLOR: Record<Health, string> = {
+  ok: 'var(--success)',
+  warn: 'var(--warning)',
+  danger: 'var(--danger)',
+  off: 'var(--text-subtle)',
+  unknown: 'var(--text-subtle)',
+};
 
-/** 卡片状态高亮（B2）：启用且健康=蓝洗底 / 降级=琥珀描边 / 失败=红描边 */
-function cardStateClass(provider: AdminProvider, probe: ProbeResponse | null): string {
-  if (probe !== null && !probe.ok) return 'card-danger';
-  if (probe !== null && provider.enabled && probe.latency_ms >= 1000) return 'card-warn';
-  if (provider.enabled !== false && probe !== null && probe.ok) return 'card-active';
-  return '';
-}
+/** 不健康时脉动（tokens.css .status-warning/.status-danger） */
+const HEALTH_PULSE: Record<Health, string> = {
+  ok: '',
+  warn: 'status-warning',
+  danger: 'status-danger',
+  off: '',
+  unknown: '',
+};
 
-/** probe 延迟火花线（design/01 §6.1 ▁▂▃ 可选位 · 图表 C 案）：失败=顶点红点，线走 primary 蓝 */
+const HEALTH_LABEL: Record<Health, MessageKey> = {
+  ok: 'card.healthy',
+  warn: 'card.degraded',
+  danger: 'card.probeFailed',
+  off: 'card.disabled',
+  unknown: 'card.untested',
+};
+
+/** probe 延迟火花线：线走 --accent，失败点 --danger（v2 图形优先） */
 function Sparkline({ hist }: { hist: ReadonlyArray<{ ms: number; ok: boolean }> }) {
-  if (hist.length < 2) {
-    return (
-      <span className="text-inkSubtle" aria-hidden>
-        ▁▁▁
-      </span>
-    );
-  }
   const w = 64;
   const h = 16;
+  if (hist.length < 2) {
+    return <span style={{ width: w, display: 'inline-block' }} aria-hidden />;
+  }
   const max = Math.max(...hist.map((p) => (p.ok ? p.ms : 0)), 1);
   const step = w / Math.max(hist.length - 1, 1);
   const pts = hist.map((p, i) => {
@@ -68,58 +68,100 @@ function Sparkline({ hist }: { hist: ReadonlyArray<{ ms: number; ok: boolean }> 
       <polyline
         points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
         fill="none"
-        stroke="var(--primary)"
+        stroke="var(--accent)"
         strokeWidth="1.5"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
       {fails.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r="2" fill="var(--danger-fill)" />
+        <circle key={i} cx={p.x} cy={p.y} r="2" fill="var(--danger)" />
       ))}
     </svg>
   );
 }
 
 /**
- * 提供商卡片（design/01 §6.1 × TeamSense 三段式 A1 × 方案 B 色）：
- * 头（id+状态徽章+Probe+开关）/ 身（kind/base/key 掩码）/ 脚（service-row 探测结果）。
- * 密钥只出掩码（契约 04 §2），卡片内不存在任何明文。
+ * 提供商卡片（v2 设计系统 · docs/design/UI-REDESIGN-v2.md §3.2）：
+ * 头「● Healthy + id」+ Probe + 开关 / 身 kind·base·掩码 key / 脚 探测结果 + 火花线。
+ * 密钥只出掩码（契约 04 §2），卡片内不存在任何明文；说明文字全部走 title tooltip。
  */
 export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete }: Props) {
   const [probe, setProbe] = useState<ProbeResponse | null>(null);
   const [hist, setHist] = useState<ReadonlyArray<{ ms: number; ok: boolean }>>([]);
   const [showKeyForm, setShowKeyForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleteText, setDeleteText] = useState('');
 
   const onProbe = (r: ProbeResponse) => {
     setProbe(r);
     setHist((h) => [...h.slice(-23), { ms: r.latency_ms, ok: r.ok }]);
   };
 
-  const dotClass = statusDotClass(provider, probe);
-  const tone = statusTone(provider, probe);
   const { t } = useI18n();
-  const label = t(statusLabelKey(provider, probe));
-  const stateClass = cardStateClass(provider, probe);
+  const health = healthOf(provider, probe);
+  const label = t(HEALTH_LABEL[health]);
+
+  const card: React.CSSProperties = {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+  };
+  const rowBorder: React.CSSProperties = { borderTop: '1px solid var(--border)' };
+  const mono: React.CSSProperties = { fontFamily: 'var(--font-mono)' };
+  const btn: React.CSSProperties = {
+    fontSize: 'var(--text-sm)',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    color: 'var(--text)',
+    padding: '0.35rem 0.7rem',
+  };
 
   return (
     <section
-      className={`flex flex-col overflow-hidden rounded-card border border-border bg-panel transition-colors ${stateClass}`.trim()}
+      className="fade-in card-hover flex flex-col overflow-hidden"
+      style={card}
       aria-label={`provider ${provider.id}`}
     >
-      {/* 头：● id + 状态徽章 — Probe + ENABLED 开关 */}
-      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+      {/* 头：● Healthy · id — Probe + 开关 */}
+      <header
+        className="flex items-center justify-between gap-3 px-4 py-3"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
         <span className="flex min-w-0 items-center gap-2.5" aria-live="polite">
-          <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} aria-hidden />
-          <span className="truncate text-[13px] font-semibold text-ink tabular">{provider.id}</span>
-          <StatusBadge tone={tone}>{label}</StatusBadge>
+          <span
+            className={HEALTH_PULSE[health]}
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: HEALTH_COLOR[health],
+              display: 'inline-block',
+              flexShrink: 0,
+            }}
+            aria-hidden
+          />
+          <span
+            className="font-semibold"
+            style={{ fontSize: 'var(--text-base)', color: HEALTH_COLOR[health] }}
+          >
+            {label}
+          </span>
+          <span
+            className="tabular truncate"
+            style={{ ...mono, fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
+            title={provider.id}
+          >
+            {provider.id}
+          </span>
         </span>
-        <span className="flex shrink-0 items-center gap-3">
+        <span className="flex shrink-0 items-center gap-2.5">
           <ProbeButton providerId={provider.id} onResult={onProbe} />
-          <label className="flex cursor-pointer items-center gap-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-              {provider.enabled ? 'ENABLED' : 'OFF'}
+          <label
+            className="flex cursor-pointer items-center gap-1.5"
+            title={t('card.toggleTip')}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              {provider.enabled ? t('card.on') : t('card.off')}
             </span>
             <span
               role="switch"
@@ -133,19 +175,22 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
                   if (!busy) onToggle(provider, !provider.enabled);
                 }
               }}
-              className={
-                'relative inline-block h-5 w-9 rounded border transition-colors ' +
-                (busy ? 'opacity-50 ' : '') +
-                (provider.enabled
-                  ? 'border-primaryFill bg-primaryFill'
-                  : 'border-border bg-soft')
-              }
+              className="relative inline-block h-5 w-9 transition-colors"
+              style={{
+                borderRadius: 999,
+                border: '1px solid',
+                borderColor: provider.enabled ? 'var(--accent)' : 'var(--border)',
+                background: provider.enabled ? 'var(--accent)' : 'var(--surface-hover)',
+                opacity: busy ? 0.5 : 1,
+              }}
             >
               <span
-                className={
-                  'absolute top-0.5 h-3 w-3 rounded border border-transparent transition-all ' +
-                  (provider.enabled ? 'left-[18px] bg-white' : 'left-0.5 bg-inkMuted')
-                }
+                className="absolute top-0.5 h-3 w-3 transition-all"
+                style={{
+                  borderRadius: '50%',
+                  left: provider.enabled ? 18 : 3,
+                  background: provider.enabled ? '#fff' : 'var(--text-muted)',
+                }}
               />
             </span>
           </label>
@@ -153,18 +198,28 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
       </header>
 
       {/* 身：kind + base + masked key */}
-      <div className="flex-1 space-y-1 px-4 py-3">
-        <div className="font-mono text-xs text-inkMuted">{provider.kind}</div>
-        <div className="truncate font-mono text-xs text-inkSubtle" title={provider.base}>
+      <div className="flex-1 space-y-1.5 px-4 py-3">
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text)' }}>{provider.kind}</div>
+        <div
+          className="truncate"
+          style={{ ...mono, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}
+          title={provider.base}
+        >
           {provider.base}
         </div>
 
         {/* key 行 — 只出掩码，无 Show 明文 */}
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-baseline gap-2 font-mono text-xs">
-            <span className="text-inkSubtle">key</span>
-            <span className="truncate text-ink tabular">
-              {provider.api_key_set ? (provider.api_key_masked ?? '****') : '(unset)'}
+          <span
+            className="flex min-w-0 items-baseline gap-2"
+            style={{ fontSize: 'var(--text-sm)' }}
+            title={t('card.keyTip')}
+          >
+            <span style={{ color: 'var(--text-muted)' }}>{t('card.keyLabel')}</span>
+            <span className="tabular truncate" style={{ ...mono, color: 'var(--text)' }}>
+              {provider.api_key_set
+                ? (provider.api_key_masked ?? '••••••••')
+                : t('card.keyUnset')}
             </span>
           </span>
           <button
@@ -174,44 +229,37 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
               setConfirmDelete(false);
             }}
             disabled={busy}
-            className="h-8 shrink-0 border border-border bg-panel px-2 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft disabled:opacity-50"
+            className="shrink-0 disabled:opacity-50"
+            style={btn}
           >
             {showKeyForm ? t('common.close') : t('card.replaceKey')}
           </button>
         </div>
       </div>
 
-      {/* 脚 = service-row（A4）：结果 ∥ 火花线 ∥ 时间 — aria-live（design/01 §8） */}
+      {/* 脚：最近探测结果 ∥ 火花线 — aria-live */}
       <div
-        className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-t border-border px-4 py-2 font-mono text-xs tabular"
+        className="tabular grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-2.5"
+        style={{ ...rowBorder, fontSize: 'var(--text-sm)' }}
         aria-live="polite"
       >
         {probe === null ? (
-          <>
-            <span className="text-inkMuted">{t('card.lastUntested')}</span>
-            <Sparkline hist={hist} />
-            <span className="text-inkSubtle">—</span>
-          </>
+          <span style={{ color: 'var(--text-muted)' }}>{t('card.lastUntested')}</span>
         ) : probe.ok ? (
-          <>
-            <span className="text-ok">
-              last {probe.latency_ms}ms · {probe.status} ok
-            </span>
-            <Sparkline hist={hist} />
-            <span className="text-inkSubtle">now</span>
-          </>
+          <span style={{ color: 'var(--success)' }}>
+            {t('card.lastProbeOk', { ms: probe.latency_ms, status: probe.status ?? 200 })}
+          </span>
         ) : (
-          <>
-            <span className="text-danger">
-              probe failed{probe.status !== null ? ` · ${probe.status}` : ''} · {probe.error ?? 'error'}
-            </span>
-            <Sparkline hist={hist} />
-            <span className="text-inkSubtle">now</span>
-          </>
+          <span className="truncate" style={{ color: 'var(--danger)' }} title={probe.error ?? ''}>
+            {t('card.lastProbeFail', {
+              detail: probe.error ?? (probe.status !== null ? String(probe.status) : '—'),
+            })}
+          </span>
         )}
+        <Sparkline hist={hist} />
       </div>
 
-      {/* Replace key 内联表单（仅密码式） */}
+      {/* Replace key 内联表单（仅密文输入） */}
       {showKeyForm && (
         <KeyForm
           onSave={(key) => onReplaceKey(provider, key)}
@@ -219,52 +267,49 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
         />
       )}
 
-      {/* 删除：打字 id 二次确认 */}
-      <div className="border-t border-border px-4 py-2.5">
+      {/* 删除：普通二次确认（不再要求打字 id — v2 §3.2「过度防御」） */}
+      <div className="px-4 py-2.5" style={rowBorder}>
         {!confirmDelete ? (
           <button
             type="button"
             onClick={() => {
               setConfirmDelete(true);
               setShowKeyForm(false);
-              setDeleteText('');
             }}
             disabled={busy}
-            className="h-8 font-mono text-xs text-inkSubtle hover:text-danger disabled:opacity-50"
+            className="disabled:opacity-50"
+            style={{
+              ...btn,
+              background: 'transparent',
+              border: '1px solid transparent',
+              color: 'var(--text-muted)',
+              padding: '0.35rem 0',
+            }}
           >
             {t('common.delete')}
           </button>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-              {t('card.typeIdConfirm')}
-            </span>
-            <input
-              value={deleteText}
-              onChange={(e) => setDeleteText(e.target.value)}
-              placeholder={provider.id}
-              spellCheck={false}
-              autoFocus
-              className="h-8 w-36 border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
-              aria-label={`type ${provider.id} to confirm delete`}
-            />
             <button
               type="button"
-              disabled={deleteText !== provider.id || busy}
+              disabled={busy}
+              autoFocus
               onClick={() => {
                 onDelete(provider);
                 setConfirmDelete(false);
-                setDeleteText('');
               }}
-              className="h-8 border border-dangerFill bg-dangerFill px-2 font-mono text-xs text-white hover:bg-dangerBg hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+              className="disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                ...btn,
+                background: 'var(--danger)',
+                borderColor: 'var(--danger)',
+                color: '#fff',
+                fontWeight: 600,
+              }}
             >
-              {t('common.remove')}
+              {t('card.confirmDelete')}
             </button>
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(false)}
-              className="h-8 border border-border bg-panel px-2 font-mono text-xs text-inkMuted hover:border-primaryBright hover:text-ink"
-            >
+            <button type="button" onClick={() => setConfirmDelete(false)} style={btn}>
               {t('common.cancel')}
             </button>
           </div>

@@ -1,0 +1,50 @@
+name: Release
+
+# 发版流水线（任务 #45 · docs/12 §四-线3 尾「GitHub Release 便携分发」）
+#
+# 触发：
+#   - push tag `v*`            → 全量发版（测试门禁 → Windows 桌面 + ghcr 镜像 → GitHub Release）
+#   - workflow_dispatch        → 干跑：构建产物但 **不推 ghcr、不建 Release**（验流水线本身）
+#
+# 测试门禁不在本文件重复实现 —— 以 `workflow_call` 复用 .github/workflows/ci.yml。
+# Windows 上 `cargo test` 与 `cargo build` 同 target-dir 会撞文件锁（os error 5 拒绝访问），
+# 故测试一律留在 ubuntu 的 ci.yml，Windows job 只构建、且 rs/ 与 src-tauri/ 是两个
+# 互不相干的 Cargo 工程（各自 target 目录）→ 结构上不可能撞锁。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '干跑校验用的版本号（不带 v）；留空则取 ui/package.json'
+        required: false
+        default: ''
+
+# 最小权限：默认只读，发 Release / 推 ghcr 的两个 job 各自就地提权
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # externalBin 落地时剥 target-triple；且**不可**与壳主二进制 jev-switch.exe 同名
+  # （WiX ICE30 两组件同装一文件名 → MSI 失败），见 docs/deployment.md §9.4-2
+  SIDECAR_TRIPLE: x86_64-pc-windows-msvc
+  TAURI_CLI_VERSION: 2.11.5
+
+jobs:
+  # ── 1. 版本一致性门禁（防忘记 bump） ────────────────────────────────
+  meta:
+    name: 版本门禁
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+<!-- MORE -->

@@ -12,7 +12,16 @@ export function LangToggle() {
       type="button"
       onClick={toggleLang}
       aria-label={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
-      className="inline-flex items-center rounded-ctl border border-border bg-panel px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted transition-colors hover:border-primaryBright hover:bg-soft hover:text-primary"
+      className="inline-flex h-8 min-w-8 items-center justify-center px-2 transition-colors"
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        background: 'var(--surface-hover)',
+        color: 'var(--text-muted)',
+        fontSize: 'var(--text-sm)',
+        fontWeight: 500,
+      }}
+      title={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
     >
       <span>{lang === 'en' ? 'EN' : '中'}</span>
     </button>

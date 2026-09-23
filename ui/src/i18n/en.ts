@@ -20,6 +20,7 @@ export const en = {
   'common.addRow': '+ Add row',
 
   /* shell */
+  'shell.navDashboard': 'Dashboard',
   'shell.navProviders': 'Providers',
   'shell.navRouting': 'Routing',
   'shell.navPlayground': 'Playground',
@@ -39,8 +40,8 @@ export const en = {
   'prov.add': '+ Add provider',
   'prov.pasteToml': 'Paste toml snippet',
   'prov.enabledCount': '{n} / {total} enabled',
-  'prov.mockMode': 'mock-first · dev',
-  'prov.liveMode': 'live daemon',
+  'prov.mockMode': 'Showing sample data (dev build, daemon not connected)',
+  'prov.liveMode': 'Connected to the local daemon',
   'prov.empty': 'No providers yet.',
   'prov.emptyHint':
     'Paste a [providers.*] toml snippet, or see rs/providers.example.toml to add your first upstream.',
@@ -55,20 +56,29 @@ export const en = {
   /* provider card */
   'card.untested': 'Untested',
   'card.disabled': 'Disabled',
-  'card.probeFailed': 'probe failed',
-  'card.degraded': 'Degraded (slow)',
+  'card.probeFailed': 'Unreachable',
+  'card.degraded': 'Slow',
   'card.healthy': 'Healthy',
-  'card.lastUntested': 'last — · untested',
+  'card.lastUntested': 'Not probed yet',
+  'card.lastProbeOk': 'Last probe {ms}ms · HTTP {status}',
+  'card.lastProbeFail': 'Last probe failed · {detail}',
   'card.replaceKey': 'Replace key',
-  'card.typeIdConfirm': 'type id to confirm',
+  'card.confirmDelete': 'Confirm delete?',
+  'card.on': 'On',
+  'card.off': 'Off',
+  'card.toggleTip': 'Enable or disable this upstream',
+  'card.keyLabel': 'Key',
+  'card.keyUnset': 'not set',
+  'card.keyTip': 'Stored by the daemon; only the mask is ever shown',
 
   /* probe button */
   'probe.btn': 'Probe',
   'probe.loading': 'Probing…',
+  'probe.tip': 'Send a health check to this upstream now',
 
   /* key form */
-  'key.newKey': 'new key',
-  'key.maskedHint': 'masked input · no plaintext echo',
+  'key.newKey': 'New key',
+  'key.maskedHint': 'Masked input only — the key is stored by the daemon and never echoed back',
 
   /* add provider panel */
   'add.tabForm': 'Form',
@@ -77,10 +87,11 @@ export const en = {
   'add.baseHttp': 'base must start with http(s)://',
   'add.noSections': 'No [providers.<id>] sections found',
   'add.pasteHint': 'Paste a [providers.<id>] snippet',
-  'add.parseHint': 'Parse errors fully shown · never half-imported',
+  'add.parseHint': 'All parse errors are shown — nothing is imported half-way',
   'add.parseAdd': 'Parse & Add',
   'add.submit': 'Add provider',
-  'add.apiKeyHint': 'password only · no Show',
+  'add.apiKeyHint': 'Masked input only — the key is stored by the daemon and never echoed back',
+  'add.enabled': 'Enabled',
 
   /* admin login */
   'login.title': 'Admin login',
@@ -95,12 +106,17 @@ export const en = {
   'routing.empty': 'No routes yet.',
   'routing.importExample': 'Import example',
   'routing.saveFailed': 'Save failed, rolled back',
+  'routing.table': 'Table',
+  'routing.tableTitle': 'Toggle the keyboard-editable route table',
+  'routing.viewExample': 'View example config',
+  'routing.hideExample': 'Hide example config',
 
   /* route table */
-  'rt.title': 'Route table · all routes (keyboard path)',
+  'rt.title': 'Route table',
   'rt.empty': 'No routes — click Add row or import the example',
   'rt.del': 'Del',
   'rt.footer': 'Changes PUT /v1/admin/routes after 400ms debounce · cycle → reject in red',
+  'rt.dup': 'Duplicate route — same left → right pair already exists',
 
   /* edge inspector */
   'edge.hintKeep': 'empty = inherit',
@@ -117,6 +133,8 @@ export const en = {
     'Route a single Jev SystemOne call across heterogeneous upstream models — Vercel AI Gateway, local Laya daemon, or any future provider. Switch the model field; the router handles protocol translation.',
   'pg.quickStart': 'Quick start',
   'pg.examples': 'Examples',
+  'pg.hideCurl': 'Hide curl',
+  'pg.showCurl': 'Show curl',
 
   /* test panel */
   'tp.form': 'Form',
@@ -130,6 +148,10 @@ export const en = {
   'tp.running': 'Running…',
   'tp.waiting': '// [ · ]\n// waiting for input + Run Jev',
   'tp.estimate': 'est',
+  'tp.runHint': 'Run a Jev SystemOne call with the current input',
+  'tp.invalidJson': 'Invalid JSON',
+  'tp.decisionType': 'Decision type',
+  'tp.summary': 'Summary',
   'tp.stateParseFailed': 'state JSON parse failed: ',
   'tp.questionsParseFailed': 'questions JSON parse failed: ',
   'tp.errCapability': 'capability mismatch (422)',

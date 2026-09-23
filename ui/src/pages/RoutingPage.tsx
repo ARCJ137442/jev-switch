@@ -41,6 +41,8 @@ export function RoutingPage() {
   const [lastError, setLastError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showTable, setShowTable] = useState(false);
+  /* 空态示例 TOML 默认折叠（渐进披露，不一上来糊一屏代码） */
+  const [showExample, setShowExample] = useState(false);
   const { toast } = useToast();
   const { t } = useI18n();
 
@@ -260,38 +262,78 @@ export function RoutingPage() {
     return out;
   }, [routes]);
 
-  /* 状态胶囊（B1）：Saving=主蓝脉动 · UNSAVED=琥珀 · synced=中性 */
+  /* 状态胶囊（v2）：Saving=主色脉动 · UNSAVED=琥珀 · synced=中性 */
+  const badgeBase: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.375rem',
+    whiteSpace: 'nowrap',
+    borderRadius: 999,
+    padding: '0.125rem 0.5rem',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 500,
+  };
   const statusBadge = saving ? (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-primaryFill px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-white animate-pulse">
+    <span
+      className="status-warning"
+      style={{ ...badgeBase, background: 'var(--accent)', color: '#fff' }}
+    >
       Saving…
     </span>
   ) : dirty ? (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warnBg px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-warn">
-      UNSAVED
+    <span style={{ ...badgeBase, background: 'var(--warning-bg)', color: 'var(--warning)' }}>
+      Unsaved
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
-      synced
+    <span
+      style={{ ...badgeBase, background: 'var(--surface-hover)', color: 'var(--text-muted)' }}
+    >
+      Synced
     </span>
   );
 
+  const card: React.CSSProperties = {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+  };
+  const btn: React.CSSProperties = {
+    fontSize: 'var(--text-sm)',
+    background: 'var(--surface-hover)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    color: 'var(--text)',
+    padding: '0.375rem 0.75rem',
+  };
+  const btnPrimary: React.CSSProperties = {
+    ...btn,
+    background: 'var(--accent)',
+    borderColor: 'var(--accent)',
+    color: '#fff',
+    fontWeight: 600,
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
-      {/* 工具条 — TeamSense 面板头 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-panel px-4 py-2.5">
+      <h1 className="mb-6 font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
+        {t('shell.navRouting')}
+      </h1>
+
+      {/* 工具条 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5" style={card}>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
-            Routing
-          </span>
-          <span className="font-mono text-xs text-inkMuted tabular">
+          <span
+            className="tabular"
+            style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
+          >
             {t('routing.edges', { n: routes.length })}
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-            model endpoint → model endpoint
           </span>
           <span aria-live="polite">{statusBadge}</span>
           {lastError && (
-            <span role="status" className="font-mono text-xs text-danger">
+            <span
+              role="status"
+              style={{ fontSize: 'var(--text-sm)', color: 'var(--danger)' }}
+            >
               {lastError}
             </span>
           )}
@@ -301,20 +343,12 @@ export function RoutingPage() {
             type="button"
             onClick={() => setShowTable((v) => !v)}
             aria-pressed={showTable}
-            className={
-              'h-8 px-2.5 font-mono text-xs transition-colors ' +
-              (showTable
-                ? 'border border-primaryFill bg-primaryFill text-white'
-                : 'border border-border bg-panel text-ink hover:border-primaryBright hover:bg-soft')
-            }
+            style={showTable ? btnPrimary : btn}
+            title={t('routing.tableTitle')}
           >
-            TABLE
+            {t('routing.table')}
           </button>
-          <button
-            type="button"
-            onClick={load}
-            className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
-          >
+          <button type="button" onClick={load} style={btn}>
             {t('common.refresh')}
           </button>
         </div>
@@ -322,37 +356,74 @@ export function RoutingPage() {
 
       {/* 主体 */}
       {loading ? (
-        <div className="mt-4 h-96 animate-pulse rounded-card border border-border bg-panel" aria-busy="true" />
+        <div
+          className="mt-4 h-96 animate-pulse"
+          style={card}
+          aria-busy="true"
+        />
       ) : loadError ? (
-        <section className="mt-4 rounded-card border border-danger bg-dangerBg p-6" role="alert">
-          <p className="text-sm text-danger">{t('common.loadFailed')}{loadError}</p>
-          <button
-            type="button"
-            onClick={load}
-            className="mt-3 h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
-          >
+        <section
+          className="mt-4 p-6"
+          style={{
+            ...card,
+            borderColor: 'var(--danger)',
+            background: 'var(--danger-bg)',
+          }}
+          role="alert"
+        >
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--danger)' }}>
+            {t('common.loadFailed')}
+            {loadError}
+          </p>
+          <button type="button" onClick={load} style={{ ...btn, marginTop: '0.75rem' }}>
             {t('common.retry')}
           </button>
         </section>
       ) : routes.length === 0 ? (
-        /* 空态（design/01 §6.2） */
-        <section className="mt-4 rounded-card border border-border bg-panel p-8 text-center">
-          <p className="text-sm text-inkMuted">{t('routing.empty')}</p>
-          <pre className="mx-auto mt-3 max-w-lg overflow-x-auto border border-border bg-soft p-3 text-left font-mono text-xs leading-relaxed text-ink">
-            {ROUTES_EXAMPLE_TOML}
-          </pre>
-          <button
-            type="button"
-            onClick={importExample}
-            className="mt-4 h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover"
-          >
-            {t('routing.importExample')}
-          </button>
+        /* 空态：一键导入优先，示例 TOML 折叠（渐进披露） */
+        <section className="fade-in mt-4 p-8 text-center" style={card}>
+          <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-muted)' }}>
+            {t('routing.empty')}
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <button type="button" onClick={importExample} style={btnPrimary}>
+              {t('routing.importExample')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowExample((v) => !v)}
+              aria-expanded={showExample}
+              style={{ ...btn, background: 'transparent', borderColor: 'transparent', color: 'var(--accent)' }}
+            >
+              {showExample ? t('routing.hideExample') : t('routing.viewExample')}
+            </button>
+          </div>
+          {showExample && (
+            <pre
+              className="fade-in mx-auto mt-4 max-w-lg overflow-x-auto p-3 text-left leading-relaxed"
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: 'var(--surface-hover)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-xs)',
+                color: 'var(--text)',
+              }}
+            >
+              {ROUTES_EXAMPLE_TOML}
+            </pre>
+          )}
         </section>
       ) : (
         <>
           {/* 二部图画布 + 边浮层 */}
-          <div className="mt-4 overflow-hidden rounded-card border border-border">
+          <div
+            className="mt-4 overflow-hidden"
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+            }}
+          >
             <BipartiteCanvas
               routes={routes}
               leftIds={leftIds}

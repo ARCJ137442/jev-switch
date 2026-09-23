@@ -22,8 +22,8 @@ const toWrite = (p: AdminProvider): AdminProviderWrite => ({
 });
 
 /**
- * Providers 页（design/01 §6.1，契约 06 §3 × TeamSense 面板结构）：
- * 卡片流 + ENABLED 乐观更新/回滚 + 密文密钥 + Probe + 打字 id 删除 +
+ * Providers 页（v2 设计系统 · docs/design/UI-REDESIGN-v2.md §3.2，契约 06 §3）：
+ * 卡片流 + ENABLED 乐观更新/回滚 + 密文密钥 + Probe + 普通二次确认删除 +
  * 表单/贴 toml 双入口 + 冲突横幅（GET 深比较驱动，hook 集中供 H3 复用）。
  */
 export function ProvidersPage() {
@@ -151,95 +151,118 @@ export function ProvidersPage() {
   const enabledCount = providers.filter((p) => p.enabled).length;
   const mode = getAdminMode();
 
-  const btnPrimary =
-    'h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover';
-  const btnSecondary =
-    'h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft';
+  const card: React.CSSProperties = {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+  };
+  const btn: React.CSSProperties = {
+    fontSize: 'var(--text-sm)',
+    background: 'var(--surface-hover)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    color: 'var(--text)',
+    padding: '0.5rem 0.875rem',
+  };
+  const btnPrimary: React.CSSProperties = {
+    ...btn,
+    background: 'var(--accent)',
+    borderColor: 'var(--accent)',
+    color: '#fff',
+    fontWeight: 600,
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
-      <div className="mb-4 flex items-baseline justify-between">
-        <h1 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+        <h1 className="font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
           {t('prov.title')}
         </h1>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-          api {mode}
+        <span
+          className="tabular"
+          style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
+          title={mode === 'mock' ? t('prov.mockMode') : t('prov.liveMode')}
+        >
+          {t('prov.enabledCount', { n: enabledCount, total: providers.length })}
         </span>
       </div>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        {/* 左窄工具栏 — TeamSense 面板 */}
-        <aside className="w-full shrink-0 lg:w-52">
-          <div className="space-y-3 overflow-hidden rounded-card border border-border bg-panel px-4 py-3">
-            <button type="button" onClick={() => openAdd('form')} className={`${btnPrimary} w-full`}>
-              {t('prov.add')}
-            </button>
-            <button type="button" onClick={() => openAdd('toml')} className={`${btnSecondary} w-full`}>
-              {t('prov.pasteToml')}
-            </button>
-            <div className="border-t border-border pt-3 font-mono text-xs text-inkMuted tabular">
-              <div>
-                <span>{t('prov.enabledCount', { n: enabledCount, total: providers.length })}</span>
-              </div>
-              <div className="mt-1 text-[10px] uppercase tracking-widest text-inkSubtle">
-                {mode === 'mock' ? t('prov.mockMode') : t('prov.liveMode')}
-              </div>
-            </div>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <button type="button" onClick={() => openAdd('form')} style={btnPrimary}>
+          {t('prov.add')}
+        </button>
+        <button
+          type="button"
+          onClick={() => openAdd('toml')}
+          style={btn}
+          title={t('add.pasteHint')}
+        >
+          {t('prov.pasteToml')}
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        {showAdd && (
+          <AddProviderPanel
+            initialTab={addTab}
+            onAdd={onAdd}
+            onCancel={() => setShowAdd(false)}
+          />
+        )}
+
+        {loading ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" aria-busy="true">
+            <div className="h-48 animate-pulse" style={card} />
+            <div className="h-48 animate-pulse" style={card} />
           </div>
-        </aside>
-
-        {/* 右侧卡片流 */}
-        <div className="min-w-0 flex-1 space-y-4">
-          {showAdd && (
-            <AddProviderPanel
-              initialTab={addTab}
-              onAdd={onAdd}
-              onCancel={() => setShowAdd(false)}
-            />
-          )}
-
-          {loading ? (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" aria-busy="true">
-              <div className="h-44 animate-pulse rounded-card border border-border bg-panel" />
-              <div className="h-44 animate-pulse rounded-card border border-border bg-panel" />
-            </div>
-          ) : error ? (
-            <section className="rounded-card border border-danger bg-dangerBg p-6" role="alert">
-              <p className="text-sm text-danger">{t('common.loadFailed')}{error}</p>
-              <button type="button" onClick={load} className={`${btnSecondary} mt-3`}>
-                {t('common.retry')}
+        ) : error ? (
+          <section
+            className="fade-in p-6"
+            style={{ ...card, borderColor: 'var(--danger)', background: 'var(--danger-bg)' }}
+            role="alert"
+          >
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--danger)' }}>
+              {t('common.loadFailed')}
+              {error}
+            </p>
+            <button type="button" onClick={load} style={{ ...btn, marginTop: '0.75rem' }}>
+              {t('common.retry')}
+            </button>
+          </section>
+        ) : providers.length === 0 ? (
+          <section className="fade-in p-10 text-center" style={card}>
+            <p className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
+              {t('prov.empty')}
+            </p>
+            <p
+              className="mx-auto mt-2 max-w-md"
+              style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
+            >
+              {t('prov.emptyHint')}
+            </p>
+            <div className="mt-5 flex justify-center gap-3">
+              <button type="button" onClick={() => openAdd('form')} style={btnPrimary}>
+                {t('prov.add')}
               </button>
-            </section>
-          ) : providers.length === 0 ? (
-            <section className="rounded-card border border-border bg-panel p-8 text-center">
-              <p className="text-sm text-inkMuted">{t('prov.empty')}</p>
-              <p className="mt-2 text-sm text-inkMuted">
-                {t('prov.emptyHint')}
-              </p>
-              <div className="mt-4 flex justify-center gap-2">
-                <button type="button" onClick={() => openAdd('form')} className={btnPrimary}>
-                  {t('prov.add')}
-                </button>
-                <button type="button" onClick={() => openAdd('toml')} className={btnSecondary}>
-                  {t('prov.pasteToml')}
-                </button>
-              </div>
-            </section>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {providers.map((p) => (
-                <ProviderCard
-                  key={p.id}
-                  provider={p}
-                  busy={busyId === p.id}
-                  onToggle={(prov, en) => void onToggle(prov, en)}
-                  onReplaceKey={onReplaceKey}
-                  onDelete={(prov) => void onDelete(prov)}
-                />
-              ))}
+              <button type="button" onClick={() => openAdd('toml')} style={btn}>
+                {t('prov.pasteToml')}
+              </button>
             </div>
-          )}
-        </div>
+          </section>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {providers.map((p) => (
+              <ProviderCard
+                key={p.id}
+                provider={p}
+                busy={busyId === p.id}
+                onToggle={(prov, en) => void onToggle(prov, en)}
+                onReplaceKey={onReplaceKey}
+                onDelete={(prov) => void onDelete(prov)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

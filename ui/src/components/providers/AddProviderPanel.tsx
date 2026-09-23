@@ -22,8 +22,35 @@ interface FormState {
 
 const EMPTY_FORM: FormState = { id: '', kind: '', base: '', enabled: true, apiKey: '' };
 
+/** 输入框（v2：mono 仅用于 id/base/key 这类机读值） */
+const inputStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--text-sm)',
+  background: 'var(--surface-hover)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  color: 'var(--text)',
+};
+
+const btn: React.CSSProperties = {
+  fontSize: 'var(--text-sm)',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  color: 'var(--text)',
+  padding: '0.4rem 0.8rem',
+};
+
+const btnPrimary: React.CSSProperties = {
+  ...btn,
+  background: 'var(--accent)',
+  borderColor: 'var(--accent)',
+  color: '#fff',
+  fontWeight: 600,
+};
+
 /**
- * + Add provider 面板（design/01 §6.1 × TeamSense 三段式）：表单 / 粘贴 toml 片段 双 Tab。
+ * + Add provider 面板（v2 设计系统）：表单 / 粘贴 toml 片段 双 Tab。
  * api_key 走 password 输入（无 Show）；解析错误全部回显，不静默半导入。
  */
 export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props) {
@@ -34,11 +61,16 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const tabClass = (active: boolean) =>
-    'h-8 px-2.5 font-mono text-xs transition-colors rounded ' +
-    (active
-      ? 'border border-primaryFill bg-primaryFill text-white'
-      : 'border border-transparent text-inkMuted hover:text-ink hover:bg-soft');
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    fontSize: 'var(--text-sm)',
+    fontWeight: active ? 600 : 400,
+    padding: '0.4rem 0.8rem',
+    borderRadius: 'var(--radius)',
+    border: '1px solid',
+    borderColor: active ? 'var(--accent)' : 'transparent',
+    background: active ? 'var(--accent)' : 'transparent',
+    color: active ? '#fff' : 'var(--text-muted)',
+  });
 
   const submitForm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,29 +126,48 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
   };
 
   return (
-    <section className="overflow-hidden rounded-card border border-border bg-panel">
-      <header className="flex items-center justify-between border-b border-border px-4 py-2">
+    <section
+      className="fade-in overflow-hidden"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+      }}
+    >
+      <header
+        className="flex items-center justify-between px-4 py-2.5"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
         <div className="flex items-center gap-1">
-          <button type="button" className={tabClass(tab === 'form')} onClick={() => setTab('form')}>
+          <button type="button" style={tabStyle(tab === 'form')} onClick={() => setTab('form')}>
             {t('add.tabForm')}
           </button>
-          <button type="button" className={tabClass(tab === 'toml')} onClick={() => setTab('toml')}>
+          <button
+            type="button"
+            style={tabStyle(tab === 'toml')}
+            onClick={() => setTab('toml')}
+            title={t('add.pasteHint')}
+          >
             {t('prov.pasteToml')}
           </button>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="h-8 font-mono text-xs text-inkSubtle hover:text-ink"
+          style={{ ...btn, background: 'transparent', borderColor: 'transparent', color: 'var(--text-muted)' }}
         >
           {t('common.close')}
         </button>
       </header>
 
       {errors.length > 0 && (
-        <div className="border-b border-danger bg-dangerBg px-4 py-2" role="alert">
+        <div
+          className="px-4 py-2.5"
+          style={{ borderBottom: '1px solid var(--danger)', background: 'var(--danger-bg)' }}
+          role="alert"
+        >
           {errors.map((err, i) => (
-            <div key={i} className="font-mono text-xs text-danger">
+            <div key={i} style={{ fontSize: 'var(--text-sm)', color: 'var(--danger)' }}>
               {err}
             </div>
           ))}
@@ -124,7 +175,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
       )}
 
       {tab === 'form' ? (
-        <form onSubmit={(e) => void submitForm(e)} className="space-y-3 px-4 py-3">
+        <form onSubmit={(e) => void submitForm(e)} className="space-y-3 px-4 py-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="id" hint={t('common.required')}>
               <input
@@ -132,7 +183,8 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
                 placeholder="vercel"
                 spellCheck={false}
-                className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+                className="h-9 w-full px-2.5"
+                style={inputStyle}
               />
             </Field>
             <Field label="kind" hint={t('common.required')}>
@@ -141,7 +193,8 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
                 onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
                 placeholder="vercel-gateway"
                 spellCheck={false}
-                className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+                className="h-9 w-full px-2.5"
+                style={inputStyle}
               />
             </Field>
           </div>
@@ -151,10 +204,11 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               onChange={(e) => setForm((f) => ({ ...f, base: e.target.value }))}
               placeholder="https://…"
               spellCheck={false}
-              className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+              className="h-9 w-full px-2.5"
+              style={inputStyle}
             />
           </Field>
-          <Field label="api_key" hint={t('add.apiKeyHint')}>
+          <Field label="api_key">
             <input
               type="password"
               value={form.apiKey}
@@ -162,52 +216,57 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               placeholder="••••••••"
               autoComplete="new-password"
               spellCheck={false}
-              className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+              title={t('add.apiKeyHint')}
+              className="h-9 w-full px-2.5"
+              style={inputStyle}
             />
           </Field>
-          <label className="flex items-center gap-2 text-xs text-ink">
+          <label
+            className="flex items-center gap-2"
+            style={{ fontSize: 'var(--text-sm)', color: 'var(--text)' }}
+          >
             <input
               type="checkbox"
               checked={form.enabled}
               onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-              className="accent-primary"
+              style={{ accentColor: 'var(--accent)' }}
             />
-            enabled
+            {t('add.enabled')}
           </label>
           <div className="flex gap-2 pt-1">
             <button
               type="submit"
               disabled={busy}
-              className="h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:opacity-50"
+              className="disabled:opacity-50"
+              style={btnPrimary}
             >
               {busy ? t('common.saving') : t('add.submit')}
             </button>
           </div>
         </form>
       ) : (
-        <form onSubmit={(e) => void submitToml(e)} className="space-y-3 px-4 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-            {t('add.pasteHint')}
-          </div>
+        <form onSubmit={(e) => void submitToml(e)} className="space-y-3 px-4 py-4">
           <textarea
             value={toml}
             onChange={(e) => setToml(e.target.value)}
             rows={8}
             spellCheck={false}
+            title={t('add.parseHint')}
+            aria-label={t('add.pasteHint')}
             placeholder={'[providers.vercel]\nkind = "vercel-gateway"\nbase = "https://…"\napi_key = "…"\nenabled = true'}
-            className="w-full resize-y border border-border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink placeholder:text-inkSubtle"
+            className="w-full resize-y p-3 leading-relaxed"
+            style={inputStyle}
           />
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={busy}
-              className="h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:opacity-50"
+              className="disabled:opacity-50"
+              style={btnPrimary}
+              title={t('add.parseHint')}
             >
               {busy ? t('common.saving') : t('add.parseAdd')}
             </button>
-            <span className="self-center font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-              {t('add.parseHint')}
-            </span>
           </div>
         </form>
       )}
@@ -225,15 +284,20 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
+    <label className="flex flex-col gap-1.5">
+      <span className="flex items-baseline justify-between gap-2">
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 600,
+            color: 'var(--text)',
+          }}
+        >
           {label}
         </span>
         {hint && (
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-            {hint}
-          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>{hint}</span>
         )}
       </span>
       {children}

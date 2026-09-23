@@ -1,104 +1,226 @@
 /**
- * 落地色板 = 方案 B 色值（docs/design/02 §3.2）× TeamSense 圆角（7/6px）。
- * 结构：全部颜色走 CSS 变量 —— `:root` = 浅色；`[data-theme="dark"]` = 深色变体（块 2）。
- * 数值与 tailwind.config.js 的 colors 扩展保持一致（改一处必须同步另一处）。
- * 对比度实测表：docs/design/02 §5 落地色板（浅/深）。
+ * Jev-Switch 设计系统 v2.0 (2026-09-24 重构)
+ * 方向：实用主义 + 精致工业风，深色优先
+ * 字体：Inter Variable（清晰）+ JetBrains Mono（仅代码/ID）
+ * 避开：终端腔（mono+uppercase+tracking-widest）、SaaS渐变俗套
  */
+
+/* ── 浅色主题（兼容） ── */
 :root {
-  /* 面（B：bg gray-100 / panel 白 / soft gray-50 输入阱） */
   --bg: #f4f4f5;
-  --panel: #ffffff;
-  --soft: #fafafa;
-
-  /* 文字（正文全部 ≥4.5:1：ink 19.9 / muted 5.99 / subtle 只放白面板 4.83） */
-  --ink: #09090b;
-  --ink-muted: #636366;
-  --ink-subtle: #71717a;
-
-  /* 线与交互蓝（B：border gray-200 · primary blue-600 · bright blue-500） */
+  --surface: #ffffff;
+  --surface-hover: #fafafa;
   --border: #e4e4e7;
-  --primary: #0060df; /* 文字/链接/选中边 — on 白 5.62 */
-  --primary-fill: #0060df; /* CTA 实底 — 白字 5.62 */
-  --primary-fill-hover: #0050c0;
-  --primary-bright: #0a84ff; /* 描边/焦点/洗底 — 非文本 3.65≥3，不做小字 */
-  --primary-wash: rgba(10, 132, 255, 0.1); /* 激活卡洗底（B2） */
-  --overlay: rgba(9, 9, 11, 0.72); /* 模态遮罩 */
 
-  /* 状态三档（B1/B5）：文字 700 / pill 底 100 / 点 500-600 — 修 ok/warn 旧 3.77/3.6 违规 */
-  --ok: #047857;
-  --ok-bg: #d1fae5;
-  --ok-dot: #059669;
-  --warn: #b45309;
-  --warn-bg: #fef3c7;
-  --warn-dot: #d97706;
-  --danger: #b91c1c; /* 正文 */
+  --text: #09090b;
+  --text-muted: #71717a;
+  --text-subtle: #a1a1aa;
+
+  --accent: #0891b2;
+  --accent-hover: #0e7490;
+
+  --success: #059669;
+  --success-bg: #d1fae5;
+  --warning: #d97706;
+  --warning-bg: #fef3c7;
+  --danger: #dc2626;
   --danger-bg: #fee2e2;
-  --danger-fill: #dc2626; /* 实底 — 白字 4.83 */
-  --danger-dot: #dc2626;
-  --info: #0369a1; /* 信息 pill（MODEL/PREFIX 类型标） */
-  --info-bg: #e0f2fe;
 
-  /* DAG 边：选中=primary · 默认=装饰（02 §3.2 标注）· 错误=red fill */
-  --edge: #0060df;
+  --radius: 8px;
+
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Geist Mono', monospace;
+
+  /* 字号层级（清晰） */
+  --text-xs: 0.75rem;   /* 12px */
+  --text-sm: 0.875rem;  /* 14px */
+  --text-base: 1rem;    /* 16px - 正文默认 */
+  --text-lg: 1.125rem;  /* 18px */
+  --text-xl: 1.25rem;   /* 20px */
+  --text-2xl: 1.5rem;   /* 24px - 页面标题 */
+
+  /* 间距系统（4px 网格） */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+
+  /* 阴影层级 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.15);
+  --shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.2);
+
+  /* ── 兼容别名（v1 → v2）──
+     未迁移的页面/组件（Shell、Providers、Routing、Playground）仍通过
+     tailwind.config.js 的 colors 映射引用 v1 变量名；此处一律指向 v2 新值，
+     保证新旧共存期配色一致。逐页迁移完成后可整段删除。 */
+  --panel: var(--surface);
+  --soft: var(--surface-hover);
+  --ink: var(--text);
+  --ink-muted: var(--text-muted);
+  --ink-subtle: var(--text-subtle);
+  --primary: var(--accent);
+  --primary-fill: var(--accent);
+  --primary-fill-hover: var(--accent-hover);
+  --primary-bright: var(--accent);
+  --primary-wash: rgba(8, 145, 178, 0.1);
+  --overlay: rgba(9, 9, 11, 0.72);
+  --ok: var(--success);
+  --ok-bg: var(--success-bg);
+  --ok-dot: var(--success);
+  --warn: var(--warning);
+  --warn-bg: var(--warning-bg);
+  --warn-dot: var(--warning);
+  --danger-fill: var(--danger);
+  --danger-dot: var(--danger);
+  --info: var(--accent);
+  --info-bg: rgba(8, 145, 178, 0.1);
+  --edge: var(--accent);
   --edge-idle: #d4d4d8;
-
-  /* 形状 = TeamSense（dist --radius-card/--radius-control）：面板 7 / 控件 6；
-     状态胶囊 rounded-full 例外（B 裁决接受）。 */
-  --radius: 6px;
-  --radius-card: 7px;
-  --radius-ctl: 6px;
-
-  /* 字号（design/01 §4.2）：UI 13–14 / eyebrow 10 / mono id 12–13 */
-  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Geist Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular,
-    Menlo, monospace;
+  --font-ui: var(--font-sans);
+  --radius-card: var(--radius);
+  --radius-ctl: var(--radius);
 
   color-scheme: light;
 }
 
-/* 焦点（B4）：2px 蓝环，替换 design/01 的 1px ink 细框 */
+/* ── 深色主题（默认，控制台标配） ── */
+[data-theme='dark'] {
+  --bg: #0a0a0f;
+  --surface: #15151a;
+  --surface-hover: #1a1a20;
+  --border: rgba(255, 255, 255, 0.08);
+
+  --text: #e4e4e7;
+  --text-muted: #a1a1aa;
+  --text-subtle: #71717a;
+
+  --accent: #06b6d4;
+  --accent-hover: #0891b2;
+
+  --success: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.1);
+
+  /* 兼容别名中需要随主题换值的项（其余 var() 别名自动跟随） */
+  --primary-wash: rgba(6, 182, 212, 0.14);
+  --info-bg: rgba(6, 182, 212, 0.12);
+  --overlay: rgba(0, 0, 0, 0.66);
+  --edge-idle: #3f3f46;
+
+  color-scheme: dark;
+}
+
+/* ── 全局基础样式 ── */
+* {
+  border-color: var(--border);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button, input, select, textarea {
+  border-radius: var(--radius);
+}
+
+code, kbd, pre, samp {
+  font-family: var(--font-mono);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 焦点环 ── */
 :focus-visible {
-  outline: 2px solid var(--primary-bright);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ── 深色变体（块 2）：CC Switch 色系深色版 — 同结构镜像，正文全 ≥4.5:1。
-   实测对比度表：docs/design/02 §5 落地色板（浅/深）。 */
-[data-theme='dark'] {
-  --bg: #141417;
-  --panel: #1c1c20;
-  --soft: #232329;
+/* ── 输入框焦点 ── */
+textarea:focus,
+input:focus,
+select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
 
-  /* ink 15.5 / muted 6.6 / subtle 5.3（panel）· 5.7（bg）· 4.9（soft） */
-  --ink: #f4f4f5;
-  --ink-muted: #a1a1ab;
-  --ink-subtle: #8f8f99;
+/* ── 卡片交互态 ── */
+.card-hover {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
 
-  --border: #2e2e34;
-  /* 文字蓝提亮到 #4d9dff（6.1 on panel）；实底保持 CC 蓝 #0060DF（白字 5.62） */
-  --primary: #4d9dff;
-  --primary-fill: #0060df;
-  --primary-fill-hover: #0a72e8; /* 白字 4.58 ≥4.5 */
-  --primary-bright: #59a8ff;
-  --primary-wash: rgba(89, 168, 255, 0.14);
-  --overlay: rgba(0, 0, 0, 0.62);
+.card-hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-lg);
+}
 
-  /* 状态：深色反相 300 档文字 on 950 档底 — pill 9.96/10.8/8.3 */
-  --ok: #5eead4;
-  --ok-bg: #052e26;
-  --ok-dot: #10b981;
-  --warn: #fcd34d;
-  --warn-bg: #2e2208;
-  --warn-dot: #f59e0b;
-  --danger: #fca5a5;
-  --danger-bg: #3f1519;
-  --danger-fill: #dc2626; /* 白字 4.83 — 实底双主题同值 */
-  --danger-dot: #ef4444;
-  --info: #7dd3fc;
-  --info-bg: #0c2f47;
+/* ── 动画（页面加载逐个淡入） ── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
-  --edge: #4d9dff;
-  --edge-idle: #4b4b55; /* 默认边=装饰（同浅色豁免标注） */
+.fade-in {
+  animation: fadeInUp 0.3s ease-out forwards;
+  opacity: 0;
+}
 
-  color-scheme: dark;
+.fade-in:nth-child(1) { animation-delay: 0s; }
+.fade-in:nth-child(2) { animation-delay: 0.05s; }
+.fade-in:nth-child(3) { animation-delay: 0.1s; }
+.fade-in:nth-child(4) { animation-delay: 0.15s; }
+
+/* ── 健康灯脉动（仅 warning/danger） ── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-warning,
+.status-danger {
+  animation: pulse 2s infinite;
+}
+
+/* ── 滚动条（深色主题） ── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-subtle);
+}
+
+/* ── 响应式运动降级 ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

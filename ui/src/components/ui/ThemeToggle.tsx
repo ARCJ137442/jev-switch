@@ -37,10 +37,17 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={theme === 'dark' ? t('shell.themeToLight') : t('shell.themeToDark')}
       aria-pressed={theme === 'dark'}
-      className="inline-flex items-center gap-1 rounded-ctl border border-border bg-panel px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted transition-colors hover:border-primaryBright hover:bg-soft hover:text-primary"
+      className="inline-flex h-8 w-8 items-center justify-center transition-colors"
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        background: 'var(--surface-hover)',
+        color: 'var(--text-muted)',
+        fontSize: 'var(--text-sm)',
+      }}
+      title={theme === 'dark' ? t('shell.themeToLight') : t('shell.themeToDark')}
     >
       <span aria-hidden>{theme === 'dark' ? '☾' : '☀'}</span>
-      <span>{theme === 'dark' ? 'DARK' : 'LIGHT'}</span>
     </button>
   );
 }

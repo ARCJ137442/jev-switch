@@ -9,13 +9,30 @@ interface Props {
   onAdd: () => void;
 }
 
-const cell =
-  'h-8 w-full border border-transparent bg-transparent px-1.5 font-mono text-xs text-ink tabular focus:border-primaryBright focus:bg-soft';
+/** 单元格输入：mono 仅用于 id / 数字类值（v2 字体规则） */
+const cellStyle: React.CSSProperties = {
+  height: '2rem',
+  width: '100%',
+  border: '1px solid transparent',
+  borderRadius: 'var(--radius)',
+  background: 'transparent',
+  padding: '0 0.375rem',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--text-sm)',
+  color: 'var(--text)',
+};
+
+const thStyle: React.CSSProperties = {
+  padding: '0.5rem 0.75rem',
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  color: 'var(--text-muted)',
+};
 
 /**
  * 路由表编辑（design/01 §8 a11y：连线编辑必须有表单等价路径）。
  * 全字段键盘可编辑：left / match / right / upstream_model / priority / sticky / on_error。
- * 环标红行（dangerBg tint）+ 重复 left→right 提示；增删行走同一 debounce PUT 管线。
+ * 环标红行 + 重复 left→right 行首 ⚠ 提示；增删行走同一 debounce PUT 管线。
  */
 export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAdd }: Props) {
   const { t } = useI18n();
@@ -26,15 +43,37 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
   }
 
   return (
-    <section className="overflow-hidden rounded-card border border-border bg-panel" aria-label="routes table editor">
-      <header className="flex items-center justify-between border-b border-border px-4 py-2">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
+    <section
+      className="overflow-hidden"
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+      }}
+      aria-label="routes table editor"
+    >
+      <header
+        className="flex items-center justify-between px-4 py-2"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        {/* 保存管线说明改为表头 tooltip（渐进披露，不常驻占位） */}
+        <span
+          style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text)' }}
+          title={t('rt.footer')}
+        >
           {t('rt.title')}
         </span>
         <button
           type="button"
           onClick={onAdd}
-          className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
+          style={{
+            fontSize: 'var(--text-sm)',
+            background: 'var(--surface-hover)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            color: 'var(--text)',
+            padding: '0.375rem 0.75rem',
+          }}
         >
           {t('common.addRow')}
         </button>
@@ -43,21 +82,25 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-border font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-              <th className="px-3 py-2 font-semibold">left</th>
-              <th className="px-2 py-2 font-semibold">match</th>
-              <th className="px-3 py-2 font-semibold">right</th>
-              <th className="px-3 py-2 font-semibold">upstream_model</th>
-              <th className="px-3 py-2 font-semibold">priority</th>
-              <th className="px-2 py-2 font-semibold">sticky</th>
-              <th className="px-2 py-2 font-semibold">on_error</th>
-              <th className="px-2 py-2" aria-label="actions" />
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <th style={thStyle}>left</th>
+              <th style={{ ...thStyle, padding: '0.5rem' }}>match</th>
+              <th style={thStyle}>right</th>
+              <th style={thStyle}>upstream_model</th>
+              <th style={thStyle}>priority</th>
+              <th style={{ ...thStyle, padding: '0.5rem' }}>sticky</th>
+              <th style={{ ...thStyle, padding: '0.5rem' }}>on_error</th>
+              <th style={{ ...thStyle, padding: '0.5rem' }} aria-label="actions" />
             </tr>
           </thead>
           <tbody>
             {routes.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-4 text-center text-sm text-inkMuted">
+                <td
+                  colSpan={8}
+                  className="px-3 py-4 text-center"
+                  style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
+                >
                   {t('rt.empty')}
                 </td>
               </tr>
@@ -66,27 +109,43 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
               const key = edgeKey(r.left, r.right);
               const isErr = errorEdges.has(key);
               const dup = (pairCount.get(key) ?? 0) > 1;
+              const dupCell: React.CSSProperties = dup
+                ? { ...cellStyle, borderColor: 'var(--danger)' }
+                : cellStyle;
               return (
                 <tr
                   key={`${key}#${i}`}
-                  className={
-                    'border-b border-border ' + (isErr ? 'bg-dangerBg' : 'hover:bg-soft')
-                  }
+                  style={{
+                    borderBottom: '1px solid var(--border)',
+                    background: isErr ? 'var(--danger-bg)' : undefined,
+                  }}
                 >
                   <td className="px-2 py-1">
-                    <input
-                      value={r.left}
-                      onChange={(e) => onPatchAt(i, { left: e.target.value })}
-                      className={cell + (dup ? ' border-danger' : '')}
-                      aria-label={`row ${i + 1} left`}
-                      spellCheck={false}
-                    />
+                    <div className="flex items-center gap-1">
+                      {dup && (
+                        <span
+                          role="img"
+                          aria-label={t('rt.dup')}
+                          title={t('rt.dup')}
+                          style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', flexShrink: 0 }}
+                        >
+                          ⚠
+                        </span>
+                      )}
+                      <input
+                        value={r.left}
+                        onChange={(e) => onPatchAt(i, { left: e.target.value })}
+                        style={dupCell}
+                        aria-label={`row ${i + 1} left`}
+                        spellCheck={false}
+                      />
+                    </div>
                   </td>
                   <td className="px-1 py-1">
                     <select
                       value={r.match}
                       onChange={(e) => onPatchAt(i, { match: e.target.value as 'exact' | 'prefix' })}
-                      className={cell}
+                      style={{ ...cellStyle, fontFamily: 'var(--font-sans)' }}
                       aria-label={`row ${i + 1} match`}
                     >
                       <option value="exact">exact</option>
@@ -97,7 +156,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                     <input
                       value={r.right}
                       onChange={(e) => onPatchAt(i, { right: e.target.value })}
-                      className={cell + (dup ? ' border-danger' : '')}
+                      style={dupCell}
                       aria-label={`row ${i + 1} right`}
                       spellCheck={false}
                     />
@@ -114,7 +173,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                         )
                       }
                       placeholder="—"
-                      className={cell + ' placeholder:text-inkSubtle'}
+                      style={cellStyle}
                       aria-label={`row ${i + 1} upstream model`}
                       spellCheck={false}
                     />
@@ -127,7 +186,8 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                         const n = Number(e.target.value);
                         if (Number.isFinite(n)) onPatchAt(i, { priority: Math.trunc(n) });
                       }}
-                      className={cell + ' w-20 tabular'}
+                      className="tabular"
+                      style={{ ...cellStyle, width: '5rem' }}
                       aria-label={`row ${i + 1} priority`}
                     />
                   </td>
@@ -135,7 +195,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                     <select
                       value={r.sticky ?? 'none'}
                       onChange={(e) => onPatchAt(i, { sticky: e.target.value as 'none' | 'session' })}
-                      className={cell}
+                      style={{ ...cellStyle, fontFamily: 'var(--font-sans)' }}
                       aria-label={`row ${i + 1} sticky`}
                     >
                       <option value="none">none</option>
@@ -146,7 +206,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                     <select
                       value={r.on_error ?? 'next'}
                       onChange={(e) => onPatchAt(i, { on_error: e.target.value as 'next' | 'fail' })}
-                      className={cell}
+                      style={{ ...cellStyle, fontFamily: 'var(--font-sans)' }}
                       aria-label={`row ${i + 1} on error`}
                     >
                       <option value="next">next</option>
@@ -158,7 +218,13 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       type="button"
                       onClick={() => onDeleteAt(i)}
                       aria-label={`delete row ${i + 1}`}
-                      className="h-8 px-1.5 font-mono text-xs text-inkMuted hover:text-danger"
+                      style={{
+                        height: '2rem',
+                        padding: '0 0.375rem',
+                        fontSize: 'var(--text-sm)',
+                        color: 'var(--text-muted)',
+                        background: 'transparent',
+                      }}
                     >
                       {t('rt.del')}
                     </button>
@@ -169,9 +235,6 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
           </tbody>
         </table>
       </div>
-      <footer className="border-t border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-        {t('rt.footer')}
-      </footer>
     </section>
   );
 }

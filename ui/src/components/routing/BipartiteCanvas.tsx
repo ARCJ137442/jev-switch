@@ -66,6 +66,27 @@ const CARD_PB = 6;
 const GAP = 16;
 const PAD = 24;
 
+/** 拖线锚点：视觉 12px，命中区 32px（触屏可用性 — 布局几何不受影响） */
+const ANCHOR_VIS = 12;
+const ANCHOR_HIT = 32;
+
+/** 类型胶囊（v2：无 uppercase / 无 tracking-widest，最小 12px） */
+const CHIP: React.CSSProperties = {
+  borderRadius: 999,
+  padding: '0.0625rem 0.375rem',
+  fontSize: 'var(--text-xs)',
+  lineHeight: 1.4,
+  fontWeight: 500,
+};
+
+/** 徽标机读值 → 展示文案（值保持不变，仅呈现小写） */
+const CHIP_TEXT: Record<string, string> = {
+  MODEL: 'model',
+  PREFIX: 'prefix',
+  ALIAS: 'alias',
+  PROVIDER: 'provider',
+};
+
 /**
  * 可调用端点判定（docs/11 §一，与 daemon 转发行为对齐）：
  * - `match=prefix` 且无 upstream_model → **透传端点**（转发 model=调用方入参）
@@ -431,8 +452,8 @@ export function BipartiteCanvas({
   return (
     <div
       ref={wrapRef}
-      className="relative w-full overflow-hidden bg-panel select-none"
-      style={{ height }}
+      className="relative w-full select-none overflow-hidden"
+      style={{ height, background: 'var(--surface)' }}
       onClick={() => onSelectEdge(null)}
     >
       {/* 左列：网关侧模型端点（公共 id；Tab 序 = 视觉序：左列 → 边 → 右列） */}
@@ -442,34 +463,75 @@ export function BipartiteCanvas({
           tabIndex={0}
           role="group"
           aria-label={`model ${b.id}, ${b.badge}`}
-          className="absolute z-10 rounded border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
-          style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
+          className="absolute z-10 px-2.5 py-2"
+          style={{
+            left: b.x,
+            top: b.y,
+            width: b.w,
+            height: b.h,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex h-full items-center justify-between gap-2">
-            <span className="min-w-0 truncate font-mono text-xs font-medium text-ink tabular" title={b.id}>
+            <span
+              className="min-w-0 truncate tabular"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 500,
+                color: 'var(--text)',
+              }}
+              title={b.id}
+            >
               {b.id}
             </span>
             <span
-              className={
-                'shrink-0 border px-1 py-0.5 font-mono text-[10px] uppercase tracking-widest ' +
-                (b.badge === 'PREFIX' || b.badge === 'ALIAS'
-                  ? 'rounded-full border-0 bg-soft px-1.5 text-inkMuted'
-                  : 'rounded-full border-0 bg-infoBg text-info')
-              }
+              className="shrink-0"
+              style={{
+                ...CHIP,
+                ...(b.badge === 'PREFIX' || b.badge === 'ALIAS'
+                  ? { background: 'var(--surface-hover)', color: 'var(--text-muted)' }
+                  : { background: 'var(--accent)', color: '#fff' }),
+              }}
             >
-              {b.badge}
+              {CHIP_TEXT[b.badge] ?? b.badge.toLowerCase()}
             </span>
           </div>
-          {/* 拖线锚点（aria 保持稳定——CDP/自动化以该文案定位） */}
+          {/* 拖线锚点：视觉 12px，命中区 32px（透明外扩容器；移动端可用性） */}
           <button
             type="button"
             aria-label={`从 ${b.id} 拖出连线到提供商`}
             title={tCore('canvas.dragTitle')}
             onPointerDown={(e) => startDrag(b.id, e)}
-            className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-sm border border-primaryBright bg-panel hover:bg-primaryFill"
-            style={{ touchAction: 'none' }}
-          />
+            className="absolute flex items-center justify-center"
+            style={{
+              right: -ANCHOR_HIT / 2,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: ANCHOR_HIT,
+              height: ANCHOR_HIT,
+              padding: (ANCHOR_HIT - ANCHOR_VIS) / 2,
+              background: 'transparent',
+              border: 'none',
+              cursor: 'crosshair',
+              touchAction: 'none',
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: ANCHOR_VIS,
+                height: ANCHOR_VIS,
+                borderRadius: 3,
+                background: 'var(--surface)',
+                border: '1px solid var(--accent)',
+                display: 'block',
+              }}
+            />
+          </button>
         </div>
       ))}
 
@@ -477,13 +539,13 @@ export function BipartiteCanvas({
       <svg width={width} height={height} className="absolute inset-0" aria-hidden={false}>
         <defs>
           <marker id="arrow-idle" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" className="fill-edgeIdle" />
+            <path d="M0,0 L8,4 L0,8 Z" fill="var(--edge-idle)" />
           </marker>
           <marker id="arrow-active" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" className="fill-edge" />
+            <path d="M0,0 L8,4 L0,8 Z" fill="var(--edge)" />
           </marker>
           <marker id="arrow-danger" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" className="fill-danger" />
+            <path d="M0,0 L8,4 L0,8 Z" fill="var(--danger)" />
           </marker>
         </defs>
 
@@ -494,13 +556,19 @@ export function BipartiteCanvas({
               const active = selectedEdge === e.key || hoverEdge === e.key;
               const isErr = errorEdges.has(e.key);
               const sticky = e.route.sticky === 'session';
-              // 端点可读性：钉死边标注目标模型，透传边标注 *input*（docs/11 §四）
-              const parts = [`p=${e.route.priority}`];
-              if (e.route.upstream_model) parts.push(shortModel(e.route.upstream_model));
-              else if (e.route.match === 'prefix') parts.push('*input*');
-              if (sticky) parts.push('sticky');
-              const label = parts.join(' · ');
+              /* badge 只留 priority（避免重叠）；模型/sticky 信息进 aria-label + EdgeInspector */
+              const label = String(e.route.priority);
               const bw = label.length * 7.2 + 14;
+              // 端点可读性移到无障碍标签（docs/11 §四）
+              const target = e.route.upstream_model
+                ? shortModel(e.route.upstream_model)
+                : e.route.match === 'prefix'
+                  ? 'caller input model'
+                  : e.route.left;
+              const aria =
+                `route ${e.route.left} to ${e.route.right}, priority ${e.route.priority}` +
+                `, upstream model ${target}` +
+                (sticky ? ', sticky session' : '');
               return (
                 <g key={e.key} role="listitem">
                   {/* 可命中的宽 hit 区 */}
@@ -512,7 +580,7 @@ export function BipartiteCanvas({
                     style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                     tabIndex={0}
                     role="button"
-                    aria-label={`route ${e.route.left} to ${e.route.right}, priority ${e.route.priority}`}
+                    aria-label={aria}
                     onClick={(ev) => {
                       ev.stopPropagation();
                       onSelectEdge(e.key);
@@ -532,34 +600,29 @@ export function BipartiteCanvas({
                   <path
                     d={e.d}
                     fill="none"
-                    className={
-                      isErr
-                        ? 'stroke-danger'
-                        : active
-                          ? 'stroke-edge'
-                          : 'stroke-edgeIdle'
-                    }
+                    stroke={isErr ? 'var(--danger)' : active ? 'var(--edge)' : 'var(--edge-idle)'}
                     strokeWidth={isErr || active ? 2 : 1.5}
                     markerEnd={
                       isErr ? 'url(#arrow-danger)' : active ? 'url(#arrow-active)' : 'url(#arrow-idle)'
                     }
                     style={{ pointerEvents: 'none' }}
                   />
-                  {/* 边 badge */}
+                  {/* 边 badge：仅 priority（其余信息见 aria-label / EdgeInspector） */}
                   <g transform={`translate(${e.mx},${e.my})`} style={{ pointerEvents: 'none' }}>
                     <rect
                       x={-bw / 2}
-                      y={-8}
+                      y={-9}
                       width={bw}
-                      height={16}
-                      className="fill-panel"
-                      stroke={isErr ? '#dc2626' : active ? '#0a0a0a' : '#e5e5e5'}
+                      height={18}
+                      rx={9}
+                      fill="var(--surface)"
+                      stroke={isErr ? 'var(--danger)' : active ? 'var(--accent)' : 'var(--border)'}
                       strokeWidth={1}
                     />
                     <text
                       textAnchor="middle"
                       y={4}
-                      className="fill-ink"
+                      fill="var(--text)"
                       style={{
                         fontSize: 12,
                         fontFamily: 'var(--font-mono)',
@@ -579,7 +642,7 @@ export function BipartiteCanvas({
           <path
             d={`M ${drag.ax} ${drag.ay} C ${drag.ax + 60} ${drag.ay}, ${drag.x - 60} ${drag.y}, ${drag.x} ${drag.y}`}
             fill="none"
-            className="stroke-edge"
+            stroke="var(--edge)"
             strokeWidth={1.5}
             strokeDasharray="4 3"
             style={{ pointerEvents: 'none' }}
@@ -596,37 +659,73 @@ export function BipartiteCanvas({
             tabIndex={0}
             role="group"
             aria-label={`provider ${b.id}, ${b.ports.length} endpoints`}
-            className="absolute z-10 rounded-card border border-border bg-panel focus-visible:outline focus-visible:outline-1"
-            style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
+            className="absolute z-10"
+            style={{
+              left: b.x,
+              top: b.y,
+              width: b.w,
+              height: b.h,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* 卡头 = 提供商锚定：地址 + key 归属（API token 在 provider 层，掩码展示归 Providers 页） */}
-            <div className="flex h-10 items-center justify-between gap-2 border-b border-border bg-soft px-2.5">
+            <div
+              className="flex h-10 items-center justify-between gap-2 px-2.5"
+              style={{
+                borderBottom: '1px solid var(--border)',
+                background: 'var(--surface-hover)',
+                borderTopLeftRadius: 'var(--radius)',
+                borderTopRightRadius: 'var(--radius)',
+              }}
+            >
               <span className="flex min-w-0 items-center gap-2">
                 <span
-                  className={
-                    'inline-block h-1.5 w-1.5 shrink-0 rounded-full ' +
-                    (b.enabled ? 'bg-okDot' : 'bg-inkSubtle')
-                  }
+                  className="inline-block shrink-0"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: b.enabled ? 'var(--success)' : 'var(--text-subtle)',
+                  }}
                   aria-hidden
                 />
-                <span className="min-w-0 truncate font-mono text-xs font-medium text-ink tabular" title={b.id}>
+                <span
+                  className="min-w-0 truncate tabular"
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-sm)',
+                    fontWeight: 500,
+                    color: 'var(--text)',
+                  }}
+                  title={b.id}
+                >
                   {b.id}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-1">
-                <span className="rounded-full bg-soft px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted tabular">
+                <span
+                  className="tabular"
+                  style={{ ...CHIP, background: 'var(--surface)', color: 'var(--text-muted)' }}
+                >
                   {b.ports.length} ep
-                </span>
-                <span className="rounded-full bg-soft px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-                  PROVIDER
                 </span>
               </span>
             </div>
             {/* 端口区 = 卡片内的模型端点（三元组再锚定模型 id） */}
             <div className="flex flex-col gap-1 px-1.5 pt-1.5">
               {b.ports.length === 0 ? (
-                <div className="flex h-6 items-center rounded border border-dashed border-border px-1.5 font-mono text-[10px] text-inkMuted">
+                <div
+                  className="flex h-6 items-center px-1.5"
+                  style={{
+                    border: '1px dashed var(--border)',
+                    borderRadius: 'var(--radius)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
                   {tCore('canvas.noEndpoint')}
                 </div>
               ) : (
@@ -637,7 +736,16 @@ export function BipartiteCanvas({
                     data-right-node={b.id}
                     role="group"
                     aria-label={`endpoint ${b.id}/${p.model ?? 'passthrough'}`}
-                    className="flex h-6 items-center gap-1.5 rounded border border-border bg-bg px-1.5 font-mono text-[10px] text-ink"
+                    className="flex items-center gap-1.5 px-1.5"
+                    style={{
+                      height: PORT_H,
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      background: 'var(--bg)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--text)',
+                    }}
                     title={
                       p.pinned
                         ? tCore('canvas.pinTitle', { id: b.id, model: p.model ?? '' })
@@ -645,21 +753,27 @@ export function BipartiteCanvas({
                     }
                   >
                     <span
-                      className={
-                        'inline-block h-1 w-1 shrink-0 ' + (p.pinned ? 'bg-ink' : 'bg-inkSubtle')
-                      }
+                      className="inline-block shrink-0"
+                      style={{
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        background: p.pinned ? 'var(--accent)' : 'var(--text-subtle)',
+                      }}
                       aria-hidden
                     />
                     <span className="min-w-0 truncate tabular" title={p.model ?? undefined}>
                       {p.model ?? '* input model'}
                     </span>
                     <span
-                      className={
-                        'ml-auto shrink-0 border px-1 uppercase tracking-widest ' +
-                        (p.pinned
-                          ? 'rounded-full border-0 bg-infoBg text-info'
-                          : 'rounded-full border-0 bg-soft px-1.5 text-inkMuted')
-                      }
+                      className="ml-auto shrink-0"
+                      style={{
+                        ...CHIP,
+                        fontFamily: 'var(--font-sans)',
+                        ...(p.pinned
+                          ? { background: 'var(--accent)', color: '#fff' }
+                          : { background: 'var(--surface-hover)', color: 'var(--text-muted)' }),
+                      }}
                     >
                       {p.pinned ? 'pin' : 'pass'}
                     </span>
@@ -675,16 +789,36 @@ export function BipartiteCanvas({
             tabIndex={0}
             role="group"
             aria-label={`alias ${b.id}`}
-            className="absolute z-10 rounded border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
-            style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
+            className="absolute z-10 px-2.5 py-2"
+            style={{
+              left: b.x,
+              top: b.y,
+              width: b.w,
+              height: b.h,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex h-full items-center justify-between gap-2">
-              <span className="min-w-0 truncate font-mono text-xs font-medium text-ink tabular" title={b.id}>
+              <span
+                className="min-w-0 truncate tabular"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 500,
+                  color: 'var(--text)',
+                }}
+                title={b.id}
+              >
                 {b.id}
               </span>
-              <span className="shrink-0 rounded-full bg-soft px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-                ALIAS
+              <span
+                className="shrink-0"
+                style={{ ...CHIP, background: 'var(--surface-hover)', color: 'var(--text-muted)' }}
+              >
+                {CHIP_TEXT.ALIAS}
               </span>
             </div>
           </div>

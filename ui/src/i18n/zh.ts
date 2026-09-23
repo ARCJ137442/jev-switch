@@ -18,6 +18,7 @@ export const zh: Record<keyof typeof en, string> = {
   'common.addRow': '+ 添加行',
 
   /* shell */
+  'shell.navDashboard': '仪表盘',
   'shell.navProviders': '提供商',
   'shell.navRouting': '路由',
   'shell.navPlayground': '演练场',
@@ -37,8 +38,8 @@ export const zh: Record<keyof typeof en, string> = {
   'prov.add': '+ 添加提供商',
   'prov.pasteToml': '贴 toml 片段',
   'prov.enabledCount': '{n} / {total} 已启用',
-  'prov.mockMode': 'mock-first · dev',
-  'prov.liveMode': 'live daemon',
+  'prov.mockMode': '当前显示示例数据（开发构建，未连接 daemon）',
+  'prov.liveMode': '已连接本地 daemon',
   'prov.empty': '还没有提供商。',
   'prov.emptyHint': '粘贴 [providers.*] toml 片段，或参考 rs/providers.example.toml 添加第一个上游。',
   'prov.idExists': 'id 已存在：{id}',
@@ -52,20 +53,29 @@ export const zh: Record<keyof typeof en, string> = {
   /* provider card */
   'card.untested': '未探测',
   'card.disabled': '已停用',
-  'card.probeFailed': '探测失败',
-  'card.degraded': '降级（慢）',
+  'card.probeFailed': '不可达',
+  'card.degraded': '响应慢',
   'card.healthy': '健康',
-  'card.lastUntested': 'last — · 未探测',
+  'card.lastUntested': '尚未探测',
+  'card.lastProbeOk': '最近探测 {ms}ms · HTTP {status}',
+  'card.lastProbeFail': '最近探测失败 · {detail}',
   'card.replaceKey': '更换密钥',
-  'card.typeIdConfirm': '输入 id 确认',
+  'card.confirmDelete': '确认删除？',
+  'card.on': '已启用',
+  'card.off': '已停用',
+  'card.toggleTip': '启用或停用该上游',
+  'card.keyLabel': '密钥',
+  'card.keyUnset': '未设置',
+  'card.keyTip': '密钥由 daemon 保管，界面只显示掩码',
 
   /* probe button */
   'probe.btn': '探测',
   'probe.loading': '探测中…',
+  'probe.tip': '立即向该上游发一次健康检查',
 
   /* key form */
   'key.newKey': '新密钥',
-  'key.maskedHint': '密文输入 · 无明文回显',
+  'key.maskedHint': '仅密文输入 —— 密钥由 daemon 保管，界面从不回显',
 
   /* add provider panel */
   'add.tabForm': '表单',
@@ -74,10 +84,11 @@ export const zh: Record<keyof typeof en, string> = {
   'add.baseHttp': 'base 需以 http(s):// 开头',
   'add.noSections': '未解析到任何 [providers.<id>] 段',
   'add.pasteHint': '粘贴 [providers.<id>] 片段',
-  'add.parseHint': '解析失败会全量回显 · 不半导入',
+  'add.parseHint': '解析错误会全量回显 —— 不会只导入一半',
   'add.parseAdd': '解析并添加',
   'add.submit': '添加提供商',
-  'add.apiKeyHint': '仅密文输入 · 无 Show',
+  'add.apiKeyHint': '仅密文输入 —— 密钥由 daemon 保管，界面从不回显',
+  'add.enabled': '启用',
 
   /* admin login */
   'login.title': '管理员登录',
@@ -92,12 +103,17 @@ export const zh: Record<keyof typeof en, string> = {
   'routing.empty': '还没有路由。',
   'routing.importExample': '一键导入 example',
   'routing.saveFailed': '保存失败，已回滚',
+  'routing.table': '表格',
+  'routing.tableTitle': '切换键盘等价的路由表',
+  'routing.viewExample': '查看示例配置',
+  'routing.hideExample': '收起示例配置',
 
   /* route table */
-  'rt.title': 'Route table · 全量 routes（键盘等价路径）',
+  'rt.title': '路由表',
   'rt.empty': '暂无 routes — 点击添加行或一键导入 example',
   'rt.del': '删',
   'rt.footer': '变更 400ms debounce 后 PUT /v1/admin/routes · 环 → 标红拒绝',
+  'rt.dup': '重复路由 — 相同的 left → right 组合已存在',
 
   /* edge inspector */
   'edge.hintKeep': '空 = 沿用',
@@ -114,6 +130,8 @@ export const zh: Record<keyof typeof en, string> = {
     '把一次 Jev SystemOne 调用路由到异构上游模型 —— Vercel AI Gateway、本地 Laya daemon 或任何未来的提供商。只改 model 字段，路由器负责协议翻译。',
   'pg.quickStart': '快速开始',
   'pg.examples': '示例',
+  'pg.hideCurl': '隐藏 curl',
+  'pg.showCurl': '显示 curl',
 
   /* test panel */
   'tp.form': '表单',
@@ -127,6 +145,10 @@ export const zh: Record<keyof typeof en, string> = {
   'tp.running': '运行中…',
   'tp.waiting': '// [ · ]\n// 等待输入 + Run Jev',
   'tp.estimate': '估算',
+  'tp.runHint': '用当前输入运行 Jev SystemOne 调用',
+  'tp.invalidJson': 'JSON 无效',
+  'tp.decisionType': '决策类型',
+  'tp.summary': '摘要',
   'tp.stateParseFailed': 'state JSON 解析失败：',
   'tp.questionsParseFailed': 'questions JSON 解析失败：',
   'tp.errCapability': 'capability 不匹配（422）',

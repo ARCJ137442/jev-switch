@@ -8,8 +8,8 @@ interface Props {
 }
 
 /**
- * Probe 按钮（design/01 §6.1）：POST /v1/admin/providers/{id}/probe；
- * loading 态按钮文案，结果回传卡片 footer。en='Probe'（CDP PROBE 前缀断言）。
+ * Probe 按钮（v2 设计系统）：POST /v1/admin/providers/{id}/probe；
+ * loading 态换文案，结果回传卡片 footer。en='Probe'（CDP PROBE 前缀断言）。
  */
 export function ProbeButton({ providerId, onResult }: Props) {
   const { t } = useI18n();
@@ -32,7 +32,16 @@ export function ProbeButton({ providerId, onResult }: Props) {
       type="button"
       onClick={() => void onClick()}
       disabled={loading}
-      className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft disabled:cursor-not-allowed disabled:opacity-60"
+      title={t('probe.tip')}
+      className="transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+      style={{
+        fontSize: 'var(--text-sm)',
+        background: 'var(--surface-hover)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        color: 'var(--text)',
+        padding: '0.35rem 0.7rem',
+      }}
     >
       {loading ? t('probe.loading') : t('probe.btn')}
     </button>

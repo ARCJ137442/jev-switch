@@ -6,6 +6,36 @@ import {
   type JevRequest,
   type JevResponse,
 } from '../../api';
+
+/* ---------- v2 设计系统共用样式（tokens.css） ---------- */
+
+const CARD: React.CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+};
+/** 小标签 —— 不再 mono+uppercase+tracking-widest（中文不可读，见 UI-AUDIT） */
+const LABEL: React.CSSProperties = {
+  fontSize: 'var(--text-sm)',
+  color: 'var(--text-muted)',
+};
+const META: React.CSSProperties = {
+  fontSize: 'var(--text-xs)',
+  color: 'var(--text-subtle)',
+};
+/** 代码/JSON 文本域 —— mono 只许用在这里 */
+const CODE_AREA: React.CSSProperties = {
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  background: 'var(--surface-hover)',
+  color: 'var(--text)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--text-xs)',
+};
+const MONO: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--text-xs)',
+};
 import { QuestionFormEditor } from './QuestionFormEditor';
 import { useI18n, t as tCore } from '../../i18n';
 
@@ -124,10 +154,22 @@ export function TestPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const statusColor =
+    status === 'idle'
+      ? 'var(--text-subtle)'
+      : status === 'loading'
+        ? 'var(--warning)'
+        : status === 'ok'
+          ? 'var(--success)'
+          : 'var(--danger)';
+
   return (
-    <section id="playground" className="overflow-hidden rounded-card border border-border bg-panel">
+    <section id="playground" className="fade-in overflow-hidden" style={CARD}>
       {/* Top bar — input mode tabs */}
-      <header className="flex items-center justify-between border-b border-border px-4 py-2">
+      <header
+        className="flex items-center justify-between px-4 py-2"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
         <div className="flex items-center gap-1">
           <TabButton active={inputMode === 'form'} onClick={() => setInputMode('form')}>
             {t('tp.form')}
@@ -136,9 +178,9 @@ export function TestPanel({
             {t('tp.json')}
           </TabButton>
         </div>
-        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+        <div className="flex items-center gap-2" style={META}>
           <span className="tabular">~{totalInputTokens} tokens</span>
-          <span className="text-inkSubtle">·</span>
+          <span>·</span>
           <span className="tabular">{questionCountLabel}</span>
         </div>
       </header>
@@ -146,11 +188,14 @@ export function TestPanel({
       <div className="grid grid-cols-1 divide-border lg:grid-cols-2 lg:divide-x">
         {/* INPUT COLUMN */}
         <div className="flex flex-col">
-          <div className="flex items-center justify-between border-b border-border px-4 py-2">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+          <div
+            className="flex items-center justify-between px-4 py-2"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <span className="font-semibold" style={LABEL}>
               {t('tp.input')}
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+            <span style={META}>
               {inputMode === 'form' ? t('tp.structured') : t('tp.rawJson')}
             </span>
           </div>
@@ -166,7 +211,8 @@ export function TestPanel({
                   onChange={(e) => onStateChange(e.target.value)}
                   spellCheck={false}
                   rows={6}
-                  className="w-full resize-y border border-border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink"
+                  className="w-full resize-y p-2.5 leading-relaxed"
+                  style={CODE_AREA}
                 />
               }
             />
@@ -186,7 +232,8 @@ export function TestPanel({
                       spellCheck={false}
                       rows={12}
                       aria-label="questions JSON"
-                      className="w-full resize-y border border-border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink"
+                      className="w-full resize-y p-2.5 leading-relaxed"
+                      style={CODE_AREA}
                     />
                   }
                 />
@@ -200,34 +247,43 @@ export function TestPanel({
 
         {/* OUTPUT COLUMN */}
         <div className="flex flex-col">
-          <div className="flex items-center justify-between border-b border-border px-4 py-2">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+          <div
+            className="flex items-center justify-between px-4 py-2"
+            style={{ borderBottom: '1px solid var(--border)' }}
+          >
+            <span className="font-semibold" style={LABEL}>
               {t('tp.output')}
             </span>
-            <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+            <span className="flex items-center gap-2" style={META}>
               <span
-                className={
-                  'inline-block h-1.5 w-1.5 rounded-full ' +
-                  (status === 'idle'
-                    ? 'bg-inkSubtle'
-                    : status === 'loading'
-                      ? 'animate-pulse bg-primaryFill'
-                      : status === 'ok'
-                        ? 'bg-okDot'
-                        : 'bg-dangerDot')
-                }
+                className={status === 'loading' ? 'status-warning' : ''}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: statusColor,
+                  display: 'inline-block',
+                }}
+                aria-hidden
               />
               {status}
-              {latencyMs !== null && <span className="tabular text-inkSubtle">· {latencyMs}ms</span>}
+              {latencyMs !== null && <span className="tabular">· {latencyMs}ms</span>}
             </span>
           </div>
 
           <div className="flex-1 px-4 py-3">
             <pre
-              className={
-                'min-h-[200px] whitespace-pre-wrap break-words border bg-soft p-3 font-mono text-xs leading-relaxed ' +
-                // design/01 §7：错误态输出面板 dangerBg tint（B1）
-                (error ? 'border-danger bg-dangerBg text-danger' : 'border-border text-ink')
+              className="min-h-[200px] whitespace-pre-wrap break-words p-3 leading-relaxed"
+              style={
+                // design/01 §7：错误态输出面板 danger tint（B1）
+                error
+                  ? {
+                      ...CODE_AREA,
+                      borderColor: 'var(--danger)',
+                      background: 'var(--danger-bg)',
+                      color: 'var(--danger)',
+                    }
+                  : CODE_AREA
               }
             >
               {error
@@ -249,16 +305,24 @@ export function TestPanel({
         </div>
       </div>
 
-      {/* Big blue CTA（B4 — 主蓝独占 CTA） */}
-      <div className="flex items-center justify-between border-t border-border bg-soft px-4 py-3">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-          POST {BASE}/v1/systemone
-        </span>
+      {/* CTA —— 技术路径收进 title（渐进披露，见 UI-AUDIT） */}
+      <div
+        className="flex items-center justify-end px-4 py-3"
+        style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-hover)' }}
+      >
         <button
           type="button"
           onClick={onRun}
           disabled={status === 'loading'}
-          className="inline-flex h-8 items-center gap-2 border border-primaryFill bg-primaryFill px-5 font-mono text-sm font-semibold text-white transition-colors hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
+          title={`POST ${BASE}/v1/systemone · ${t('tp.runHint')}`}
+          className="inline-flex h-8 items-center gap-2 px-5 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            border: '1px solid var(--accent)',
+            borderRadius: 'var(--radius)',
+            background: 'var(--accent)',
+            color: '#fff',
+            fontSize: 'var(--text-sm)',
+          }}
         >
           {status === 'loading' ? t('tp.running') : 'Run Jev'}
           {status !== 'loading' && <span aria-hidden>↗</span>}
@@ -284,12 +348,15 @@ function TabButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={
-        'h-8 px-2.5 font-mono text-xs transition-colors ' +
-        (active
-          ? 'border border-primaryFill bg-primaryFill text-white'
-          : 'border border-transparent text-inkMuted hover:text-primary hover:bg-soft')
-      }
+      className="h-8 px-2.5 transition-colors"
+      style={{
+        fontSize: 'var(--text-sm)',
+        borderRadius: 'var(--radius)',
+        border: `1px solid ${active ? 'var(--accent)' : 'transparent'}`,
+        background: active ? 'var(--accent)' : 'transparent',
+        color: active ? '#fff' : 'var(--text-muted)',
+        fontWeight: active ? 600 : 400,
+      }}
     >
       {children}
     </button>
@@ -310,14 +377,24 @@ function Field({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+        {/* label 是契约字段名（state / questions）→ 保留 mono，但字号 ≥ 12px 且不 uppercase */}
+        <span className="font-semibold" style={{ ...MONO, color: 'var(--text)' }}>
           {label}
         </span>
         {hint && (
           <span
-            className={
-              'font-mono text-[10px] uppercase tracking-widest ' +
-              (hintBg ? 'border border-border bg-soft px-1.5 py-0.5 text-inkMuted' : 'text-inkSubtle')
+            className="tabular"
+            style={
+              hintBg
+                ? {
+                    ...META,
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    background: 'var(--surface-hover)',
+                    color: 'var(--text-muted)',
+                    padding: '0.125rem 0.375rem',
+                  }
+                : META
             }
           >
             {hint}
@@ -335,8 +412,17 @@ function DecisionTypeHint({ questionsJson }: { questionsJson: string }) {
     parsed = JSON.parse(questionsJson || '{}');
   } catch {
     return (
-      <div className="rounded border border-danger bg-dangerBg px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-danger">
-        invalid JSON
+      <div
+        className="px-3 py-2"
+        style={{
+          border: '1px solid var(--danger)',
+          borderRadius: 'var(--radius)',
+          background: 'var(--danger-bg)',
+          color: 'var(--danger)',
+          fontSize: 'var(--text-sm)',
+        }}
+      >
+        {tCore('tp.invalidJson')}
       </div>
     );
   }
@@ -344,14 +430,26 @@ function DecisionTypeHint({ questionsJson }: { questionsJson: string }) {
   const entries = Object.values(parsed as Record<string, { type?: string }>);
   if (entries.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded border border-border bg-soft px-3 py-2">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-        decision type
-      </span>
+    <div
+      className="flex flex-wrap items-center gap-2 px-3 py-2"
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        background: 'var(--surface-hover)',
+      }}
+    >
+      <span style={LABEL}>{tCore('tp.decisionType')}</span>
       {entries.map((q, i) => (
         <span
           key={i}
-          className="rounded-full bg-infoBg px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-info"
+          className="px-2 py-0.5 font-semibold"
+          style={{
+            borderRadius: 999,
+            background: 'var(--accent)',
+            color: '#fff',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-xs)',
+          }}
         >
           {q.type ?? 'unknown'}
         </span>
@@ -426,11 +524,14 @@ function AnswerSummary({
   const answers = response.answers;
   if (!answers || typeof answers !== 'object') {
     return (
-      <div className="border-t border-border px-4 py-3">
-        <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
-          Summary
+      <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+        <div className="mb-2 font-semibold" style={LABEL}>
+          {tCore('tp.summary')}
         </div>
-        <pre className="whitespace-pre-wrap break-words border border-border bg-soft p-3 font-mono text-xs text-inkMuted">
+        <pre
+          className="whitespace-pre-wrap break-words p-3"
+          style={{ ...CODE_AREA, color: 'var(--text-muted)' }}
+        >
           {JSON.stringify(response, null, 2)}
         </pre>
       </div>
@@ -438,12 +539,12 @@ function AnswerSummary({
   }
   const entries = Object.entries(answers as Record<string, unknown>);
   return (
-    <div className="border-t border-border px-4 py-3">
-      <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
-        Summary
+    <div className="px-4 py-3" style={{ borderTop: '1px solid var(--border)' }}>
+      <div className="mb-2 font-semibold" style={LABEL}>
+        {tCore('tp.summary')}
       </div>
       {entries.length > 0 && (
-        <ul className="space-y-1.5 font-mono text-xs">
+        <ul className="space-y-1.5" style={{ fontSize: 'var(--text-xs)' }}>
           {entries.map(([qid, raw]) => (
             <AnswerRow key={qid} qid={qid} raw={raw} />
           ))}
@@ -453,7 +554,7 @@ function AnswerSummary({
         response={response}
         inputTokens={inputTokens}
         measuredLatencyMs={measuredLatencyMs}
-        className={entries.length > 0 ? 'mt-3 border-t border-border pt-2.5' : ''}
+        className={entries.length > 0 ? 'mt-3 pt-2.5' : ''}
       />
     </div>
   );
