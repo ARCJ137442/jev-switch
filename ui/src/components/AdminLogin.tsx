@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { loginAdmin } from '../api/admin';
+import { useI18n } from '../i18n';
 
 /**
  * #43 cloud 态 admin 登录小窗（任务书 B：**极简能用**，视觉打磨归 UI 线 #42）。
@@ -15,6 +16,7 @@ interface AdminLoginProps {
 }
 
 export function AdminLogin({ onSuccess }: AdminLoginProps) {
+  const { t } = useI18n();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,10 +57,10 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
           id="admin-login-title"
           className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted"
         >
-          Admin login
+          {t('login.title')}
         </h2>
         <p className="mt-2 font-mono text-xs text-inkMuted">
-          cloud 态管理需登录（会话缺失或已过期）
+          {t('login.desc')}
         </p>
         <input
           ref={inputRef}
@@ -80,7 +82,7 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
             disabled={busy || password.length === 0}
             className="h-8 border border-primaryFill bg-primaryFill px-4 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? '…' : '登录'}
+            {busy ? '…' : t('login.submit')}
           </button>
         </div>
       </form>

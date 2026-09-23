@@ -10,6 +10,7 @@ import {
   type ModelEntry,
 } from '../api';
 import { EXAMPLES, type ExamplePayload } from '../examples';
+import { useI18n } from '../i18n';
 
 /**
  * Playground 页 — 保留原单页 DNA（jevplayground 黑白等宽），
@@ -17,6 +18,7 @@ import { EXAMPLES, type ExamplePayload } from '../examples';
  * 导航 / daemon 灯 / footer 已上移至 Shell。
  */
 export function PlaygroundPage() {
+  const { t } = useI18n();
   const [model, setModel] = useState<string>(DEFAULT_MODEL_OPTIONS[0].value);
   const [serverModels, setServerModels] = useState<ModelEntry[]>([]);
   const server = useServerStatus();
@@ -94,12 +96,7 @@ export function PlaygroundPage() {
               <span className="text-primary">Every upstream.</span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-inkMuted">
-              Route a single Jev SystemOne call across heterogeneous upstream models — Vercel AI
-              Gateway, local Laya daemon, or any future provider. Switch the{' '}
-              <code className="border border-border bg-panel px-1.5 py-0.5 font-mono text-xs text-ink">
-                model
-              </code>{' '}
-              field; the router handles protocol translation.
+              {t('pg.heroLead')}
             </p>
           </div>
         </div>
@@ -151,7 +148,7 @@ export function PlaygroundPage() {
             <section className="overflow-hidden rounded-card border border-border bg-panel px-4 py-3">
               <div className="mb-2 flex items-baseline justify-between">
                 <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
-                  Quick start
+                  {t('pg.quickStart')}
                 </h2>
                 <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
                   curl

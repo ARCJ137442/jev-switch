@@ -3,6 +3,7 @@ import {
   parseProvidersToml,
   type AdminProviderWrite,
 } from '../../api/admin';
+import { useI18n } from '../../i18n';
 
 interface Props {
   /** toml | form — 空态引导可预选 toml */
@@ -26,6 +27,7 @@ const EMPTY_FORM: FormState = { id: '', kind: '', base: '', enabled: true, apiKe
  * api_key 走 password 输入（无 Show）；解析错误全部回显，不静默半导入。
  */
 export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<'form' | 'toml'>(initialTab);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [toml, setToml] = useState('');
@@ -41,9 +43,9 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
   const submitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     const next: string[] = [];
-    if (!form.id.trim()) next.push('id 必填');
-    if (!form.kind.trim()) next.push('kind 必填');
-    if (!/^https?:\/\/.+/.test(form.base.trim())) next.push('base 需以 http(s):// 开头');
+    if (!form.id.trim()) next.push(t('add.idRequired'));
+    if (!form.kind.trim()) next.push(t('add.kindRequired'));
+    if (!/^https?:\/\/.+/.test(form.base.trim())) next.push(t('add.baseHttp'));
     if (next.length > 0) {
       setErrors(next);
       return;
@@ -72,7 +74,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
     const { providers, errors: parseErrors } = parseProvidersToml(toml);
     if (parseErrors.length > 0 || providers.length === 0) {
       setErrors(
-        parseErrors.length > 0 ? parseErrors : ['未解析到任何 [providers.<id>] 段'],
+        parseErrors.length > 0 ? parseErrors : [t('add.noSections')],
       );
       return;
     }
@@ -96,10 +98,10 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-1">
           <button type="button" className={tabClass(tab === 'form')} onClick={() => setTab('form')}>
-            表单
+            {t('add.tabForm')}
           </button>
           <button type="button" className={tabClass(tab === 'toml')} onClick={() => setTab('toml')}>
-            贴 toml 片段
+            {t('prov.pasteToml')}
           </button>
         </div>
         <button
@@ -107,7 +109,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
           onClick={onCancel}
           className="h-8 font-mono text-xs text-inkSubtle hover:text-ink"
         >
-          Close
+          {t('common.close')}
         </button>
       </header>
 
@@ -124,7 +126,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
       {tab === 'form' ? (
         <form onSubmit={(e) => void submitForm(e)} className="space-y-3 px-4 py-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="id" hint="必填">
+            <Field label="id" hint={t('common.required')}>
               <input
                 value={form.id}
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
@@ -133,7 +135,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
                 className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
               />
             </Field>
-            <Field label="kind" hint="必填">
+            <Field label="kind" hint={t('common.required')}>
               <input
                 value={form.kind}
                 onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
@@ -152,7 +154,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
             />
           </Field>
-          <Field label="api_key" hint="仅密文输入 · 无 Show">
+          <Field label="api_key" hint={t('add.apiKeyHint')}>
             <input
               type="password"
               value={form.apiKey}
@@ -178,14 +180,14 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               disabled={busy}
               className="h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:opacity-50"
             >
-              {busy ? 'Saving…' : 'Add provider'}
+              {busy ? t('common.saving') : t('add.submit')}
             </button>
           </div>
         </form>
       ) : (
         <form onSubmit={(e) => void submitToml(e)} className="space-y-3 px-4 py-3">
           <div className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-            粘贴 [providers.&lt;id&gt;] 片段
+            {t('add.pasteHint')}
           </div>
           <textarea
             value={toml}
@@ -201,10 +203,10 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               disabled={busy}
               className="h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:opacity-50"
             >
-              {busy ? 'Saving…' : 'Parse & Add'}
+              {busy ? t('common.saving') : t('add.parseAdd')}
             </button>
             <span className="self-center font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-              解析失败会全量回显 · 不半导入
+              {t('add.parseHint')}
             </span>
           </div>
         </form>

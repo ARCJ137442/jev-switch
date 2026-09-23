@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { edgeKey, type Route } from '../../api/admin';
 import { EdgeInspector } from './EdgeInspector';
+import { t as tCore } from '../../i18n';
 
 export interface CanvasProvider {
   id: string;
@@ -464,7 +465,7 @@ export function BipartiteCanvas({
           <button
             type="button"
             aria-label={`从 ${b.id} 拖出连线到提供商`}
-            title="拖到右侧卡片内的模型端口建端点边；落卡片空白 = 同名钉死"
+            title={tCore('canvas.dragTitle')}
             onPointerDown={(e) => startDrag(b.id, e)}
             className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-sm border border-primaryBright bg-panel hover:bg-primaryFill"
             style={{ touchAction: 'none' }}
@@ -626,7 +627,7 @@ export function BipartiteCanvas({
             <div className="flex flex-col gap-1 px-1.5 pt-1.5">
               {b.ports.length === 0 ? (
                 <div className="flex h-6 items-center rounded border border-dashed border-border px-1.5 font-mono text-[10px] text-inkMuted">
-                  no endpoint — 拖线到此卡片建同名端点
+                  {tCore('canvas.noEndpoint')}
                 </div>
               ) : (
                 b.ports.map((p) => (
@@ -639,8 +640,8 @@ export function BipartiteCanvas({
                     className="flex h-6 items-center gap-1.5 rounded border border-border bg-bg px-1.5 font-mono text-[10px] text-ink"
                     title={
                       p.pinned
-                        ? `钉死端点：(${b.id}) ${p.model} — 地址×模型×token 三固定`
-                        : `透传端点：模型 = 调用方入参（local/* → local/qwen…）`
+                        ? tCore('canvas.pinTitle', { id: b.id, model: p.model ?? '' })
+                        : tCore('canvas.passTitle')
                     }
                   >
                     <span

@@ -20,6 +20,7 @@ import {
 } from '../components/routing/BipartiteCanvas';
 import { RouteTableForm } from '../components/routing/RouteTableForm';
 import { useToast } from '../app/feedback';
+import { useI18n } from '../i18n';
 
 const ser = (rs: Route[]) => JSON.stringify(rs);
 
@@ -41,6 +42,7 @@ export function RoutingPage() {
   const [saving, setSaving] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const routesRef = useRef(routes);
   routesRef.current = routes;
@@ -80,7 +82,7 @@ export function RoutingPage() {
     const localCycle = findCyclicEdgeKeys(current);
     if (localCycle.length > 0) {
       setErrorEdges(new Set(localCycle));
-      setLastError('路由成环，已拒绝写入');
+      setLastError(t('routing.cycle'));
       return;
     }
     const seq = ++seqRef.current;
@@ -105,7 +107,7 @@ export function RoutingPage() {
         setRoutes(baselineRef.current.map(normalizeRoute));
         setSelected(null);
         setLastError(msg);
-        toast('danger', '保存失败，已回滚');
+        toast('danger', t('routing.saveFailed'));
       }
     } finally {
       if (seq === seqRef.current) setSaving(false);
@@ -229,14 +231,14 @@ export function RoutingPage() {
         return;
       }
     }
-    toast('warn', '没有可用的 left×right 组合');
+    toast('warn', t('routing.noPair'));
   };
 
   const importExample = () => {
     setRoutes(ROUTES_FIXTURE.map(normalizeRoute));
     setErrorEdges(new Set());
     setLastError(null);
-    toast('ok', '已导入 example routes（UNSAVED → 自动保存）');
+    toast('ok', t('routing.imported'));
   };
 
   /* ---- 左列：models ∪ routes.left ---- */
@@ -282,7 +284,7 @@ export function RoutingPage() {
             Routing
           </span>
           <span className="font-mono text-xs text-inkMuted tabular">
-            {routes.length} edges
+            {t('routing.edges', { n: routes.length })}
           </span>
           <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
             model endpoint → model endpoint
@@ -313,7 +315,7 @@ export function RoutingPage() {
             onClick={load}
             className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
           >
-            刷新
+            {t('common.refresh')}
           </button>
         </div>
       </div>
@@ -323,19 +325,19 @@ export function RoutingPage() {
         <div className="mt-4 h-96 animate-pulse rounded-card border border-border bg-panel" aria-busy="true" />
       ) : loadError ? (
         <section className="mt-4 rounded-card border border-danger bg-dangerBg p-6" role="alert">
-          <p className="text-sm text-danger">加载失败：{loadError}</p>
+          <p className="text-sm text-danger">{t('common.loadFailed')}{loadError}</p>
           <button
             type="button"
             onClick={load}
             className="mt-3 h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
           >
-            重试
+            {t('common.retry')}
           </button>
         </section>
       ) : routes.length === 0 ? (
         /* 空态（design/01 §6.2） */
         <section className="mt-4 rounded-card border border-border bg-panel p-8 text-center">
-          <p className="text-sm text-inkMuted">还没有路由。</p>
+          <p className="text-sm text-inkMuted">{t('routing.empty')}</p>
           <pre className="mx-auto mt-3 max-w-lg overflow-x-auto border border-border bg-soft p-3 text-left font-mono text-xs leading-relaxed text-ink">
             {ROUTES_EXAMPLE_TOML}
           </pre>
@@ -344,7 +346,7 @@ export function RoutingPage() {
             onClick={importExample}
             className="mt-4 h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover"
           >
-            一键导入 example
+            {t('routing.importExample')}
           </button>
         </section>
       ) : (

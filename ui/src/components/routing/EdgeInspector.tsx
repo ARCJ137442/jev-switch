@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { Route } from '../../api/admin';
+import { useI18n } from '../../i18n';
 
 interface Props {
   route: Route;
@@ -15,6 +16,7 @@ interface Props {
  * 选中面板描边 = 主蓝（CC Switch border-active 手法）。
  */
 export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Props) {
+  const { t } = useI18n();
   const [prio, setPrio] = useState(String(route.priority));
   useEffect(() => {
     setPrio(String(route.priority));
@@ -58,7 +60,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             aria-label="priority"
           />
         </Field>
-        <Field label="upstream_model" hint="空 = 沿用">
+        <Field label="upstream_model" hint={t('edge.hintKeep')}>
           <input
             type="text"
             value={route.upstream_model ?? ''}
@@ -102,10 +104,10 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
           onClick={onDelete}
           className="h-8 border border-dangerFill bg-dangerFill px-2 font-mono text-xs text-white hover:bg-dangerBg hover:text-danger"
         >
-          Delete
+          {t('common.delete')}
         </button>
         <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-          Backspace / Delete 亦可删
+          {t('edge.backspaceHint')}
         </span>
       </footer>
     </div>

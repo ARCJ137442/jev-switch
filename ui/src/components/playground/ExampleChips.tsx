@@ -1,4 +1,5 @@
 import type { ExamplePayload } from '../../examples';
+import { useI18n } from '../../i18n';
 
 interface Props {
   examples: ExamplePayload[];
@@ -11,10 +12,11 @@ interface Props {
  * 激活/悬停 = 主蓝实底（CC Switch 手法），替代原黑白反色。
  */
 export function ExampleChips({ examples, onPick, activeId }: Props) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="mr-1 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-        Examples
+        {t('pg.examples')}
       </span>
       {examples.map((ex) => {
         const active = ex.id === activeId;
@@ -23,7 +25,7 @@ export function ExampleChips({ examples, onPick, activeId }: Props) {
             key={ex.id}
             type="button"
             onClick={() => onPick(ex)}
-            title={`${ex.description} · ${Object.keys(ex.payload.questions).length} 题`}
+            title={t('ex.titleQuestions', { desc: ex.description, n: Object.keys(ex.payload.questions).length })}
             className={
               'inline-flex h-8 items-center gap-1.5 border px-2.5 font-mono text-xs transition-colors ' +
               (active

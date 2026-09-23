@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n';
+
 interface Props {
   onReload: () => void;
   onOverwrite: () => void;
@@ -7,8 +9,10 @@ interface Props {
 /**
  * 冲突横幅（design/01 §5 / §7，契约 04 §3）：
  * 「配置已在外部修改」→ 重载（默认，主 CTA 蓝）/ 覆盖；warn 描边，禁止静默丢弃手改。
+ * en='Reload' / zh='重载'（CDP 双匹配 ['重载','Reload']）。
  */
 export function ConflictBanner({ onReload, onOverwrite, busy = false }: Props) {
+  const { t } = useI18n();
   return (
     <div
       role="alert"
@@ -18,7 +22,7 @@ export function ConflictBanner({ onReload, onOverwrite, busy = false }: Props) {
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-6 py-2.5">
         <span className="flex items-center gap-2 text-sm text-ink">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-warnDot" aria-hidden />
-          配置已在外部修改
+          {t('conflict.text')}
         </span>
         <span className="flex items-center gap-2">
           <button
@@ -27,7 +31,7 @@ export function ConflictBanner({ onReload, onOverwrite, busy = false }: Props) {
             disabled={busy}
             className="h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:opacity-50"
           >
-            重载
+            {t('common.reload')}
           </button>
           <button
             type="button"
@@ -35,7 +39,7 @@ export function ConflictBanner({ onReload, onOverwrite, busy = false }: Props) {
             disabled={busy}
             className="h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft disabled:opacity-50"
           >
-            覆盖
+            {t('common.overwrite')}
           </button>
         </span>
       </div>

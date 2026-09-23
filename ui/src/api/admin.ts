@@ -1,4 +1,5 @@
 import { getBase } from '../api';
+import { t as tI18n } from '../i18n/core';
 import { PROVIDERS_FIXTURE } from '../fixtures/providers.mock';
 import { ROUTES_FIXTURE } from '../fixtures/routes.mock';
 
@@ -382,7 +383,7 @@ export async function putRoutes(routes: Route[]): Promise<RoutesResponse> {
   // 环 = 400（contracts/05：DAG 含环则 400）— mock 服务端校验，环边键回传供标红
   const cycleEdges = findCyclicEdgeKeys(normalized);
   if (cycleEdges.length > 0) {
-    throw new AdminApiError('路由成环，已拒绝写入', 400, cycleEdges);
+    throw new AdminApiError(tI18n('routing.cycle'), 400, cycleEdges);
   }
   if (adminMode === 'mock') {
     await delay(150);
@@ -455,8 +456,8 @@ export function parseProvidersToml(text: string): TomlParseResult {
 
   const flush = () => {
     if (current === null) return;
-    if (!current.kind) errors.push(`[${current.id}] 缺少 kind`);
-    if (!current.base) errors.push(`[${current.id}] 缺少 base`);
+    if (!current.kind) errors.push(tI18n('api.missingKind', { id: current.id }));
+    if (!current.base) errors.push(tI18n('api.missingBase', { id: current.id }));
     if (current.kind && current.base) providers.push(current);
     current = null;
   };
@@ -472,7 +473,7 @@ export function parseProvidersToml(text: string): TomlParseResult {
       const name = section[1].trim();
       const idMatch = name.match(/^providers\.(.+)$/);
       if (!idMatch) {
-        errors.push(`第 ${i + 1} 行：不支持的段 [${name}]（期待 [providers.<id>]）`);
+        errors.push(tI18n('api.badSection', { n: i + 1, name }));
         current = null;
         continue;
       }
@@ -486,17 +487,17 @@ export function parseProvidersToml(text: string): TomlParseResult {
 
     const kv = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/);
     if (!kv) {
-      errors.push(`第 ${i + 1} 行：无法解析 "${line.slice(0, 40)}"`);
+      errors.push(tI18n('api.parseLine', { n: i + 1, line: line.slice(0, 40) }));
       continue;
     }
     if (current === null) {
-      errors.push(`第 ${i + 1} 行：键值对出现在 [providers.<id>] 段之外`);
+      errors.push(tI18n('api.kvOutside', { n: i + 1 }));
       continue;
     }
     const key = kv[1];
     const value = parseValue(kv[2]);
     if (value === null) {
-      errors.push(`第 ${i + 1} 行：${key} 仅支持引号字符串或布尔值`);
+      errors.push(tI18n('api.valueType', { n: i + 1, key }));
       continue;
     }
     switch (key) {

@@ -1,4 +1,5 @@
 import { edgeKey, type Route } from '../../api/admin';
+import { useI18n } from '../../i18n';
 
 interface Props {
   routes: Route[];
@@ -17,6 +18,7 @@ const cell =
  * 环标红行（dangerBg tint）+ 重复 left→right 提示；增删行走同一 debounce PUT 管线。
  */
 export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAdd }: Props) {
+  const { t } = useI18n();
   const pairCount = new Map<string, number>();
   for (const r of routes) {
     const k = edgeKey(r.left, r.right);
@@ -27,14 +29,14 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
     <section className="overflow-hidden rounded-card border border-border bg-panel" aria-label="routes table editor">
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
         <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
-          Route table · 全量 routes（键盘等价路径）
+          {t('rt.title')}
         </span>
         <button
           type="button"
           onClick={onAdd}
           className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
         >
-          + Add row
+          {t('common.addRow')}
         </button>
       </header>
 
@@ -56,7 +58,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
             {routes.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-4 text-center text-sm text-inkMuted">
-                  暂无 routes — 点击 Add row 或一键导入 example
+                  {t('rt.empty')}
                 </td>
               </tr>
             )}
@@ -158,7 +160,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       aria-label={`delete row ${i + 1}`}
                       className="h-8 px-1.5 font-mono text-xs text-inkMuted hover:text-danger"
                     >
-                      删
+                      {t('rt.del')}
                     </button>
                   </td>
                 </tr>
@@ -168,7 +170,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
         </table>
       </div>
       <footer className="border-t border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-        变更 400ms debounce 后 PUT /v1/admin/routes · 环 → 标红拒绝
+        {t('rt.footer')}
       </footer>
     </section>
   );

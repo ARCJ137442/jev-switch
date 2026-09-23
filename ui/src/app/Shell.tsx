@@ -5,6 +5,7 @@ import { ConflictBanner } from '../components/ConflictBanner';
 import { AdminLogin } from '../components/AdminLogin';
 import { StatusBadge, type BadgeTone } from '../components/ui/StatusBadge';
 import { FeedbackProvider, useConflictControl, useToast } from './feedback';
+import { useI18n } from '../i18n';
 import pkg from '../../package.json';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
@@ -74,10 +75,10 @@ interface ShellProps {
   children: ReactNode;
 }
 
-const NAV: ReadonlyArray<{ route: Route; label: string; href: string }> = [
-  { route: 'providers', label: 'Providers', href: '#/providers' },
-  { route: 'routing', label: 'Routing', href: '#/routing' },
-  { route: 'playground', label: 'Playground', href: '#/playground' },
+const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navProviders' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
+  { route: 'providers', labelKey: 'shell.navProviders', href: '#/providers' },
+  { route: 'routing', labelKey: 'shell.navRouting', href: '#/routing' },
+  { route: 'playground', labelKey: 'shell.navPlayground', href: '#/playground' },
 ];
 
 /** design/01 §5 版式 × TeamSense 导航激活态（A6）× 方案 B 色 */
@@ -93,6 +94,7 @@ function ShellFrame({ route, children }: ShellProps) {
   const server = useServerStatus();
   const { conflict, handlers } = useConflictControl();
   const { toasts } = useToast();
+  const { t, lang, toggleLang } = useI18n();
   const endpointLabel = BASE.replace(/^https?:\/\//, '');
 
   // #43 cloud 态：任一 admin 请求 401/403 → 登录小窗；成功后整页刷新重拉
@@ -125,10 +127,10 @@ function ShellFrame({ route, children }: ShellProps) {
     server.status === 'ok' ? 'ok' : server.status === 'error' ? 'danger' : 'muted';
   const daemonLabel =
     server.status === 'ok'
-      ? 'daemon ok'
+      ? t('shell.daemonOk')
       : server.status === 'error'
-        ? 'daemon unreachable'
-        : 'connecting…';
+        ? t('shell.daemonUnreachable')
+        : t('shell.connecting');
 
   return (
     <div className="flex min-h-full flex-col bg-bg text-ink">
@@ -167,13 +169,13 @@ function ShellFrame({ route, children }: ShellProps) {
                       : 'border-transparent text-inkMuted hover:bg-soft hover:text-ink')
                   }
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </a>
               );
             })}
           </nav>
         </div>
-        {/* 顶栏第二行：daemon 状态胶囊 · masked-key hint · 版本 · 主题切换 */}
+        {/* 顶栏第二行：daemon 状态胶囊 · masked-key hint · 版本 · 主题切换 · 语言切换 */}
         <div className="border-t border-border">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-1.5 font-mono text-[10px] uppercase tracking-widest">
             <StatusBadge tone={daemonTone} aria-live="polite">
@@ -187,15 +189,22 @@ function ShellFrame({ route, children }: ShellProps) {
                 type="button"
                 onClick={toggleTheme}
                 aria-label={
-                  theme === 'dark'
-                    ? 'Switch to light theme (当前：深色)'
-                    : 'Switch to dark theme (当前：浅色)'
+                  theme === 'dark' ? t('shell.themeToLight') : t('shell.themeToDark')
                 }
                 aria-pressed={theme === 'dark'}
                 className="inline-flex items-center gap-1 rounded-ctl border border-border bg-panel px-2 py-0.5 text-inkMuted transition-colors hover:border-primaryBright hover:bg-soft hover:text-primary"
               >
                 <span aria-hidden>{theme === 'dark' ? '☾' : '☀'}</span>
                 <span>{theme === 'dark' ? 'DARK' : 'LIGHT'}</span>
+              </button>
+              {/* 语言切换钮（块 3）：紧邻主题钮；显示当前语言，点击对切 */}
+              <button
+                type="button"
+                onClick={toggleLang}
+                aria-label={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
+                className="inline-flex items-center rounded-ctl border border-border bg-panel px-2 py-0.5 text-inkMuted transition-colors hover:border-primaryBright hover:bg-soft hover:text-primary"
+              >
+                <span>{lang === 'en' ? 'EN' : '中'}</span>
               </button>
             </span>
           </div>
@@ -220,19 +229,19 @@ function ShellFrame({ route, children }: ShellProps) {
       {/* toast 槽位 — B1 tint 胶囊 */}
       {toasts.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2" aria-live="polite">
-          {toasts.map((t) => (
+          {toasts.map((item) => (
             <div
-              key={t.id}
+              key={item.id}
               className={
                 'rounded-ctl border px-3 py-2 font-mono text-xs ' +
-                (t.kind === 'ok'
+                (item.kind === 'ok'
                   ? 'border-transparent bg-okBg text-ok'
-                  : t.kind === 'warn'
+                  : item.kind === 'warn'
                     ? 'border-transparent bg-warnBg text-warn'
                     : 'border-transparent bg-dangerBg text-danger')
               }
             >
-              {t.message}
+              {item.message}
             </div>
           ))}
         </div>

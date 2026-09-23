@@ -7,6 +7,7 @@ import {
   type JevResponse,
 } from '../../api';
 import { QuestionFormEditor } from './QuestionFormEditor';
+import { useI18n, t as tCore } from '../../i18n';
 
 interface Props {
   model: string;
@@ -32,6 +33,7 @@ export function TestPanel({
   onQuestionsChange,
   onRunningChange,
 }: Props) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<Status>('idle');
   const [response, setResponse] = useState<JevResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,9 +53,9 @@ export function TestPanel({
       parsed && typeof parsed === 'object' && !Array.isArray(parsed)
         ? Object.keys(parsed).length
         : 0;
-    questionCountLabel = `${n} question(s)`;
+    questionCountLabel = t('tp.questionsCount', { n });
   } catch {
-    questionCountLabel = '? questions';
+    questionCountLabel = t('tp.questionsUnknown');
   }
 
   const onRun = async () => {
@@ -69,7 +71,7 @@ export function TestPanel({
       parsedState = JSON.parse(stateJson || '{}');
     } catch (e) {
       setStatus('error');
-      setError(`state JSON parse failed: ${(e as Error).message}`);
+      setError(t('tp.stateParseFailed') + (e as Error).message);
       onRunningChange?.(false);
       return;
     }
@@ -77,7 +79,7 @@ export function TestPanel({
       parsedQuestions = JSON.parse(questionsJson || '{}');
     } catch (e) {
       setStatus('error');
-      setError(`questions JSON parse failed: ${(e as Error).message}`);
+      setError(t('tp.questionsParseFailed') + (e as Error).message);
       onRunningChange?.(false);
       return;
     }
@@ -128,10 +130,10 @@ export function TestPanel({
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-1">
           <TabButton active={inputMode === 'form'} onClick={() => setInputMode('form')}>
-            Form
+            {t('tp.form')}
           </TabButton>
           <TabButton active={inputMode === 'json'} onClick={() => setInputMode('json')}>
-            JSON
+            {t('tp.json')}
           </TabButton>
         </div>
         <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
@@ -146,10 +148,10 @@ export function TestPanel({
         <div className="flex flex-col">
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
-              Input
+              {t('tp.input')}
             </span>
             <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-              {inputMode === 'form' ? 'structured' : 'raw JSON'}
+              {inputMode === 'form' ? t('tp.structured') : t('tp.rawJson')}
             </span>
           </div>
 
@@ -200,7 +202,7 @@ export function TestPanel({
         <div className="flex flex-col">
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
-              Output
+              {t('tp.output')}
             </span>
             <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
               <span
@@ -232,7 +234,7 @@ export function TestPanel({
                 ? `// error\n${error}`
                 : response
                   ? JSON.stringify(response, null, 2)
-                  : '// [ · ]\n// waiting for input + Run Jev'}
+                  : t('tp.waiting')}
             </pre>
           </div>
 
@@ -258,7 +260,7 @@ export function TestPanel({
           disabled={status === 'loading'}
           className="inline-flex h-8 items-center gap-2 border border-primaryFill bg-primaryFill px-5 font-mono text-sm font-semibold text-white transition-colors hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {status === 'loading' ? 'Running…' : 'Run Jev'}
+          {status === 'loading' ? t('tp.running') : 'Run Jev'}
           {status !== 'loading' && <span aria-hidden>↗</span>}
         </button>
       </div>
@@ -382,10 +384,10 @@ function formatSystemOneError(e: unknown): string {
   if (e instanceof SystemOneError) {
     const up = e.upstream ? ` · upstream=${e.upstream}` : '';
     if (e.status === 422) {
-      return `capability 不匹配（422）${up}\n${e.message}`;
+      return tCore('tp.errCapability') + up + '\n' + e.message;
     }
     if (e.status === 503 && e.retryable) {
-      return `上游限流（retryable）→ 已返回 503${up}\n${e.message}`;
+      return tCore('tp.errRateLimit') + up + '\n' + e.message;
     }
   }
   return e instanceof Error ? e.message : String(e);
@@ -521,7 +523,7 @@ function Metering({
             {cell('in', `~${inputTokens}`)}
             {cell('out', `~${estOut}`)}
             <span className="border border-border bg-soft px-1 py-px text-[10px] uppercase tracking-widest text-inkMuted">
-              估算
+              {tCore('tp.estimate')}
             </span>
           </>
         )}

@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { initLang } from './i18n';
 import './styles/tokens.css';
 import './index.css';
 
@@ -22,6 +23,8 @@ function initTheme(): void {
   document.documentElement.dataset.theme = theme;
 }
 initTheme();
+/* 语言初始值（块 3）：jev_lang → 默认 en（CDP 断言依赖英文字面）+ <html lang> 同步 */
+initLang();
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('#root not found');

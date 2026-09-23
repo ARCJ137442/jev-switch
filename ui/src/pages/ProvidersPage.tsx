@@ -12,6 +12,7 @@ import { useConfigConflict } from '../hooks/useConfigConflict';
 import { useToast } from '../app/feedback';
 import { ProviderCard } from '../components/providers/ProviderCard';
 import { AddProviderPanel } from '../components/providers/AddProviderPanel';
+import { useI18n } from '../i18n';
 
 const toWrite = (p: AdminProvider): AdminProviderWrite => ({
   id: p.id,
@@ -33,6 +34,7 @@ export function ProvidersPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [addTab, setAddTab] = useState<'form' | 'toml'>('form');
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const providersRef = useRef(providers);
   providersRef.current = providers;
@@ -88,7 +90,7 @@ export function ProvidersPage() {
       await commit(optimistic.map(toWrite));
     } catch {
       setProviders(prev); // 回滚
-      toast('danger', '保存失败，已回滚');
+      toast('danger', t('prov.saveFailed'));
     } finally {
       setBusyId(null);
     }
@@ -104,9 +106,9 @@ export function ProvidersPage() {
         return w;
       });
       await commit(writes);
-      toast('ok', '密钥已保存，仅显示掩码');
+      toast('ok', t('prov.keySaved'));
     } catch (e) {
-      toast('danger', '密钥保存失败');
+      toast('danger', t('prov.keySaveFailed'));
       throw e; // KeyForm 保持打开
     } finally {
       setBusyId(null);
@@ -121,10 +123,10 @@ export function ProvidersPage() {
     setProviders(optimistic);
     try {
       await commit(optimistic.map(toWrite));
-      toast('ok', `已删除 ${p.id}`);
+      toast('ok', t('prov.deleted', { id: p.id }));
     } catch {
       setProviders(prev);
-      toast('danger', '删除失败，已回滚');
+      toast('danger', t('prov.deleteFailed'));
     } finally {
       setBusyId(null);
     }
@@ -134,10 +136,10 @@ export function ProvidersPage() {
   const onAdd = async (provider: AdminProviderWrite) => {
     const prev = providersRef.current;
     if (prev.some((x) => x.id === provider.id)) {
-      throw new Error(`id 已存在：${provider.id}`);
+      throw new Error(t('prov.idExists', { id: provider.id }));
     }
     await commit([...prev.map(toWrite), provider]);
-    toast('ok', `已添加 ${provider.id}`);
+    toast('ok', t('prov.added', { id: provider.id }));
     setShowAdd(false);
   };
 
@@ -158,7 +160,7 @@ export function ProvidersPage() {
     <div className="mx-auto max-w-7xl px-6 py-8">
       <div className="mb-4 flex items-baseline justify-between">
         <h1 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
-          Providers
+          {t('prov.title')}
         </h1>
         <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
           api {mode}
@@ -170,17 +172,17 @@ export function ProvidersPage() {
         <aside className="w-full shrink-0 lg:w-52">
           <div className="space-y-3 overflow-hidden rounded-card border border-border bg-panel px-4 py-3">
             <button type="button" onClick={() => openAdd('form')} className={`${btnPrimary} w-full`}>
-              + Add provider
+              {t('prov.add')}
             </button>
             <button type="button" onClick={() => openAdd('toml')} className={`${btnSecondary} w-full`}>
-              贴 toml 片段
+              {t('prov.pasteToml')}
             </button>
             <div className="border-t border-border pt-3 font-mono text-xs text-inkMuted tabular">
               <div>
-                <span className="text-ink">{enabledCount}</span> / {providers.length} enabled
+                <span>{t('prov.enabledCount', { n: enabledCount, total: providers.length })}</span>
               </div>
               <div className="mt-1 text-[10px] uppercase tracking-widest text-inkSubtle">
-                {mode === 'mock' ? 'mock-first · dev' : 'live daemon'}
+                {mode === 'mock' ? t('prov.mockMode') : t('prov.liveMode')}
               </div>
             </div>
           </div>
@@ -203,23 +205,23 @@ export function ProvidersPage() {
             </div>
           ) : error ? (
             <section className="rounded-card border border-danger bg-dangerBg p-6" role="alert">
-              <p className="text-sm text-danger">加载失败：{error}</p>
+              <p className="text-sm text-danger">{t('common.loadFailed')}{error}</p>
               <button type="button" onClick={load} className={`${btnSecondary} mt-3`}>
-                重试
+                {t('common.retry')}
               </button>
             </section>
           ) : providers.length === 0 ? (
             <section className="rounded-card border border-border bg-panel p-8 text-center">
-              <p className="text-sm text-inkMuted">还没有提供商。</p>
+              <p className="text-sm text-inkMuted">{t('prov.empty')}</p>
               <p className="mt-2 text-sm text-inkMuted">
-                粘贴 [providers.*] toml 片段，或参考 rs/providers.example.toml 添加第一个上游。
+                {t('prov.emptyHint')}
               </p>
               <div className="mt-4 flex justify-center gap-2">
                 <button type="button" onClick={() => openAdd('form')} className={btnPrimary}>
-                  + Add provider
+                  {t('prov.add')}
                 </button>
                 <button type="button" onClick={() => openAdd('toml')} className={btnSecondary}>
-                  贴 toml 片段
+                  {t('prov.pasteToml')}
                 </button>
               </div>
             </section>

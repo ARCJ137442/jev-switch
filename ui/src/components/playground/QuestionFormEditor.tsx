@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useI18n, t as tCore, type MessageKey } from '../../i18n';
 
 /**
  * 结构化题目表单编辑器（验收反馈 UI-3 / UI-4，参考 jevplayground.com 呈现）：
@@ -31,10 +32,10 @@ interface Props {
   onChange: (json: string) => void;
 }
 
-const TYPE_META: ReadonlyArray<{ id: QItem['type']; label: string; title: string }> = [
-  { id: 'choice', label: 'Choice', title: '从选项中选一个标签并返回各自概率' },
-  { id: 'score', label: 'Score', title: '按有序档位打一个分数' },
-  { id: 'noul', label: 'Noul', title: '是非题：返回 0-1 概率（true/false 两行描述）' },
+const TYPE_META: ReadonlyArray<{ id: QItem['type']; label: string; titleKey: MessageKey }> = [
+  { id: 'choice', label: 'Choice', titleKey: 'qf.typeChoice' },
+  { id: 'score', label: 'Score', titleKey: 'qf.typeScore' },
+  { id: 'noul', label: 'Noul', titleKey: 'qf.typeNoul' },
 ];
 
 const MAX_CHOICES = 10;
@@ -47,17 +48,17 @@ function str(v: unknown): string {
 
 function fromPlain(obj: unknown): QItem[] {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-    throw new Error('questions 必须是对象 { qid: {...} }');
+    throw new Error(tCore('qf.notObject'));
   }
   const items: QItem[] = [];
   for (const [qid, raw] of Object.entries(obj as Record<string, unknown>)) {
     if (!raw || typeof raw !== 'object') {
-      throw new Error(`题目 "${qid}" 不是对象`);
+      throw new Error(tCore('qf.qidNotObject', { qid }));
     }
     const q = raw as Record<string, unknown>;
     const type = str(q.type);
     if (type !== 'choice' && type !== 'score' && type !== 'noul') {
-      throw new Error(`题目 "${qid}" 的 type="${type || '?'}" 不受支持（仅 choice/score/noul）— 请在 JSON 视图编辑`);
+      throw new Error(tCore('qf.typeUnsupported', { qid, type: type || '?' }));
     }
     const instructions = str(q.instructions);
     const crit = q.criteria;
@@ -95,7 +96,7 @@ function fromPlain(obj: unknown): QItem[] {
     items.push({ qid, type, instructions, entries });
   }
   if (items.length === 0) {
-    throw new Error('questions 为空 — 至少需要 1 题');
+    throw new Error(tCore('qf.empty'));
   }
   return items;
 }
@@ -105,8 +106,8 @@ function toPlain(items: QItem[]): { json?: string; error?: string } {
   const seen = new Set<string>();
   for (const it of items) {
     const id = it.qid.trim();
-    if (!id) return { error: 'qid 不能为空' };
-    if (seen.has(id)) return { error: `qid 重复："${id}" — 请改名` };
+    if (!id) return { error: tCore('qf.qidEmpty') };
+    if (seen.has(id)) return { error: tCore('qf.qidDup', { id }) };
     seen.add(id);
   }
   const out: Record<string, unknown> = {};
@@ -168,6 +169,7 @@ function nextQid(items: QItem[]): string {
 /* ---------- 组件 ---------- */
 
 export function QuestionFormEditor({ questionsJson, onChange }: Props) {
+  const { t } = useI18n();
   const [items, setItems] = useState<QItem[] | null>(null);
   const [parseErr, setParseErr] = useState<string | null>(null);
   const [pushErr, setPushErr] = useState<string | null>(null);
@@ -214,7 +216,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
   if (items === null) {
     return (
       <div className="border border-border bg-soft px-3 py-2 font-mono text-xs text-inkMuted">
-        loading form…
+        {t('qf.loadingForm')}
       </div>
     );
   }
@@ -226,7 +228,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
           role="alert"
           className="rounded border border-danger bg-dangerBg px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-danger"
         >
-          JSON 无效，下方为最近一次有效表单 — 请切到 JSON 视图修复：{parseErr}
+          {t('qf.jsonInvalid')}{parseErr}
         </div>
       )}
       {pushErr && (
@@ -234,7 +236,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
           role="alert"
           className="rounded border border-warn bg-warnBg px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-warn"
         >
-          {pushErr}（暂未写回 JSON）
+          {t('qf.notWrittenBack', { err: pushErr })}
         </div>
       )}
 
@@ -255,7 +257,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
         aria-label="add question"
         className="h-8 w-full border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-primaryFill hover:bg-primaryFill hover:text-white"
       >
-        + Add question
+        {t('qf.addQuestion')}
       </button>
     </div>
   );
@@ -272,6 +274,7 @@ interface CardProps {
 }
 
 function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
+  const { t } = useI18n();
   const typeSwitch = (t: QItem['type']) =>
     onChange({ type: t, entries: retargetEntries(item.entries, t) });
 
@@ -326,21 +329,21 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
           placeholder="qid"
         />
         <div className="flex items-center gap-1" role="group" aria-label={`decision type for ${item.qid}`}>
-          {TYPE_META.map((t) => (
+          {TYPE_META.map((meta) => (
             <button
-              key={t.id}
+              key={meta.id}
               type="button"
-              title={t.title}
-              aria-pressed={item.type === t.id}
-              onClick={() => typeSwitch(t.id)}
+              title={t(meta.titleKey)}
+              aria-pressed={item.type === meta.id}
+              onClick={() => typeSwitch(meta.id)}
               className={
                 'h-8 border px-2.5 font-mono text-xs transition-colors ' +
-                (item.type === t.id
+                (item.type === meta.id
                   ? 'border border-primaryFill bg-primaryFill text-white'
                   : 'border-border bg-panel text-inkMuted hover:border-primaryBright hover:text-ink')
               }
             >
-              {t.label}
+              {meta.label}
             </button>
           ))}
         </div>
@@ -353,7 +356,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
             onClick={onRemove}
             disabled={total <= 1}
             aria-label={`delete question ${item.qid}`}
-            title={total <= 1 ? '至少保留 1 题' : '删除本题'}
+            title={total <= 1 ? t('qf.keepOne') : t('qf.deleteQuestion')}
             className="h-8 w-8 border border-border font-mono text-xs text-inkMuted transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
           >
             ×
@@ -367,7 +370,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
           <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
             Question
             {item.instructions.trim() === '' && (
-              <span className="ml-2 text-danger">required</span>
+              <span className="ml-2 text-danger">{t('common.required')}</span>
             )}
           </span>
           <textarea
@@ -379,7 +382,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
               'w-full resize-y border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink ' +
               (item.instructions.trim() === '' ? 'border-danger' : 'border-border')
             }
-            placeholder="要 Jev 做的决定是什么？/ The decision you want Jev to make."
+            placeholder={t('qf.placeholderQuestion')}
           />
         </label>
 
@@ -397,7 +400,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   onChange={(e) => setEntry(i, { value: e.target.value })}
                   aria-label={`question ${index + 1} ${k} description`}
                   className="h-8 flex-1 border border-border bg-soft px-2 font-mono text-xs text-ink"
-                  placeholder={k === 'true' ? 'true 时的含义' : 'false 时的含义'}
+                  placeholder={k === 'true' ? t('qf.trueMeaning') : t('qf.falseMeaning')}
                 />
               </div>
             ))}
@@ -405,7 +408,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
         ) : isChoice ? (
           <div className="flex flex-col gap-2">
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
-              Choices · key = 概率分布键 / 描述 = 展示文案
+              {t('qf.choicesHint')}
             </span>
             {item.entries.map((e, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -425,7 +428,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   onChange={(ev) => setEntry(i, { value: ev.target.value })}
                   aria-label={`question ${index + 1} choice ${i + 1} label`}
                   className="h-8 min-w-0 flex-1 border border-border bg-soft px-2 font-mono text-xs text-ink"
-                  placeholder="选项描述"
+                  placeholder={t('qf.choiceLabel')}
                 />
                 <button
                   type="button"
@@ -445,13 +448,13 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
               aria-label={`add choice to question ${index + 1}`}
               className="h-8 border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-primaryFill hover:bg-primaryFill hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              + Add choice{item.entries.length >= MAX_CHOICES ? ' (max 10)' : ''}
+              {item.entries.length >= MAX_CHOICES ? t('qf.addChoiceMax') : t('qf.addChoice')}
             </button>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
-              Levels · 有序档位（低 → 高）
+              {t('qf.levelsHint')}
             </span>
             {item.entries.map((e, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -463,7 +466,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   onChange={(ev) => setEntry(i, { value: ev.target.value })}
                   aria-label={`question ${index + 1} level ${i + 1}`}
                   className="h-8 min-w-0 flex-1 border border-border bg-soft px-2 font-mono text-xs text-ink"
-                  placeholder="档位描述"
+                  placeholder={t('qf.levelLabel')}
                 />
                 <button
                   type="button"
@@ -500,7 +503,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
               aria-label={`add level to question ${index + 1}`}
               className="h-8 border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-primaryFill hover:bg-primaryFill hover:text-white"
             >
-              + Add level
+              {t('qf.addLevel')}
             </button>
           </div>
         )}

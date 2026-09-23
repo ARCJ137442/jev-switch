@@ -3,6 +3,7 @@ import type { AdminProvider, ProbeResponse } from '../../api/admin';
 import { KeyForm } from './KeyForm';
 import { ProbeButton } from './ProbeButton';
 import { StatusBadge } from '../ui/StatusBadge';
+import { useI18n, type MessageKey } from '../../i18n';
 
 interface Props {
   provider: AdminProvider;
@@ -28,11 +29,11 @@ function statusTone(provider: AdminProvider, probe: ProbeResponse | null): 'ok' 
   return provider.enabled ? 'ok' : 'muted';
 }
 
-function statusLabel(provider: AdminProvider, probe: ProbeResponse | null): string {
-  if (probe === null) return provider.enabled ? '未探测' : '已停用';
-  if (!probe.ok) return 'probe 失败';
-  if (provider.enabled && probe.latency_ms >= 1000) return '降级（慢）';
-  return provider.enabled ? '健康' : '已停用';
+function statusLabelKey(provider: AdminProvider, probe: ProbeResponse | null): MessageKey {
+  if (probe === null) return provider.enabled ? 'card.untested' : 'card.disabled';
+  if (!probe.ok) return 'card.probeFailed';
+  if (provider.enabled && probe.latency_ms >= 1000) return 'card.degraded';
+  return provider.enabled ? 'card.healthy' : 'card.disabled';
 }
 
 /** 卡片状态高亮（B2）：启用且健康=蓝洗底 / 降级=琥珀描边 / 失败=红描边 */
@@ -98,7 +99,8 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
 
   const dotClass = statusDotClass(provider, probe);
   const tone = statusTone(provider, probe);
-  const label = statusLabel(provider, probe);
+  const { t } = useI18n();
+  const label = t(statusLabelKey(provider, probe));
   const stateClass = cardStateClass(provider, probe);
 
   return (
@@ -174,7 +176,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
             disabled={busy}
             className="h-8 shrink-0 border border-border bg-panel px-2 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft disabled:opacity-50"
           >
-            {showKeyForm ? 'Close' : 'Replace key'}
+            {showKeyForm ? t('common.close') : t('card.replaceKey')}
           </button>
         </div>
       </div>
@@ -186,7 +188,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
       >
         {probe === null ? (
           <>
-            <span className="text-inkMuted">last — · 未探测</span>
+            <span className="text-inkMuted">{t('card.lastUntested')}</span>
             <Sparkline hist={hist} />
             <span className="text-inkSubtle">—</span>
           </>
@@ -230,12 +232,12 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
             disabled={busy}
             className="h-8 font-mono text-xs text-inkSubtle hover:text-danger disabled:opacity-50"
           >
-            Delete
+            {t('common.delete')}
           </button>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-              type id to confirm
+              {t('card.typeIdConfirm')}
             </span>
             <input
               value={deleteText}
@@ -256,14 +258,14 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
               }}
               className="h-8 border border-dangerFill bg-dangerFill px-2 font-mono text-xs text-white hover:bg-dangerBg hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Remove
+              {t('common.remove')}
             </button>
             <button
               type="button"
               onClick={() => setConfirmDelete(false)}
               className="h-8 border border-border bg-panel px-2 font-mono text-xs text-inkMuted hover:border-primaryBright hover:text-ink"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         )}

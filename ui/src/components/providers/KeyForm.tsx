@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useI18n } from '../../i18n';
 
 interface Props {
   onSave: (apiKey: string) => Promise<void>;
@@ -11,6 +12,7 @@ interface Props {
  * 保存成功后表单收起，由 toast 反馈「密钥已保存，仅显示掩码」。
  */
 export function KeyForm({ onSave, onCancel }: Props) {
+  const { t } = useI18n();
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -36,7 +38,7 @@ export function KeyForm({ onSave, onCancel }: Props) {
     >
       <label className="flex items-center gap-2">
         <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-          new key
+          {t('key.newKey')}
         </span>
         <input
           type="password"
@@ -47,7 +49,7 @@ export function KeyForm({ onSave, onCancel }: Props) {
           spellCheck={false}
           autoFocus
           className="h-8 w-56 border border-border bg-panel px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
-          aria-label="new api key（仅密文输入，不提供明文显示）"
+          aria-label="new api key (masked input only, no plaintext reveal)"
         />
       </label>
       <button
@@ -55,7 +57,7 @@ export function KeyForm({ onSave, onCancel }: Props) {
         disabled={saving || value.length === 0}
         className="h-8 border border-primaryFill bg-primaryFill px-2.5 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {saving ? 'Saving…' : 'Save'}
+        {saving ? t('common.saving') : t('common.save')}
       </button>
       <button
         type="button"
@@ -63,10 +65,10 @@ export function KeyForm({ onSave, onCancel }: Props) {
         disabled={saving}
         className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-inkMuted hover:border-primaryBright hover:text-ink disabled:opacity-50"
       >
-        Cancel
+        {t('common.cancel')}
       </button>
       <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-        masked input · 无明文回显
+        {t('key.maskedHint')}
       </span>
     </form>
   );
