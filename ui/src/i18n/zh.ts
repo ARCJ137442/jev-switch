@@ -1,0 +1,172 @@
+import type { en } from './en';
+
+/** 中文词典 — 键集必须与 en 完全一致（类型强制）。 */
+export const zh: Record<keyof typeof en, string> = {
+  /* common */
+  'common.reload': '重载',
+  'common.overwrite': '覆盖',
+  'common.retry': '重试',
+  'common.cancel': '取消',
+  'common.close': '关闭',
+  'common.save': '保存',
+  'common.saving': '保存中…',
+  'common.delete': '删除',
+  'common.remove': '移除',
+  'common.refresh': '刷新',
+  'common.required': '必填',
+  'common.loadFailed': '加载失败：',
+  'common.addRow': '+ 添加行',
+
+  /* shell */
+  'shell.navProviders': '提供商',
+  'shell.navRouting': '路由',
+  'shell.navPlayground': '演练场',
+  'shell.daemonOk': 'daemon 正常',
+  'shell.daemonUnreachable': 'daemon 不可达',
+  'shell.connecting': '连接中…',
+  'shell.themeToDark': 'Switch to dark theme (currently: light)',
+  'shell.themeToLight': 'Switch to light theme (currently: dark)',
+  'shell.langToZh': '切换到中文',
+  'shell.langToEn': 'Switch to English',
+
+  /* conflict banner */
+  'conflict.text': '配置已在外部修改',
+
+  /* providers page */
+  'prov.title': '提供商',
+  'prov.add': '+ 添加提供商',
+  'prov.pasteToml': '贴 toml 片段',
+  'prov.enabledCount': '{n} / {total} 已启用',
+  'prov.mockMode': 'mock-first · dev',
+  'prov.liveMode': 'live daemon',
+  'prov.empty': '还没有提供商。',
+  'prov.emptyHint': '粘贴 [providers.*] toml 片段，或参考 rs/providers.example.toml 添加第一个上游。',
+  'prov.idExists': 'id 已存在：{id}',
+  'prov.added': '已添加 {id}',
+  'prov.deleted': '已删除 {id}',
+  'prov.saveFailed': '保存失败，已回滚',
+  'prov.deleteFailed': '删除失败，已回滚',
+  'prov.keySaved': '密钥已保存，仅显示掩码',
+  'prov.keySaveFailed': '密钥保存失败',
+
+  /* provider card */
+  'card.untested': '未探测',
+  'card.disabled': '已停用',
+  'card.probeFailed': '探测失败',
+  'card.degraded': '降级（慢）',
+  'card.healthy': '健康',
+  'card.lastUntested': 'last — · 未探测',
+  'card.replaceKey': '更换密钥',
+  'card.typeIdConfirm': '输入 id 确认',
+
+  /* probe button */
+  'probe.btn': '探测',
+  'probe.loading': '探测中…',
+
+  /* key form */
+  'key.newKey': '新密钥',
+  'key.maskedHint': '密文输入 · 无明文回显',
+
+  /* add provider panel */
+  'add.tabForm': '表单',
+  'add.idRequired': 'id 必填',
+  'add.kindRequired': 'kind 必填',
+  'add.baseHttp': 'base 需以 http(s):// 开头',
+  'add.noSections': '未解析到任何 [providers.<id>] 段',
+  'add.pasteHint': '粘贴 [providers.<id>] 片段',
+  'add.parseHint': '解析失败会全量回显 · 不半导入',
+  'add.parseAdd': '解析并添加',
+  'add.submit': '添加提供商',
+  'add.apiKeyHint': '仅密文输入 · 无 Show',
+
+  /* admin login */
+  'login.title': '管理员登录',
+  'login.desc': 'cloud 态管理需登录（会话缺失或已过期）',
+  'login.submit': '登录',
+
+  /* routing page */
+  'routing.edges': '{n} 条边',
+  'routing.cycle': '路由成环，已拒绝写入',
+  'routing.noPair': '没有可用的 left×right 组合',
+  'routing.imported': '已导入 example routes（UNSAVED → 自动保存）',
+  'routing.empty': '还没有路由。',
+  'routing.importExample': '一键导入 example',
+  'routing.saveFailed': '保存失败，已回滚',
+
+  /* route table */
+  'rt.title': 'Route table · 全量 routes（键盘等价路径）',
+  'rt.empty': '暂无 routes — 点击添加行或一键导入 example',
+  'rt.del': '删',
+  'rt.footer': '变更 400ms debounce 后 PUT /v1/admin/routes · 环 → 标红拒绝',
+
+  /* edge inspector */
+  'edge.hintKeep': '空 = 沿用',
+  'edge.backspaceHint': 'Backspace / Delete 亦可删',
+
+  /* bipartite canvas */
+  'canvas.dragTitle': '拖到右侧卡片内的模型端口建端点边；落卡片空白 = 同名钉死',
+  'canvas.noEndpoint': 'no endpoint — 拖线到此卡片建同名端点',
+  'canvas.pinTitle': '钉死端点：({id}) {model} — 地址×模型×token 三固定',
+  'canvas.passTitle': '透传端点：模型 = 调用方入参（local/* → local/qwen…）',
+
+  /* playground page */
+  'pg.heroLead':
+    '把一次 Jev SystemOne 调用路由到异构上游模型 —— Vercel AI Gateway、本地 Laya daemon 或任何未来的提供商。只改 model 字段，路由器负责协议翻译。',
+  'pg.quickStart': '快速开始',
+  'pg.examples': '示例',
+
+  /* test panel */
+  'tp.form': '表单',
+  'tp.json': 'JSON',
+  'tp.structured': '结构化',
+  'tp.rawJson': '原始 JSON',
+  'tp.input': '输入',
+  'tp.output': '输出',
+  'tp.questionsCount': '{n} 题',
+  'tp.questionsUnknown': '? 题',
+  'tp.running': '运行中…',
+  'tp.waiting': '// [ · ]\n// 等待输入 + Run Jev',
+  'tp.estimate': '估算',
+  'tp.stateParseFailed': 'state JSON 解析失败：',
+  'tp.questionsParseFailed': 'questions JSON 解析失败：',
+  'tp.errCapability': 'capability 不匹配（422）',
+  'tp.errRateLimit': '上游限流（retryable）→ 已返回 503',
+
+  /* question form editor */
+  'qf.typeChoice': '从选项中选一个标签并返回各自概率',
+  'qf.typeScore': '按有序档位打一个分数',
+  'qf.typeNoul': '是非题：返回 0-1 概率（true/false 两行描述）',
+  'qf.notObject': 'questions 必须是对象 { qid: {...} }',
+  'qf.qidNotObject': '题目 "{qid}" 不是对象',
+  'qf.typeUnsupported': '题目 "{qid}" 的 type="{type}" 不受支持（仅 choice/score/noul）— 请在 JSON 视图编辑',
+  'qf.empty': 'questions 为空 — 至少需要 1 题',
+  'qf.qidEmpty': 'qid 不能为空',
+  'qf.qidDup': 'qid 重复："{id}" — 请改名',
+  'qf.jsonInvalid': 'JSON 无效，下方为最近一次有效表单 — 请切到 JSON 视图修复：',
+  'qf.notWrittenBack': '{err}（暂未写回 JSON）',
+  'qf.keepOne': '至少保留 1 题',
+  'qf.deleteQuestion': '删除本题',
+  'qf.placeholderQuestion': '要 Jev 做的决定是什么？',
+  'qf.trueMeaning': 'true 时的含义',
+  'qf.falseMeaning': 'false 时的含义',
+  'qf.choiceLabel': '选项描述',
+  'qf.levelLabel': '档位描述',
+  'qf.choicesHint': 'Choices · key = 概率分布键 / 描述 = 展示文案',
+  'qf.levelsHint': 'Levels · 有序档位（低 → 高）',
+  'qf.addQuestion': '+ 添加题目',
+  'qf.addChoice': '+ 添加选项',
+  'qf.addChoiceMax': '+ 添加选项（最多 10）',
+  'qf.addLevel': '+ 添加档位',
+  'qf.loadingForm': '加载表单中…',
+
+  /* example chips */
+  'ex.titleQuestions': '{desc} · {n} 题',
+
+  /* api/admin parse errors */
+  'api.missingKind': '[{id}] 缺少 kind',
+  'api.missingBase': '[{id}] 缺少 base',
+  'api.badSection': '第 {n} 行：不支持的段 [{name}]（期待 [providers.<id>]）',
+  'api.parseLine': '第 {n} 行：无法解析 "{line}"',
+  'api.kvOutside': '第 {n} 行：键值对出现在 [providers.<id>] 段之外',
+  'api.valueType': '第 {n} 行：{key} 仅支持引号字符串或布尔值',
+};
