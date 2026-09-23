@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BASE, postSystemOne, type SystemOneRequest, type SystemOneResponse } from '../api';
+import { BASE, postSystemOne, type SystemOneRequest, type SystemOneResponse } from '../../api';
 
 interface Props {
   model: string;
@@ -163,8 +163,8 @@ export function TestPanel({
                     : status === 'loading'
                       ? 'animate-pulse bg-ink'
                       : status === 'ok'
-                        ? 'bg-emerald-500'
-                        : 'bg-red-500')
+                        ? 'bg-ok'
+                        : 'bg-danger')
                 }
               />
               {status}
@@ -272,7 +272,7 @@ function DecisionTypeHint({ questionsJson }: { questionsJson: string }) {
     parsed = JSON.parse(questionsJson || '{}');
   } catch {
     return (
-      <div className="border border-red-300 bg-red-50 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-red-700">
+      <div className="border border-danger bg-danger/10 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-danger">
         invalid JSON
       </div>
     );
@@ -297,36 +297,124 @@ function DecisionTypeHint({ questionsJson }: { questionsJson: string }) {
   );
 }
 
+/** 数字展示：最多 3 位小数并去尾零（0.960 → 0.96） */
+function fmtNum(n: number): string {
+  const s = n.toFixed(3);
+  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+}
+
+/**
+ * Answer 分型摘要 — 防御渲染（H2 铺垫，design/01 §6.3）：
+ * - 有 `type` 字段 → 按契约 01 分型（choice / score / noul·boolean 无 confidence 行）
+ * - 无 `type` → 旧扁平逻辑（A2 前的兼容形态）
+ * - 任何未知形态 → 降级显示原始 JSON，保证协议变更不崩 UI
+ */
 function AnswerSummary({ response }: { response: SystemOneResponse }) {
-  const answers = Object.entries(response.answers ?? {});
-  if (answers.length === 0) return null;
+  const answers = response.answers;
+  if (!answers || typeof answers !== 'object') {
+    return (
+      <div className="border-t border-border px-4 py-3">
+        <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+          Summary
+        </div>
+        <pre className="whitespace-pre-wrap break-words border border-border bg-bg p-3 font-mono text-xs text-inkMuted">
+          {JSON.stringify(response, null, 2)}
+        </pre>
+      </div>
+    );
+  }
+  const entries = Object.entries(answers as Record<string, unknown>);
+  if (entries.length === 0) return null;
   return (
     <div className="border-t border-border px-4 py-3">
       <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
         Summary
       </div>
       <ul className="space-y-1.5 font-mono text-xs">
-        {answers.map(([qid, a]) => {
-          const value =
-            a.choice ??
-            a.noul ??
-            a.boolean ??
-            a.score ??
-            (a.probabilities ? Object.entries(a.probabilities).sort((x, y) => y[1] - x[1])[0]?.[0] : null) ??
-            '—';
-          const conf = a.confidence != null ? a.confidence.toFixed(2) : null;
-          return (
-            <li key={qid} className="flex items-baseline gap-2">
-              <span className="text-inkSubtle">{qid}</span>
-              <span className="text-inkSubtle">→</span>
-              <span className="font-semibold text-ink tabular">
-                {typeof value === 'number' ? value.toFixed(3) : String(value)}
-              </span>
-              {conf && <span className="text-inkSubtle">conf={conf}</span>}
-            </li>
-          );
-        })}
+        {entries.map(([qid, raw]) => (
+          <AnswerRow key={qid} qid={qid} raw={raw} />
+        ))}
       </ul>
     </div>
+  );
+}
+
+function AnswerLine({ qid, value, conf }: { qid: string; value: string; conf: string | null }) {
+  return (
+    <li className="flex flex-wrap items-baseline gap-2">
+      <span className="text-inkSubtle">{qid}</span>
+      <span className="text-inkSubtle">→</span>
+      <span className="font-semibold text-ink tabular">{value}</span>
+      {conf && <span className="text-inkSubtle">conf={conf}</span>}
+    </li>
+  );
+}
+
+function RawAnswerLine({ qid, raw }: { qid: string; raw: unknown }) {
+  return (
+    <li className="flex flex-wrap items-baseline gap-2">
+      <span className="text-inkSubtle">{qid}</span>
+      <span className="text-inkSubtle">→</span>
+      <pre className="max-w-full overflow-x-auto border border-border bg-bg px-1.5 py-0.5 text-[11px] text-inkMuted">
+        {JSON.stringify(raw, null, 2)}
+      </pre>
+    </li>
+  );
+}
+
+function AnswerRow({ qid, raw }: { qid: string; raw: unknown }) {
+  // 形态未知（null / 标量 / 数组）→ 原始 JSON
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return <RawAnswerLine qid={qid} raw={raw} />;
+  }
+  const a = raw as SystemOneResponse['answers'][string];
+  const type = typeof a.type === 'string' ? a.type : undefined;
+
+  if (type === 'choice') {
+    const value = typeof a.choice === 'string' ? a.choice : '—';
+    const conf = typeof a.confidence === 'number' ? a.confidence.toFixed(2) : null;
+    return <AnswerLine qid={qid} value={value} conf={conf} />;
+  }
+  if (type === 'score') {
+    const value = typeof a.score === 'number' ? fmtNum(a.score) : '—';
+    const conf = typeof a.confidence === 'number' ? a.confidence.toFixed(2) : null;
+    return <AnswerLine qid={qid} value={value} conf={conf} />;
+  }
+  if (type === 'noul' || type === 'boolean') {
+    // 布尔族：概率本身就是置信度 — 无 confidence 行（契约 01 §4）
+    const prob = typeof a.probability === 'number' ? a.probability : null;
+    const noul = typeof a.noul === 'number' ? a.noul : null;
+    const value =
+      prob !== null && noul !== null
+        ? `prob ${fmtNum(prob)} · noul ${fmtNum(noul)}`
+        : prob !== null
+          ? `prob ${fmtNum(prob)}`
+          : noul !== null
+            ? `noul ${fmtNum(noul)}`
+            : '—';
+    return <AnswerLine qid={qid} value={value} conf={null} />;
+  }
+  if (type !== undefined) {
+    // 未知 type → 原始 JSON 降级
+    return <RawAnswerLine qid={qid} raw={raw} />;
+  }
+
+  // 旧扁平逻辑（无 type 字段的兼容形态）
+  const value =
+    a.choice ??
+    a.noul ??
+    a.boolean ??
+    a.score ??
+    (a.probabilities
+      ? Object.entries(a.probabilities).sort((x, y) => y[1] - x[1])[0]?.[0]
+      : null) ??
+    '—';
+  const conf = a.confidence != null ? a.confidence.toFixed(2) : null;
+  return (
+    <AnswerLine
+      qid={qid}
+      value={typeof value === 'number' ? fmtNum(value) : String(value)}
+      conf={conf}
+    />
   );
 }

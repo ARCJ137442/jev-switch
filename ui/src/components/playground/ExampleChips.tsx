@@ -1,4 +1,4 @@
-import type { ExamplePayload } from '../examples';
+import type { ExamplePayload } from '../../examples';
 
 interface Props {
   examples: ExamplePayload[];

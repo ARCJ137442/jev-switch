@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+/* tokens 见 styles/tokens.css（design/01 §4）；tailwind 色值在 tailwind.config.js 同步 */
+
 html,
 body,
 #root {
@@ -10,16 +12,16 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: #fafafa;
-  color: #0a0a0a;
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 /* 极简风 — 极细 border 分隔，无阴影无渐变 */
 * {
-  border-color: #e5e5e5;
+  border-color: var(--border);
 }
 
 /* 代码字体优先 */
@@ -28,7 +30,7 @@ kbd,
 pre,
 samp,
 .mono {
-  font-family: 'JetBrains Mono', 'Geist Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 /* 等宽数字 */
@@ -41,7 +43,7 @@ textarea:focus,
 input:focus,
 select:focus {
   outline: none;
-  border-color: #0a0a0a;
+  border-color: var(--ink);
 }
 
 /* 滚动条极简化 */
@@ -53,9 +55,9 @@ select:focus {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
+  background: var(--edge-idle);
   border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #a3a3a3;
+  background: var(--ink-subtle);
 }

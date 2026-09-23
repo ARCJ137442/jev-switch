@@ -41,9 +41,13 @@ export interface SystemOneRequest {
 }
 
 export interface SystemOneAnswer {
+  /** 判别联合 tag（契约 01 §4）；防御渲染：缺省时走旧扁平逻辑 */
+  type?: string;
   choice?: string;
   score?: number;
   noul?: number;
+  /** Vercel 方言键（契约 01 §4 — 双键并存时都保留） */
+  probability?: number | null;
   boolean?: boolean;
   confidence?: number | null;
   probabilities?: Record<string, number> | null;
@@ -138,10 +142,31 @@ function getBase(): string {
   return DEFAULT_BASE;
 }
 
+/**
+ * health 双兼容（H1 后简化为只认 JSON）：
+ * - 新形态（contracts/05）：JSON `{"status":"ok","version":…}` → ok
+ * - 旧形态（兼容期）：纯文本 `jev-switch MVP` → ok
+ * 其余 200 响应视为异常，避免「随便一个 200 都算健康」。
+ */
 export async function fetchHealth(): Promise<string> {
   const res = await fetch(`${getBase()}/health`);
   if (!res.ok) throw new Error(`health ${res.status}`);
-  return res.text();
+  const text = await res.text();
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = null;
+  }
+  if (
+    parsed !== null &&
+    typeof parsed === 'object' &&
+    typeof (parsed as { status?: unknown }).status === 'string'
+  ) {
+    return text;
+  }
+  if (text.trim() === 'jev-switch MVP') return text;
+  throw new Error(`health unexpected body: ${text.slice(0, 80)}`);
 }
 
 export async function fetchModels(): Promise<ModelsResponse> {

@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import './styles/tokens.css';
 import './index.css';
 
 const rootEl = document.getElementById('root');
