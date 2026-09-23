@@ -147,6 +147,10 @@ bash scripts/smoke.sh                 # Linux CI / Git Bash
 完整索引见 **[docs/README.md](docs/README.md)**。
 阅读顺序：`08-CONTRACT`（定稿） → `contracts/00-INDEX` → `contracts/01–06` → `07-REVIEW`（意见清单） → 历史 `01–06`。验收报告：`docs/10-v0.5.0-验收报告.md`。
 
+## 开发说明
+
+本项目由 AI 编码代理（MiMo、Claude Code 会话）协作构建，文档级作者逐件署名见各文件头与 [docs/README](docs/README.md) 索引；此披露同时满足 awesome-jev 等列表的 AI 辅助投稿规则。
+
 ## License
 
 Licensed under **MIT OR Apache-2.0**：
