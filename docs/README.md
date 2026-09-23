@@ -21,6 +21,7 @@
 | `PROGRESS.md` | `v0.1.0-mvp` 进度快照与实测 | 封存 |
 | **`07-REVIEW-v0.1.0-mvp.md`** | **全方位评审**（作者 **Mimo-V2.6-Pro**） | **定稿** |
 | **`08-CONTRACT-功能特性契约与施工计划.md`** | **对齐定稿 Q1–Q6 + 施工计划**（作者 **Mimo-V2.6-Pro**） | **定稿** |
+| `09-用户叙事评估报告-MiMo.md` | 10 叙事 vs v0.1.0 匹配度 + 三标记（openai-compat 不做 / fallback·shadow 待讨论 / 端口 11435 已做）（作者 **MiMo mimo-v2.6-flash**） | 已存档 |
 | **`contracts/00-INDEX.md`** | **六份契约正文入口**（作者 **Mimo-V2.6-Pro**） | **Phase 0 完成** |
 | `contracts/01-协议契约.md` | Jev 内核类型与不变量 | 定稿 |
 | `contracts/02-扩展点契约.md` | serde 同构：冻结 trait + 黄金测试 | 定稿 |
