@@ -32,6 +32,7 @@ use serde::Serialize;
 use serde_json::json;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
 use upstream::{JevError, Upstream};
 use upstream_laya::LayaUpstream;
@@ -118,6 +119,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/systemone", post(systemone_handler))
         .route("/health", get(health_handler))
         .route("/v1/models", get(models_handler))
+        // MVP: 允许浏览器从任意 origin 直连 /v1/systemone（dev demo 用）。
+        // 后续 M1+ 会收紧 origin 白名单。
+        .layer(CorsLayer::very_permissive())
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8765));
