@@ -16,6 +16,8 @@
 //!
 //! 过渡命名：[`JevRequest`]/[`JevResponse`] 为契约主名；
 //! [`SystemOneRequest`]/[`SystemOneResponse`] 保留为别名（deprecated 注释级）。
+//!
+//! 分层铁律（A5 已执行）：厂商方言 DTO 不在本 crate —— 只活在 jev-adapters。
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
@@ -490,54 +492,8 @@ pub struct JevResponse {
 /// 过渡别名：主名 [`JevResponse`]（contracts/01）；deprecated 名保留以降低迁移面。
 pub type SystemOneResponse = JevResponse;
 
-/* ══════════════════════════════════════════════════════════════════
-   Vercel 方言 DTO（⚠ 暂留：A5 迁出到 jev-adapters —— contracts/02 分层铁律）
-   ══════════════════════════════════════════════════════════════════ */
-
-/// Vercel 网关响应里的单条 answer 原始形态（参考 03- §2.4 + jev-decision-lab TS）。
-///
-/// Vercel 用 `probability`（不是 `noul`）字段表达 true 的概率。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct VercelAnswer {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub r#type: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub probability: Option<f64>,
-    /// 少数经 Vercel 形态的网关也给 `noul` 键（§4 兜底链含它）。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub noul: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub boolean: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub choice: Option<String>,
-    /// score 题分值（契约 `Score.score: f64`；缺失则无法构成 Answer，translate 报 502）。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub score: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub probabilities: Option<BTreeMap<String, f64>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub confidence: Option<f64>,
-}
-
-/// Vercel 网关响应外壳（关心字段 + 顶层余量透传进 `JevResponse.extra`）。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct VercelResponse {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub answers: Option<BTreeMap<String, VercelAnswer>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    #[serde(
-        default,
-        alias = "providerMetadata",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub provider_metadata: Option<serde_json::Value>,
-    /// 顶层未知键余量 → 翻译时并入 `JevResponse.extra`（契约 flatten 语义）。
-    #[serde(flatten)]
-    pub extra: BTreeMap<String, serde_json::Value>,
-}
+// A5：厂商 DTO（VercelAnswer / VercelResponse）已迁出至 jev-adapters
+// （contracts/02 §3 分层铁律：厂商 DTO 只活在 adapter crate）。
 
 #[cfg(test)]
 mod tests {

@@ -1,29 +1,44 @@
-//! Vercel `noul` ↔ `boolean` 翻译层（M0.7 · P0-3 同步 contracts/01）
+//! Vercel 方言 `ProtocolAdapter`（A5 · 原 jev-core `translate.rs` 重组落位）
 //!
 //! 参考 03-上游类别与协议兼容矩阵 §2.4 + contracts/01 §4/§6：
-//! - 入站（`normalize_request_for_vercel`）：Jev `type: noul` → Vercel `type: boolean`
-//!   （仅改写 type 键，criteria/instructions 保持）。
-//! - 出站（`build_jev_response_from_vercel`）是**唯一**出口翻译路径：
+//! - 出站（[`normalize_request_for_vercel`]）：Jev `type: noul` → Vercel `type: boolean`
+//!   （仅改写 type 键，criteria/instructions 保持）
+//! - 入站（[`VercelProtocol::incoming`] / [`build_jev_response_from_vercel`]）是**唯一**
+//!   出口翻译路径：
 //!   - 概率兜底链（§4 冻结）：`probability > noul > probabilities["true"] >
 //!     boolean→{0.95,0.05}` —— 仅作最后回退；双缺 → 键缺省（`noul_probability`
-//!     返回 0.0 = 未验到）。
-//!   - 布尔族归一为 `Answer::Noul`（kind=Noul，§1 语义层只有 noul；写出键 `"noul"`），
-//!     `probability` 原样保留（双键并存，§6 禁止吞掉）。
-//!   - choice / score：三字段必填（缺 → Err，由上游映射 502，禁 best-effort）。
-//!   - 未知 type → Err（§6 禁止平移）。
+//!     返回 0.0 = 未验到）
+//!   - 布尔族归一为 `Answer::Noul`（kind=Noul，§1 语义层只有 noul），`probability`
+//!     原样保留（双键并存，§6 禁止吞掉）
+//!   - choice / score：三字段必填（缺 → Err → 502，禁 best-effort）
+//!   - 未知 type → Err（§6 禁止平移）
 //!
-//! ⚠ 历史差异（本 commit 修复/变更，见 commit body）：
-//! - 旧实现把「归一后的请求」误当 original 传入 → 生产路径恒走 boolean 形态分支；
-//!   契约下语义层统一 noul，不再形态跟随。
-//! - 旧 DecisionAnswer 扁平全 Option + 硬推 confidence → 契约判别联合，布尔族无 confidence。
+//! # 契约偏差备案（contracts/01 §1/§6 vs contracts/02 §2）
+//!
+//! contracts/01 说「`boolean` 只在 `ProtocolAdapter::outgoing 后出现」「需要
+//! boolean 时在 outgoing 转换」，但 contracts/02 §2 **冻结** `outgoing` 签名为
+//! `JevRequest -> JevRequest`，而 [`Question`](jev_protocol::Question) 三变体无法
+//! 表达 `boolean`。按最贴近字面实现：
+//! - trait 签名逐字保留，`VercelProtocol::outgoing` 保持默认恒等；
+//! - wire 级 noul→boolean 留在本方言的**出站 body 构造**
+//!   （[`normalize_request_for_vercel`]，由 `VercelUpstream::evaluate` 组 HTTP body
+//!   时调用）—— 行为与 A4 完全一致，测试不减。
 
+use crate::vercel_dto::VercelResponse;
+use jev_core::adapter::{IncomingCtx, ProtocolAdapter};
+use jev_core::upstream::JevError;
 use jev_protocol::{
-    Answer, JevRequest, JevResponse, NoulAnswer, NoulKind, VercelResponse,
+    Answer, JevRequest, JevResponse, NoulAnswer, NoulKind, Usage,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-/// 把 Jev 请求翻译成 Vercel 形态 JSON（出站方言化）。
+/// Vercel 方言 id（contracts/02 §2 示例值 `vercel_boolean`）。
+pub const VERCEL_DIALECT: &str = "vercel_boolean";
+/// 上游逻辑 id（错误体 `upstream` 字段用；adapter crate 允许厂商字面量）。
+pub const VERCEL_UPSTREAM_ID: &str = "vercel";
+
+/// 把 Jev 请求翻译成 Vercel 形态 JSON（出站 wire 级方言化）。
 ///
 /// - `type: "noul"` → `type: "boolean"`（仅布尔族；choice/score 不碰）
 /// - 其余键原样保留；返回完整请求 Value（daemon body 取 `state`/`questions`，
@@ -103,8 +118,7 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
         .usage
         .as_ref()
         .map(|u| {
-            serde_json::from_value::<jev_protocol::Usage>(u.clone())
-                .map_err(|e| format!("usage: {e}"))
+            serde_json::from_value::<Usage>(u.clone()).map_err(|e| format!("usage: {e}"))
         })
         .transpose()?;
 
@@ -119,7 +133,7 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
         model: raw.model.clone(),
         answers,
         usage,
-        // 单次上游实发（工具循环计量 A4+ 接线；此处如实 = 1）
+        // 单次上游实发；failover/重试实发次数由 Registry::invoke 如实覆写
         upstream_calls: Some(1),
         latency_ms: None,
         cost_usd: None, // 未知 → null（§5）
@@ -127,10 +141,43 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
     })
 }
 
+/// Vercel 方言实现（冻结 `ProtocolAdapter` 的 vercel 侧挂载点）。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VercelProtocol;
+
+impl ProtocolAdapter for VercelProtocol {
+    // outgoing：默认恒等（契约偏差备案见模块文档 —— wire 级 noul→boolean 由
+    // normalize_request_for_vercel 在组 body 时完成）。
+
+    fn incoming(&self, raw: &[u8], _ctx: &IncomingCtx<'_>) -> Result<JevResponse, JevError> {
+        let parsed: VercelResponse =
+            serde_json::from_slice(raw).map_err(|e| JevError::BadResponse {
+                upstream_id: VERCEL_UPSTREAM_ID.to_string(),
+                message: format!(
+                    "parse Vercel JSON: {e}; raw={}",
+                    String::from_utf8_lossy(raw)
+                ),
+            })?;
+        build_jev_response_from_vercel(&parsed).map_err(|message| JevError::BadResponse {
+            upstream_id: VERCEL_UPSTREAM_ID.to_string(),
+            message,
+        })
+    }
+
+    fn dialect(&self) -> &'static str {
+        VERCEL_DIALECT
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   测试（原 jev-core translate.rs 全量随迁 —— 行为不变，测试不减）
+   ══════════════════════════════════════════════════════════════════ */
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jev_protocol::{noul_probability, Question, VercelAnswer};
+    use crate::vercel_dto::VercelAnswer;
+    use jev_protocol::{noul_probability, Criteria, Question};
     use std::collections::BTreeMap;
 
     fn make_noul_request() -> JevRequest {
@@ -139,7 +186,7 @@ mod tests {
             "q".to_string(),
             Question::Noul {
                 instructions: "is greeting?".into(),
-                criteria: jev_protocol::Criteria::Bool {
+                criteria: Criteria::Bool {
                     r#true: "yes".into(),
                     r#false: "no".into(),
                 },
@@ -196,7 +243,7 @@ mod tests {
             "c".to_string(),
             Question::Choice {
                 instructions: "pick".into(),
-                criteria: jev_protocol::Criteria::Map(BTreeMap::from([
+                criteria: Criteria::Map(BTreeMap::from([
                     ("A".into(), "alpha".into()),
                     ("B".into(), "beta".into()),
                 ])),
@@ -275,8 +322,6 @@ mod tests {
     #[test]
     fn boolean_input_answers_normalize_to_noul() {
         // §1：boolean 输入在反序列化时归一为 Noul；出口统一回 noul 形态
-        // （旧「形态跟随 original」依赖已随契约移除 —— 原测试
-        //  `boolean_origin_stays_boolean` 按 contracts/01 改写于此）
         let json = r#"{
             "model": "typesafe-ai/jev",
             "state": null,
@@ -303,7 +348,7 @@ mod tests {
             "c".to_string(),
             Question::Choice {
                 instructions: "pick".into(),
-                criteria: jev_protocol::Criteria::Map(BTreeMap::from([(
+                criteria: Criteria::Map(BTreeMap::from([(
                     "A".into(),
                     "alpha".into(),
                 )])),
@@ -387,7 +432,10 @@ mod tests {
         raw.extra
             .insert("requestId".into(), serde_json::json!("r-1"));
         let resp = build_jev_response_from_vercel(&raw).unwrap();
-        assert_eq!(resp.extra.get("providerMetadata"), Some(&serde_json::json!({"gw": "vercel"})));
+        assert_eq!(
+            resp.extra.get("providerMetadata"),
+            Some(&serde_json::json!({"gw": "vercel"}))
+        );
         assert_eq!(resp.extra.get("requestId"), Some(&serde_json::json!("r-1")));
         // 计量字段按契约
         assert_eq!(resp.upstream_calls, Some(1));
@@ -396,10 +444,46 @@ mod tests {
 
     #[test]
     fn upstream_calls_count_built_responses() {
-        // build 路径单发上游 = 1（A4 failover 接线前的如实基线）
+        // build 路径单发上游 = 1（Registry::invoke 覆写为如实实发次数）
         let resp =
             build_jev_response_from_vercel(&make_vercel_response("q", boolean_answer(true)))
                 .unwrap();
         assert_eq!(resp.upstream_calls, Some(1));
+    }
+
+    /* ── 冻结 ProtocolAdapter 挂载 ───────────────────────────── */
+
+    #[test]
+    fn vercel_protocol_incoming_bytes_path() {
+        // incoming(raw bytes) = 唯一出口路径的 trait 入口
+        let p = VercelProtocol;
+        assert_eq!(p.dialect(), "vercel_boolean");
+        let raw = br#"{"answers":{"q":{"type":"boolean","probability":0.69,"boolean":true}}}"#;
+        let req = make_noul_request();
+        let ctx = IncomingCtx {
+            request: &req,
+            original: &req,
+            status: 200,
+        };
+        let resp = p.incoming(raw, &ctx).unwrap();
+        let n = noul_of(&resp, "q");
+        assert!((noul_probability(n) - 0.69).abs() < 1e-12);
+        // 默认 outgoing 恒等
+        let out = p.outgoing(req.clone());
+        assert_eq!(out, req);
+    }
+
+    #[test]
+    fn vercel_protocol_incoming_invalid_json_is_bad_response() {
+        let p = VercelProtocol;
+        let req = make_noul_request();
+        let ctx = IncomingCtx {
+            request: &req,
+            original: &req,
+            status: 200,
+        };
+        let err = p.incoming(b"not-json", &ctx).unwrap_err();
+        assert_eq!(err.http_status(), 502);
+        assert_eq!(err.upstream_id(), "vercel");
     }
 }

@@ -23,24 +23,22 @@ use axum::{
 use config::{Config, ConfigError};
 use jev_adapters::{upstream_laya::LayaUpstream, upstream_vercel::VercelUpstream};
 use jev_core::{
-    router::{OnError, RouteCtx, Router as JevRouter},
-    upstream::{JevError, QuestionType, Upstream},
+    adapter::{plain_ctx, Registry},
+    upstream::JevError,
 };
 use jev_protocol::{JevRequest, JevResponse};
 use serde::Serialize;
 use serde_json::json;
-use std::{
-    collections::{BTreeSet, HashMap},
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
 struct AppState {
-    router: Arc<JevRouter>,
+    /// A5 装配：能力注册制 —— 上游经 `Registry::register(Box<dyn UpstreamAdapter>)`
+    /// 挂载，`/v1/models` 能力从 trait 取（`capabilities_of` 硬编码已删）。
+    registry: Arc<Registry>,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -68,8 +66,8 @@ async fn main() -> anyhow::Result<()> {
         "config loaded"
     );
 
-    // 2. construct upstreams based on config
-    let mut upstreams: HashMap<String, Box<dyn Upstream>> = HashMap::new();
+    // 2. Registry：DAG 边 + 逐个注册上游（能力注册制 —— trait 自报）
+    let mut registry = Registry::new(route_edges);
 
     if let Some(p) = config.providers.get("vercel") {
         if p.enabled {
@@ -84,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
             if !api_key.is_empty() {
                 match VercelUpstream::new(p.base.clone(), api_key) {
                     Ok(u) => {
-                        upstreams.insert("vercel".into(), Box::new(u));
+                        registry.register(Box::new(u));
                         tracing::info!(base = %p.base, "vercel upstream ready");
                     }
                     Err(e) => tracing::warn!(error = %e, "vercel upstream init failed"),
@@ -99,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
         if p.enabled {
             match LayaUpstream::new(p.base.clone()) {
                 Ok(u) => {
-                    upstreams.insert("laya".into(), Box::new(u));
+                    registry.register(Box::new(u));
                     tracing::info!(base = %p.base, "laya upstream ready");
                 }
                 Err(e) => tracing::warn!(error = %e, "laya upstream init failed"),
@@ -109,12 +107,9 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // 3. router（DAG 边 = [[routes]] ∪ 旧 [router] 展开）
-    let router = JevRouter::new(route_edges, upstreams);
-
     // 4. axum state + routes
     let state = AppState {
-        router: Arc::new(router),
+        registry: Arc::new(registry),
     };
     // CORS 白名单（contracts/05 §5 M1+；替换 very_permissive 已知债务）：
     // vite dev 两种打开方式都可能 —— 127.0.0.1 与 localhost 都放行。
@@ -184,14 +179,14 @@ struct ModelsResponse {
 }
 
 async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
+    let router = state.registry.router();
     // 保留 6af3a47 的不可路由过滤：只列出真正可路由的 model
     // （upstream 未注册的 model 不列出 —— 否则 UI 判断可用、点击即 404）
-    let mut data: Vec<ModelEntry> = state
-        .router
+    let mut data: Vec<ModelEntry> = router
         .list_models()
         .into_iter()
         .filter_map(|m| {
-            let upstream = state.router.route(&m).ok()?.id().to_string();
+            let upstream = router.route(&m).ok()?.id().to_string();
             Some(ModelEntry {
                 id: m,
                 object: "model",
@@ -201,8 +196,8 @@ async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
         .collect();
     data.sort_by(|a, b| a.id.cmp(&b.id));
 
-    let upstreams: Vec<UpstreamCapabilityEntry> = state
-        .router
+    // 能力列表 = 各 adapter 自报（注册制，经 UpstreamAdapter trait）
+    let upstreams: Vec<UpstreamCapabilityEntry> = router
         .list_capabilities()
         .into_iter()
         .map(|(_id, _uid, cap)| UpstreamCapabilityEntry {
@@ -221,12 +216,13 @@ async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
     })
 }
 
-/// 把 JevError 转换为 axum Response。
+/// 把 JevError 转换为 axum Response（contracts/05 §3）。
 fn jev_error_to_response(e: JevError) -> Response {
     let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let body = ErrorBody {
         error: e.to_string(),
-        upstream: Some(e.upstream_id().to_string()),
+        // 404 路由错误不带 upstream 字段（A4 行为保留）
+        upstream: e.error_body_upstream().map(str::to_string),
         retryable: e.retryable(),
     };
     (status, Json(body)).into_response()
@@ -248,147 +244,25 @@ async fn systemone_handler(
         (StatusCode::BAD_REQUEST, Json(err)).into_response()
     })?;
 
-    run_request(&state.router, req).await.map(Json)
+    run_request(&state.registry, req).await.map(Json)
 }
 
-/// A4 failover 主循环（从 handler 抽出以便进程内单测，行为 = handler 内联版）。
+/// handler → `Registry::invoke` 的薄封装（failover/DAG 逻辑 A5 起内核化在
+/// jev-core，daemon 只做 HTTP 错误映射；抽函数以便进程内单测）。
 ///
-/// 规则（contracts/03 §4 + A4 任务书）：
-/// - 无匹配边 / 全悬空 → 404 `UnknownModel`/`UnknownUpstream` 文案
-/// - 逐候选：capability 不匹配 → **跳过（不计入失败语义，不发请求）**
-/// - `upstream_model` 改写后发上游；每实发一次 `upstream_calls += 1`
-/// - 仅 `JevError::retryable()`（429/5xx/Timeout/Network）且该候选 `on_error=next`
-///   → 试下一候选；`fail` 或不可重试 → 第一错即返
-/// - 多候选成功取**首个成功**响应，`upstream_calls` 如实回写
-/// - 全败 → 按最后错误映射状态码；全部 capability 跳过 → 422
-/// - sticky：HTTP 层暂无 sticky key 入口 → `RouteCtx` 传 None（见报告）
+/// sticky：HTTP 层暂无 sticky key 入口 → `plain_ctx()`（sticky_key=None），
+/// core 侧有 RouteCtx 单测覆盖（见报告 A4 sticky 备注）。
 async fn run_request(
-    router: &JevRouter,
+    registry: &Registry,
     req: JevRequest,
 ) -> Result<JevResponse, Response> {
-    let ctx = RouteCtx {
-        sticky_key: None, // HTTP 层暂无 sticky 入口（契约位保留，core 有单测）
-        exclude: BTreeSet::new(),
-    };
-    let plan = match router.plan(&req.model, &ctx) {
-        Ok(p) if p.is_empty() => {
-            // 命中边但候选全被 exclude / 全解析不到 → 404（无可用上游）
-            return Err(error_response(
-                StatusCode::NOT_FOUND,
-                format!("no upstream registered for model '{}'", req.model),
-                None,
-            ));
-        }
-        Ok(p) => p,
+    match registry.invoke(req, plain_ctx()).await {
+        Ok(resp) => Ok(resp),
         Err(e) => {
-            // UnknownModel / UnknownUpstream → 404（旧 route() 任意错误也走 404，不回潮）
-            return Err(error_response(StatusCode::NOT_FOUND, e.to_string(), None));
-        }
-    };
-
-    let qts: Vec<QuestionType> = req.questions.values().map(|q| q.question_type()).collect();
-
-    let mut upstream_calls: u32 = 0;
-    let mut last_err: Option<JevError> = None;
-    let mut cap_skip: Option<JevError> = None; // 首个 capability 不匹配（全跳过时转 422）
-
-    for item in &plan {
-        let upstream = match router.upstream(&item.candidate.upstream_id) {
-            Some(u) => u,
-            None => {
-                // select 已保证注册；防御分支（配置热变等）按不可用候选记错跳过
-                last_err = Some(JevError::Config {
-                    upstream_id: item.candidate.upstream_id.clone(),
-                    message: "upstream disappeared after select".into(),
-                });
-                continue;
-            }
-        };
-
-        // capability：不匹配 = 跳过该候选（不计入失败语义，不实发）
-        if let Some(qt) = qts.iter().find(|qt| !upstream.capabilities().supports(**qt)) {
-            if cap_skip.is_none() {
-                cap_skip = Some(JevError::Capability {
-                    upstream_id: upstream.id().to_string(),
-                    detail: format!(
-                        "model '{}' requires question type '{}' but upstream '{}' cannot handle it",
-                        req.model,
-                        qt.as_str(),
-                        upstream.id()
-                    ),
-                });
-            }
-            tracing::debug!(
-                upstream = %upstream.id(),
-                qt = qt.as_str(),
-                "candidate skipped: capability mismatch"
-            );
-            continue;
-        }
-
-        // upstream_model 改写后发上游
-        let mut attempt_req = req.clone();
-        attempt_req.model = item.candidate.upstream_model.clone();
-
-        upstream_calls += 1; // 实发计数（capability 跳过不计）
-        match upstream.evaluate(attempt_req).await {
-            Ok(raw) => {
-                // raw Value → typed JevResponse（形态非法 → 502，不可重试 → 即返）
-                return match serde_json::from_value::<JevResponse>(raw) {
-                    Ok(mut resp) => {
-                        resp.upstream_calls = Some(upstream_calls); // 如实 = 实发次数
-                        Ok(resp)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            upstream = %upstream.id(),
-                            error = %e,
-                            "deserialize upstream response failed"
-                        );
-                        Err(error_response(
-                            StatusCode::BAD_GATEWAY,
-                            format!("deserialize upstream response: {e}"),
-                            Some(upstream.id().to_string()),
-                        ))
-                    }
-                };
-            }
-            Err(e) => {
-                tracing::warn!(upstream = %e.upstream_id(), error = %e, "upstream evaluate failed");
-                let retry_next =
-                    e.retryable() && item.on_error == OnError::Next; // 仅可重试错误试下一候选
-                if retry_next {
-                    last_err = Some(e);
-                    continue; // on_error=next → 下一候选
-                }
-                return Err(jev_error_to_response(e)); // fail 首错即返 / 不可重试即返
-            }
+            tracing::warn!(error = %e, status = e.http_status(), "invoke failed");
+            Err(jev_error_to_response(e))
         }
     }
-
-    // 循环走完：有失败记录 → 按最后错误映射；否则全部 capability 跳过 → 422
-    if let Some(e) = last_err {
-        return Err(jev_error_to_response(e));
-    }
-    if let Some(e) = cap_skip {
-        tracing::warn!(model = %req.model, error = %e, "all candidates capability-skipped");
-        return Err(jev_error_to_response(e));
-    }
-    Err(error_response(
-        StatusCode::NOT_FOUND,
-        format!("no upstream registered for model '{}'", req.model),
-        None,
-    ))
-}
-
-/// 构造统一错误体响应（contracts/05 §3）。
-fn error_response(status: StatusCode, error: String, upstream: Option<String>) -> Response {
-    let body = ErrorBody {
-        error,
-        upstream,
-        retryable: false,
-    };
-    (status, Json(body)).into_response()
 }
 
 // 防止 rust 误以为 main 用不到的 import 是 dead_code
@@ -465,24 +339,26 @@ mod tests {
     }
 
     /* ════════════════════════════════════════════════════════
-       A4 failover（进程内 fake Upstream；不占 11435、无 wiremock）
+       A4/A5 failover（进程内 fake UpstreamAdapter → Registry；
+       不占 11435、无 wiremock）
        ════════════════════════════════════════════════════════ */
 
-    use jev_core::router::{MatchMode, RouteEdge, Sticky};
-    use jev_core::upstream::Capabilities;
+    use jev_core::adapter::{Registry, UpstreamAdapter};
+    use jev_core::router::{MatchMode, OnError, RouteEdge, Sticky};
+    use jev_core::upstream::{Capabilities, QuestionType};
     use jev_protocol::{Criteria, Question};
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Mutex;
 
     /// fake 上游行为脚本。
     enum Behave {
-        /// 合法 JevResponse JSON。
+        /// 合法 JevResponse。
         Ok200,
         /// 可重试 429（vercel 类 retryable_status 含 429）。
         Err429,
         /// 不可重试 400。
         Err400,
-        /// 合法 JSON 但不是 JevResponse 形态 → 502。
+        /// 上游响应形态非法 → BadResponse（502；A5 起反序列化在 adapter 内）。
         InvalidJson,
     }
 
@@ -500,24 +376,23 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl Upstream for Fake {
+    impl UpstreamAdapter for Fake {
         fn id(&self) -> &str {
             &self.id
         }
         fn capabilities(&self) -> Capabilities {
-            Capabilities {
-                question_types: self.cap.question_types,
-                has_confidence: self.cap.has_confidence,
-                has_usage: self.cap.has_usage,
-                noul_via_boolean: self.cap.noul_via_boolean,
-                retryable_status: self.cap.retryable_status,
-            }
+            self.cap.clone()
         }
-        async fn evaluate(&self, req: jev_protocol::JevRequest) -> Result<serde_json::Value, JevError> {
+        async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, JevError> {
             self.handle.calls.fetch_add(1, Ordering::SeqCst);
             self.handle.seen_models.lock().unwrap().push(req.model.clone());
             match self.behave {
-                Behave::Ok200 => Ok(serde_json::json!({"answers": {}})),
+                Behave::Ok200 => serde_json::from_str(r#"{"answers":{}}"#).map_err(|e| {
+                    JevError::BadResponse {
+                        upstream_id: self.id.clone(),
+                        message: e.to_string(),
+                    }
+                }),
                 Behave::Err429 => Err(JevError::Upstream {
                     upstream_id: self.id.clone(),
                     status: 429,
@@ -530,12 +405,19 @@ mod tests {
                     body: "bad request".into(),
                     retryable: false,
                 }),
-                Behave::InvalidJson => Ok(serde_json::json!({"not": "a jev response"})),
+                Behave::InvalidJson => Err(JevError::BadResponse {
+                    upstream_id: self.id.clone(),
+                    message: "invalid jev json".into(),
+                }),
             }
         }
     }
 
-    fn fake(id: &str, qts: &'static [QuestionType], behave: Behave) -> (Box<dyn Upstream>, Arc<FakeHandle>) {
+    fn fake(
+        id: &str,
+        qts: &'static [QuestionType],
+        behave: Behave,
+    ) -> (Box<dyn UpstreamAdapter>, Arc<FakeHandle>) {
         let handle = Arc::new(FakeHandle {
             calls: AtomicU32::new(0),
             seen_models: Mutex::new(Vec::new()),
@@ -611,17 +493,16 @@ mod tests {
     async fn failover_429_falls_to_second_candidate_with_upstream_calls() {
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::Err429);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
-        let mut upstreams = HashMap::new();
-        upstreams.insert("vercel".to_string(), v1);
-        upstreams.insert("laya".to_string(), v2);
 
         let mut e1 = edge("jev", "vercel", 10);
         e1.upstream_model = Some("typesafe-ai/jev".into());
         let mut e2 = edge("jev", "laya", 30);
         e2.upstream_model = Some("laya-english".into());
-        let router = JevRouter::new(vec![e1, e2], upstreams);
+        let mut reg = Registry::new(vec![e1, e2]);
+        reg.register(v1);
+        reg.register(v2);
 
-        let resp = run_request(&router, noul_request("jev")).await.expect("failover success");
+        let resp = run_request(&reg, noul_request("jev")).await.expect("failover success");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "首候选实发 1 次");
         assert_eq!(h2.calls.load(Ordering::SeqCst), 1, "次候选实发 1 次");
         // upstream_calls 如实 = 实发次数 >= 2
@@ -635,22 +516,26 @@ mod tests {
     /// 验收 ⑥：404 语义不回潮（无匹配边）。
     #[tokio::test]
     async fn unknown_model_is_404() {
-        let router = JevRouter::new(vec![], HashMap::new());
-        let resp = run_request(&router, noul_request("nope")).await;
+        let reg = Registry::new(vec![]);
+        let resp = run_request(&reg, noul_request("nope")).await;
         assert_eq!(status_of(resp).await, 404);
+        let body = error_body(run_request(&reg, noul_request("nope")).await).await;
+        assert!(body.error.contains("nope"));
+        assert!(!body.retryable);
+        assert!(body.upstream.is_none(), "404 不带 upstream 字段");
     }
 
     /// 验收 ⑥：422 语义不回潮（capability 不匹配且无可用候选）。
     #[tokio::test]
     async fn capability_mismatch_all_skipped_is_422() {
         let (v1, h1) = fake("vercel", &[QuestionType::Choice], Behave::Ok200);
-        let upstreams = HashMap::from([("vercel".to_string(), v1)]);
-        let router = JevRouter::new(vec![edge("jev", "vercel", 10)], upstreams);
+        let mut reg = Registry::new(vec![edge("jev", "vercel", 10)]);
+        reg.register(v1);
 
-        let resp = run_request(&router, noul_request("jev")).await;
+        let resp = run_request(&reg, noul_request("jev")).await;
         assert_eq!(status_of(resp).await, 422);
         assert_eq!(h1.calls.load(Ordering::SeqCst), 0, "capability 跳过不实发");
-        let body = error_body(run_request(&router, noul_request("jev")).await).await;
+        let body = error_body(run_request(&reg, noul_request("jev")).await).await;
         assert!(body.error.contains("question type"), "got: {}", body.error);
         assert!(!body.retryable);
     }
@@ -661,16 +546,11 @@ mod tests {
         // cand1 只支持 choice（不支持 noul）→ 跳过；cand2 支持 noul → 成功
         let (v1, h1) = fake("vercel", &[QuestionType::Choice], Behave::Err429);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
-        let upstreams = HashMap::from([
-            ("vercel".to_string(), v1),
-            ("laya".to_string(), v2),
-        ]);
-        let router = JevRouter::new(
-            vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)],
-            upstreams,
-        );
+        let mut reg = Registry::new(vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)]);
+        reg.register(v1);
+        reg.register(v2);
 
-        let resp = run_request(&router, noul_request("jev")).await.expect("second wins");
+        let resp = run_request(&reg, noul_request("jev")).await.expect("second wins");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 0, "cap 跳过 = 零实发（连 429 都没走到）");
         assert_eq!(h2.calls.load(Ordering::SeqCst), 1);
         assert_eq!(resp.upstream_calls, Some(1), "upstream_calls 只计实发");
@@ -681,21 +561,19 @@ mod tests {
     async fn on_error_fail_returns_first_error_without_next() {
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::Err429);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
-        let upstreams = HashMap::from([
-            ("vercel".to_string(), v1),
-            ("laya".to_string(), v2),
-        ]);
         let e1 = RouteEdge {
             on_error: OnError::Fail,
             ..edge("jev", "vercel", 10)
         };
-        let router = JevRouter::new(vec![e1, edge("jev", "laya", 30)], upstreams);
+        let mut reg = Registry::new(vec![e1, edge("jev", "laya", 30)]);
+        reg.register(v1);
+        reg.register(v2);
 
-        let resp = run_request(&router, noul_request("jev")).await;
+        let resp = run_request(&reg, noul_request("jev")).await;
         assert_eq!(status_of(resp).await, 503, "429 retryable → 对外 503");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "fail 不试下一候选");
-        let body = error_body(run_request(&router, noul_request("jev")).await).await;
+        let body = error_body(run_request(&reg, noul_request("jev")).await).await;
         assert!(body.retryable, "429 retryable 标志透出");
         assert_eq!(body.upstream.as_deref(), Some("vercel"));
     }
@@ -705,34 +583,24 @@ mod tests {
     async fn non_retryable_error_stops_even_with_on_error_next() {
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::Err400);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
-        let upstreams = HashMap::from([
-            ("vercel".to_string(), v1),
-            ("laya".to_string(), v2),
-        ]);
-        let router = JevRouter::new(
-            vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)],
-            upstreams,
-        );
-        let resp = run_request(&router, noul_request("jev")).await;
+        let mut reg = Registry::new(vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)]);
+        reg.register(v1);
+        reg.register(v2);
+        let resp = run_request(&reg, noul_request("jev")).await;
         assert_eq!(status_of(resp).await, 400, "透传上游码");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "首候选实发一次即停");
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "不可重试错误不 failover");
     }
 
-    /// 上游响应形态非法 → 502 即返（不 failover；反序列化失败非 retryable）。
+    /// 上游响应形态非法 → 502 即返（不 failover；BadResponse 非 retryable）。
     #[tokio::test]
     async fn invalid_upstream_json_is_502_no_failover() {
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::InvalidJson);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
-        let upstreams = HashMap::from([
-            ("vercel".to_string(), v1),
-            ("laya".to_string(), v2),
-        ]);
-        let router = JevRouter::new(
-            vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)],
-            upstreams,
-        );
-        let resp = run_request(&router, noul_request("jev")).await;
+        let mut reg = Registry::new(vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)]);
+        reg.register(v1);
+        reg.register(v2);
+        let resp = run_request(&reg, noul_request("jev")).await;
         assert_eq!(status_of(resp).await, 502);
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
@@ -742,10 +610,9 @@ mod tests {
     #[tokio::test]
     async fn legacy_single_edge_success_upstream_calls_one() {
         let (v1, h1) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
-        let upstreams = HashMap::from([("laya".to_string(), v1)]);
-        let router =
-            JevRouter::new(vec![edge("laya-english", "laya", 0)], upstreams);
-        let resp = run_request(&router, noul_request("laya-english")).await.expect("ok");
+        let mut reg = Registry::new(vec![edge("laya-english", "laya", 0)]);
+        reg.register(v1);
+        let resp = run_request(&reg, noul_request("laya-english")).await.expect("ok");
         assert_eq!(resp.upstream_calls, Some(1));
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         // 无 upstream_model 改写 → 沿用原 model

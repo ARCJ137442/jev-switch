@@ -26,7 +26,8 @@
 //! - 粘性：`note_success(sticky_key, upstream_id)` 记忆；同 key 下 sticky=session 的
 //!   已记忆候选在 select 时提到首位（失败 failover 由顶层循环负责）。
 
-use crate::upstream::{Capabilities, JevError, QuestionType, Upstream};
+use crate::adapter::UpstreamAdapter;
+use crate::upstream::{Capabilities, JevError, QuestionType};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use thiserror::Error;
@@ -166,13 +167,16 @@ pub struct PlanItem {
 
 pub struct Router {
     edges: Vec<RouteEdge>,
-    upstreams: HashMap<UpstreamId, Box<dyn Upstream>>,
+    upstreams: HashMap<UpstreamId, Box<dyn UpstreamAdapter>>,
     /// sticky_key → 上次成功候选（session 粘性记忆）。
     sticky: std::sync::Mutex<HashMap<String, UpstreamId>>,
 }
 
 impl Router {
-    pub fn new(edges: Vec<RouteEdge>, upstreams: HashMap<String, Box<dyn Upstream>>) -> Self {
+    pub fn new(
+        edges: Vec<RouteEdge>,
+        upstreams: HashMap<String, Box<dyn UpstreamAdapter>>,
+    ) -> Self {
         Self {
             edges,
             upstreams,
@@ -183,7 +187,7 @@ impl Router {
     /// 旧扁平 `model → upstream` 映射的兼容构造（每条 = 单 exact 边）。
     pub fn from_flat(
         mapping: HashMap<String, String>,
-        upstreams: HashMap<String, Box<dyn Upstream>>,
+        upstreams: HashMap<String, Box<dyn UpstreamAdapter>>,
     ) -> Self {
         let mut edges: Vec<RouteEdge> = mapping
             .iter()
@@ -192,6 +196,11 @@ impl Router {
         // 稳定顺序：按 left 排，保证旧表行为与 HashMap 迭代序无关
         edges.sort_by(|a, b| a.left.cmp(&b.left));
         Self::new(edges, upstreams)
+    }
+
+    /// 挂载上游（能力注册制：id/capabilities 一律来自 adapter trait）。
+    pub fn register(&mut self, up: Box<dyn UpstreamAdapter>) {
+        self.upstreams.insert(up.id().to_string(), up);
     }
 
     /* ── 选路 ──────────────────────────────────────────────── */
@@ -346,7 +355,7 @@ impl Router {
     /* ── 兼容 / 装配视图 ─────────────────────────────────────── */
 
     /// 兼容包装：取 `select` 第一候选对应的 upstream（旧 1:1 语义）。
-    pub fn route(&self, model: &str) -> Result<&dyn Upstream, RouterError> {
+    pub fn route(&self, model: &str) -> Result<&dyn UpstreamAdapter, RouterError> {
         let cands = self.select(model, &RouteCtx::default())?;
         let first = cands
             .into_iter()
@@ -357,7 +366,7 @@ impl Router {
     }
 
     /// 按 id 取已注册上游（handler 逐候选调用）。
-    pub fn upstream(&self, id: &str) -> Option<&dyn Upstream> {
+    pub fn upstream(&self, id: &str) -> Option<&dyn UpstreamAdapter> {
         self.upstreams.get(id).map(|b| b.as_ref())
     }
 
@@ -481,7 +490,7 @@ pub fn check_acyclic(edges: &[RouteEdge]) -> Result<(), RouterError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jev_protocol::SystemOneRequest;
+    use jev_protocol::{JevRequest, JevResponse};
 
     /// Mock upstream for router unit tests.
     struct MockUpstream {
@@ -490,7 +499,7 @@ mod tests {
     }
 
     #[async_trait::async_trait]
-    impl Upstream for MockUpstream {
+    impl UpstreamAdapter for MockUpstream {
         fn id(&self) -> &str {
             &self.id
         }
@@ -503,15 +512,15 @@ mod tests {
                 retryable_status: self.cap.retryable_status,
             }
         }
-        async fn evaluate(
-            &self,
-            _req: SystemOneRequest,
-        ) -> Result<serde_json::Value, JevError> {
-            Ok(serde_json::json!({"answers": {}}))
+        async fn evaluate(&self, _req: JevRequest) -> Result<JevResponse, JevError> {
+            serde_json::from_str(r#"{"answers":{}}"#).map_err(|e| JevError::BadResponse {
+                upstream_id: self.id.clone(),
+                message: e.to_string(),
+            })
         }
     }
 
-    fn mock(id: &str, qts: &'static [QuestionType]) -> Box<dyn Upstream> {
+    fn mock(id: &str, qts: &'static [QuestionType]) -> Box<dyn UpstreamAdapter> {
         Box::new(MockUpstream {
             id: id.to_string(),
             cap: Capabilities {
@@ -524,8 +533,12 @@ mod tests {
         })
     }
 
-    fn ups(ids: &[(&str, &'static [QuestionType])]) -> HashMap<String, Box<dyn Upstream>> {
-        ids.iter().map(|(id, qts)| (id.to_string(), mock(id, *qts))).collect()
+    fn ups(
+        ids: &[(&str, &'static [QuestionType])],
+    ) -> HashMap<String, Box<dyn UpstreamAdapter>> {
+        ids.iter()
+            .map(|(id, qts)| (id.to_string(), mock(id, *qts)))
+            .collect()
     }
 
     fn edge(left: &str, right: &str, priority: i32) -> RouteEdge {

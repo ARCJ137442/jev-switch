@@ -1,16 +1,11 @@
-//! Upstream trait + Capability table（M0.3 + M0.4 · P0-1 迁入 jev-core）
+//! 错误分类 + Capability 表（M0.3/M0.4 · A5：能力改为 adapter 注册制）
 //!
-//! 参考 03-上游类别与协议兼容矩阵 §2.3 capability 表（精简为 M0 范围：C2 Vercel + C5 Laya）。
-//! 参考 04-架构设计 §2.4 关键 trait。
-//!
-//! 设计选择：
-//! - `evaluate` 返回 `Result<serde_json::Value, JevError>`：上游能产出 Vercel 形态 / Laya 形态
-//!   / 未来 broker 形态，统一用 Value 在边界换形态，让 Vercel boolean→noul 等翻译
-//!   在外层 `translate.rs` 处理。
-//! - 使用 Rust 1.75+ 的 native `async fn` in trait，无需 `async_trait`。
+//! - [`JevError`]：上游/路由错误统一分类；`retryable()` 是 failover 唯一门闸
+//!   （429/5xx/Timeout/Network）；`http_status()` 给出对外映射（contracts/05 §3）
+//! - [`Capabilities`]：能力描述结构；**取值一律来自 `UpstreamAdapter::capabilities()`**
+//!   （07 P2：删除 `capabilities_of` 按 id 硬编码 match）
+//! - 冻结双 trait（`ProtocolAdapter` / `UpstreamAdapter`）+ `Registry` 见 [`crate::adapter`]
 
-use jev_protocol::SystemOneRequest;
-use serde_json::Value;
 use thiserror::Error;
 
 // P0-1：QuestionType 随协议类型迁入 jev-protocol（DecisionQuestion::question_type() 需要它），
@@ -41,6 +36,13 @@ pub enum JevError {
     BadResponse { upstream_id: String, message: String },
     #[error("upstream {upstream_id} config error: {message}")]
     Config { upstream_id: String, message: String },
+    /// 无匹配边（contracts/03 §4 → 404 `UnknownModel`）。
+    /// A5 扩充：`Registry::invoke` 冻结返回 `Result<_, JevError>`，路由错误并入本枚举。
+    #[error("no upstream registered for model '{0}'")]
+    UnknownModel(String),
+    /// 边终点既非已注册上游也无出边（→ 404，文案与旧 `RouterError` 一致）。
+    #[error("upstream '{0}' not registered in router")]
+    UnknownUpstream(String),
 }
 
 impl JevError {
@@ -51,7 +53,18 @@ impl JevError {
             | JevError::Network { upstream_id, .. }
             | JevError::Capability { upstream_id, .. }
             | JevError::BadResponse { upstream_id, .. }
-            | JevError::Config { upstream_id, .. } => upstream_id,
+            | JevError::Config { upstream_id, .. }
+            | JevError::UnknownUpstream(upstream_id) => upstream_id,
+            JevError::UnknownModel(m) => m,
+        }
+    }
+
+    /// 是否携带 `upstream` 字段语义（错误体里 None = 纯路由/协议错误）。
+    /// `UnknownModel` / `UnknownUpstream` 的错误体 `upstream` 为 None（A4 行为保留）。
+    pub fn error_body_upstream(&self) -> Option<&str> {
+        match self {
+            JevError::UnknownModel(_) | JevError::UnknownUpstream(_) => None,
+            other => Some(other.upstream_id()),
         }
     }
 
@@ -77,6 +90,7 @@ impl JevError {
             JevError::Capability { .. } => 422,
             JevError::BadResponse { .. } => 502,
             JevError::Config { .. } => 500,
+            JevError::UnknownModel(_) | JevError::UnknownUpstream(_) => 404,
         }
     }
 }
@@ -99,56 +113,16 @@ pub struct Capabilities {
 impl Capabilities {
     pub fn supports(&self, qt: QuestionType) -> bool {
         if self.noul_via_boolean && qt == QuestionType::Noul {
-            // Vercel 通过翻译层接 noul；这里返回 true 让路由能选它
+            // 经翻译层可接 noul 的上游（如 boolean 方言）返回 true 让路由能选它
             return true;
         }
         self.question_types.contains(&qt)
     }
-}
 
-/// 按上游 id 查 capability（M0.4 capability 表）。
-///
-/// M0 只硬编码 2 个：Vercel + Laya。其他 id 返回 `None`。
-pub fn capabilities_of(id: &str) -> Option<Capabilities> {
-    match id {
-        "vercel" => Some(Capabilities {
-            question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Boolean],
-            has_confidence: false,
-            has_usage: false,
-            noul_via_boolean: true,
-            retryable_status: &[408, 429, 500, 502, 503, 504],
-        }),
-        "laya" => Some(Capabilities {
-            question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Noul],
-            has_confidence: true,
-            has_usage: false,
-            noul_via_boolean: false,
-            retryable_status: &[0], // 本地不需要重试（空表语义：非 retriable）
-        }),
-        _ => None,
-    }
-}
-
-/// 上游抽象。用 `async_trait` 是为了让 trait dyn-compatible（Rust 1.93
-/// 还未稳定 `async fn` in dyn trait）。
-#[async_trait::async_trait]
-pub trait Upstream: Send + Sync {
-    /// 上游在 router 里的逻辑 id（如 "vercel" / "laya"）。
-    fn id(&self) -> &str;
-
-    /// 上游能力。
-    fn capabilities(&self) -> Capabilities;
-
-    /// 真正调用上游。返回上游原始响应（Vercel 形态 / Laya 形态等），
-    /// 翻译在 `translate.rs` 里做，upstream 只负责 HTTP。
-    async fn evaluate(&self, req: SystemOneRequest) -> Result<Value, JevError>;
-}
-
-/// 根据 HTTP status 判定是否 retryable（结合 capability 表）。
-pub fn is_retryable_status(upstream_id: &str, status: u16) -> bool {
-    match capabilities_of(upstream_id) {
-        Some(cap) => cap.retryable_status.contains(&status),
-        None => false,
+    /// 按本能力表判定 HTTP status 是否可重试（adapter 报错时用自家表，替代
+    /// 已删除的 `capabilities_of` 全局查表）。
+    pub fn is_retryable_status(&self, status: u16) -> bool {
+        self.retryable_status.contains(&status)
     }
 }
 
@@ -157,28 +131,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vercel_capability() {
-        let cap = capabilities_of("vercel").unwrap();
-        assert!(cap.supports(QuestionType::Boolean));
+    fn supports_noul_via_boolean_shortcut() {
+        // 翻译层型能力（boolean 方言上游）对 Noul 短路为 true
+        let cap = Capabilities {
+            question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Boolean],
+            has_confidence: false,
+            has_usage: false,
+            noul_via_boolean: true,
+            retryable_status: &[429],
+        };
         assert!(cap.supports(QuestionType::Noul)); // via translation
-        assert!(!cap.has_confidence);
-        assert!(cap.noul_via_boolean);
-        assert!(cap.retryable_status.contains(&429));
+        assert!(cap.supports(QuestionType::Boolean));
+        assert!(cap.is_retryable_status(429));
+        assert!(!cap.is_retryable_status(400));
     }
 
     #[test]
-    fn laya_capability() {
-        let cap = capabilities_of("laya").unwrap();
+    fn local_style_caps_do_not_retry() {
+        // 本地类上游 retryable_status=[0]（空表语义）→ 任何真实 status 都不重试
+        let cap = Capabilities {
+            question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Noul],
+            has_confidence: true,
+            has_usage: false,
+            noul_via_boolean: false,
+            retryable_status: &[0],
+        };
         assert!(cap.supports(QuestionType::Noul));
-        assert!(cap.supports(QuestionType::Choice));
         assert!(!cap.supports(QuestionType::Boolean));
-        assert!(cap.has_confidence);
-        assert!(!cap.noul_via_boolean);
+        assert!(!cap.is_retryable_status(429));
+        assert!(!cap.is_retryable_status(500));
     }
 
     #[test]
-    fn unknown_capability() {
-        assert!(capabilities_of("openrouter").is_none());
+    fn unknown_model_error_is_404_not_retryable() {
+        let e = JevError::UnknownModel("ghost".into());
+        assert_eq!(e.http_status(), 404);
+        assert!(!e.retryable());
+        assert!(e.error_body_upstream().is_none());
+        assert_eq!(e.to_string(), "no upstream registered for model 'ghost'");
     }
 
     #[test]
