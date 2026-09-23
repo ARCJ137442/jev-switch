@@ -60,11 +60,57 @@ export interface SystemOneResponse {
 export interface ModelInfo {
   id: string;
   object: string;
+  upstream?: string;
 }
 
 export interface ModelsResponse {
   object: 'list';
   data: ModelInfo[];
+}
+
+interface RawModelEntry {
+  model?: string;
+  id?: string;
+  object?: string;
+  upstream?: string;
+}
+
+interface RawModelsResponse {
+  models?: RawModelEntry[];
+  data?: RawModelEntry[];
+  object?: string;
+}
+
+/**
+ * Normalize the upstream `/v1/models` payload into `ModelsResponse`.
+ *
+ * The Rust daemon (rs/) currently returns
+ *   { "models": [{ "model": "...", "upstream": "..." }, ...], "upstreams": [...] }
+ * but the UI was originally written against an OpenAI-style
+ *   { "object": "list", "data": [{ "id": "...", "object": "..." }, ...] }
+ * shape. Accept either, prefer `data` when present, and normalize
+ * `model` → `id` so the rest of the UI can stay shape-agnostic.
+ */
+function normalizeModels(raw: unknown): ModelsResponse {
+  const obj = (raw ?? {}) as RawModelsResponse;
+  const rawList = Array.isArray(obj.data)
+    ? obj.data
+    : Array.isArray(obj.models)
+      ? obj.models
+      : [];
+  const data: ModelInfo[] = [];
+  for (const m of rawList) {
+    if (!m) continue;
+    const id = (m.id ?? m.model ?? '').toString();
+    if (!id) continue;
+    const out: ModelInfo = {
+      id,
+      object: (m.object ?? 'model').toString(),
+    };
+    if (typeof m.upstream === 'string') out.upstream = m.upstream;
+    data.push(out);
+  }
+  return { object: 'list', data };
 }
 
 export interface ProviderInfo {
@@ -94,7 +140,8 @@ export async function fetchHealth(): Promise<string> {
 export async function fetchModels(): Promise<ModelsResponse> {
   const res = await fetch(`${getBase()}/v1/models`);
   if (!res.ok) throw new Error(`models ${res.status}`);
-  return (await res.json()) as ModelsResponse;
+  const raw = await res.json();
+  return normalizeModels(raw);
 }
 
 export async function postSystemOne(req: SystemOneRequest): Promise<SystemOneResponse> {

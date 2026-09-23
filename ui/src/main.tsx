@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
@@ -6,8 +6,60 @@ import './index.css';
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('#root not found');
 
+interface BoundaryProps {
+  children: ReactNode;
+}
+interface BoundaryState {
+  error: Error | null;
+}
+
+/**
+ * Top-level ErrorBoundary — surfaces render-time errors in the DOM instead of
+ * silently leaving `<div id="root">` empty. Without this, a downstream render
+ * error makes the entire React tree disappear with no on-screen feedback,
+ * which is exactly the symptom this app exhibited before this commit.
+ */
+class RootErrorBoundary extends Component<BoundaryProps, BoundaryState> {
+  state: BoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): BoundaryState {
+    return { error };
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    // eslint-disable-next-line no-console
+    console.error('[RootErrorBoundary]', error, info);
+  }
+
+  override render(): ReactNode {
+    if (this.state.error) {
+      const msg = this.state.error?.message ?? String(this.state.error);
+      return (
+        <div
+          style={{
+            padding: 24,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            color: '#7f1d1d',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            margin: 24,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>
+            Jev-Switch UI crashed
+          </div>
+          <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{msg}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 createRoot(rootEl).render(
   <StrictMode>
-    <App />
+    <RootErrorBoundary>
+      <App />
+    </RootErrorBoundary>
   </StrictMode>,
 );

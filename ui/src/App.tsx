@@ -40,7 +40,12 @@ export default function App() {
     let cancelled = false;
     fetchModels()
       .then((m) => {
-        if (!cancelled) setServerModels(m.data);
+        if (!cancelled) {
+          // Defensive: `data` may be missing if the upstream returns an
+          // unexpected shape; always fall back to the bundled defaults.
+          const next = Array.isArray(m?.data) ? m.data : [];
+          setServerModels(next);
+        }
       })
       .catch(() => {});
     return () => {
@@ -49,7 +54,7 @@ export default function App() {
   }, [server.status]);
 
   const modelOptions = useMemo(() => {
-    if (serverModels.length === 0) {
+    if (!Array.isArray(serverModels) || serverModels.length === 0) {
       return DEFAULT_MODEL_OPTIONS.map((o) => ({
         value: o.value,
         label: o.value,
