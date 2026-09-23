@@ -212,3 +212,135 @@ cargo tauri build          # = nsis + msi；CLI：cargo tauri 2.9.6（或 npx @t
 
 - Tauri **macOS / Linux** 打包与签名（Windows 首发裁决）；GitHub Release 便携分发的 CI 流水线归发布线；
 - 托盘「退出」路径的 UI 自动化回归（本次人工验收级：收尸逻辑在 `RunEvent::Exit` 单点，代码审阅覆盖）。
+
+---
+
+## 十、mode 热切换与 listen 热 Rebind（不重启）+ 重启粒度（小网关）
+
+> **作者**：MiMo（`mimo-v2.6-flash`，Mode-Agent 本次执行）· 如实披露
+> **日期**：2026-09-23 · **裁决**：用户「服务器上重启是大阻碍」→ 方案一「改地址不重启」+ 任务级最小重启 + 激活原子设密。
+> **性质**：在 §三/§五基础上的行为**增补与局部变更**（§三表未改动；冲突以本节为准）。含 contracts/05 §1 端点表新增备案（同 §五 login 处理方式）。
+
+### 10.1 新旧行为对照（bind / mode）
+
+| 维度 | 旧行为（#43 初版） | 新行为（本节落地） |
+|---|---|---|
+| bind 来源 | **隐含在 mode 里**（local→`127.0.0.1:11435`、cloud→`0.0.0.0:11435`，不可另配） | **独立配置**：文件 `bind = "ip:port"` ← env `JEV_BIND` 覆盖；未配置 → **成对默认随 mode**（地址同旧，来源显式化） |
+| 换监听地址 | 只能改配置 + **重启进程** | **`PUT /v1/admin/listen` 热 Rebind**（try-bind → 优雅退场 → spawn；零进程重启、零内核重建） |
+| mode 切换 | 改配置 + 重启 | **`PUT /v1/admin/mode` 运行时热切**：写鉴权 `RwLock` → 后续请求**立即生效**（在途请求跑完旧策略）+ 写回 toml；**非显式 bind 时联动 Rebind 到成对默认** |
+| local 态防护 | 靠 loopback 绑定（内核级） | 不变（非显式绑定仍 `127.0.0.1` 内核级关）；**显式 bind=0.0.0.0 时**追加应用层 peer 兜底：非 loopback → **403**（`local mode: loopback only`，三键错误体） |
+| admin 密码 | 仅启动期读 env/toml | **运行时热更**：`PUT /v1/admin/password`；mode 激活可同请求携带首个密码（见 10.6） |
+| 运维可观测 | 只有 `/health` | **`GET /v1/admin/status`** 首页仪表盘自检（见 10.7） |
+
+### 10.2 语义矩阵（两 mode × peer；鉴权中间件每请求读锁取 mode）
+
+| 端点域 | local + loopback peer | local + 远程 peer | cloud + loopback peer | cloud + 远程 peer |
+|---|---|---|---|---|
+| `/v1/systemone`、`/v1/models` | 放行（零鉴权，现状） | **403** | Bearer 调用 token，缺失/错值 401 | 同左（401） |
+| `/v1/admin/*`（providers/routes/mode/listen/status/probe） | 放行（零鉴权，现状） | **403** | admin 会话，缺失/无效 401 | 同左（401） |
+| `POST /v1/admin/login` | 放行（密码错仍 401） | 放行（门外端点） | 放行（密码错/未配 401） | 放行（门外端点） |
+| `PUT /v1/admin/password` | 放行 | **403** | **会话 或 loopback 皆可**（忘密恢复） | 需会话，无 → **401** |
+| `/health`、静态 UI | 放行 | 放行（探活需要；静态 UI 不设门） | 放行 | 放行 |
+
+- peer 取 `ConnectInfo<SocketAddr>`；**peer 缺失（进程内 oneshot/单测无 TCP 对端）按 loopback 信任** —— 真实 TCP 必有 ConnectInfo，None 仅测试路径。
+- 「local + 远程 → 403」只在**显式 bind 让 LAN 可达**时才可能被触发（非显式默认绑 `127.0.0.1`，连接层直接 refused）——这是 peer 校验作为**显式绑定残留场景兜底**的定位。
+
+### 10.3 bind 默认变更与 LAN-403 说明（显式绑定代价）
+
+- **默认（未配 bind）**：local → `127.0.0.1:11435`、cloud → `0.0.0.0:11435`（成对；与 §三表地址一致，来源从「mode 驱动」改为「独立键缺省」——README/脚本地址不变）。
+- **显式 `bind`（文件或 `JEV_BIND`）**：恒绑该值，mode 翻转**不动监听**（响应 `rebind.skipped = "explicit bind"`）。若显式值是 `0.0.0.0:…` 而 mode=local：LAN 内 **TCP 可达**，但应用层 peer 校验对 `/v1` 一律 **403**（10.2 矩阵）。此代价已接受；如需内核级关闭，**不要显式配 0.0.0.0**（用成对默认），或自行加防火墙。
+- 非法 `bind`/`JEV_BIND`/`JEV_SWITCH_MODE` → **启动硬拒**（带病不上线）。
+
+### 10.4 热切端点（curl 示例）
+
+```bash
+# ① mode 热切：local → cloud（非显式 bind 时自动 Rebind 到 0.0.0.0:11435）
+curl -X PUT http://127.0.0.1:11435/v1/admin/mode \
+  -H 'content-type: application/json' \
+  -d '{"mode":"cloud"}'
+# → {"mode":"cloud","persisted":true,"env_override_active":false,
+#    "rebind":{"from":"127.0.0.1:11435","to":"0.0.0.0:11435","ok":true}}
+# cloud 态发起翻转必须带 admin 会话（防匿名拆锁）：
+#   -H "Authorization: Bearer <login 换取的会话 token>"
+
+# 首次激活 cloud 且从未配过密码 → 必须同请求带第一个密码（否则 400 指引）：
+curl -X PUT http://127.0.0.1:11435/v1/admin/mode \
+  -H 'content-type: application/json' \
+  -d '{"mode":"cloud","admin_password":"…"}'
+
+# ② 监听热 Rebind（显式化；写回 toml bind 键，此后 mode 翻转不再动它）
+curl -X PUT http://127.0.0.1:11435/v1/admin/listen \
+  -H 'content-type: application/json' \
+  -d '{"addr":"127.0.0.1:2222"}'
+# → {"addr":"127.0.0.1:2222","rebound":true}
+# 恢复成对默认（按当前 mode 自动选地址；从 toml 移除 bind 键）
+curl -X PUT http://127.0.0.1:11435/v1/admin/listen \
+  -H 'content-type: application/json' -d '{"addr":"auto"}'
+# 查询当前实际监听：
+curl http://127.0.0.1:11435/v1/admin/listen
+# try-bind 失败（目标端口被占）→ 500 三键错误体，旧监听一字未动、不写文件。
+
+# ③ admin 密码热更（轮换 = 全体会话作废，代际 +1）
+curl -X PUT http://127.0.0.1:11435/v1/admin/password \
+  -H 'content-type: application/json' \
+  -d '{"password":"…"}'
+# cloud 鉴权：有效会话（任意 peer）**或** loopback（无会话）——见 10.2 矩阵
+```
+
+**响应字段（给 UI 的 mode 切换钮）**：
+
+| 端点 | 成功体 | 鉴权 |
+|---|---|---|
+| `PUT /v1/admin/mode` | `{mode, persisted, env_override_active, rebind:{from,to,ok[,reason]} \| {skipped:"explicit bind"\|"no listener"}}` | admin 门内：cloud=会话；local=loopback |
+| `PUT /v1/admin/listen` | `{addr, rebound:true, reason?}`；失败 400/500 三键错误体 | 同上 |
+| `GET /v1/admin/listen` | `{addr}` | 同上 |
+| `PUT /v1/admin/password` | `{updated:true, env_override_active}`（**永不回显密码**） | 门外 in-handler：见 10.2 |
+
+**Rebind 时序（try-bind → 优雅退场 → spawn）**：
+1. 地址与当前**不重叠**（不同端口/IP 不互含）：先 **try-bind 新地址**（失败 → 错误给调用方、**旧监听原样保留**）→ 成功则 spawn 新 serve（`with_graceful_shutdown`）→ 取消旧 serve：**停 accept、在途请求跑完**（`DRAIN_TIMEOUT=10s` 超时兜底 `abort` 强杀）→ 更新共享 `bound` 地址。
+2. **同端口重叠例外**（成对默认 local⇄cloud 同为 `:11435` 仅 IP 不同——新 bind 会被旧监听物理挡住）：优雅退场旧 serve → try-bind → 成功 spawn；失败 → **恢复绑定旧地址**再报错（带病不上线，服务不悬空）。
+
+**重启粒度声明**：本次全部热切均在**任务级**（tokio task + socket 替换；内核 Router/auth/handlers 的 `Arc` 共享、**永不因换地址而亡**；进程级零重启）。
+进程级「独立小网关」方案**本期不实现**——可选演进：将 listen 层拆独立进程做故障隔离（daemon 崩不影响网关 accept 队列等场景），需要时再立项。
+
+### 10.5 env 覆盖警示（`env_override_active`）
+
+- `PUT /v1/admin/mode` **总是**把 mode 写回 toml（Q5 文件真值）；若 env `JEV_SWITCH_MODE` 非空 → 响应 `env_override_active: true`——**下次启动 env 会覆盖文件值**（本次运行态已切，重启后回到 env 定的 mode）。
+- 密码写入（mode 携带 / password 端点）同理：env `JEV_ADMIN_PASSWORD` 非空 → 警示 true（下次启动覆盖回 env 值）。UI 见到 true 应提示用户「改 env 或移除 env 才能持久」。
+- 优先级恒为 **env（非空）> 文件**（与 §三表一致）；`status.env_override_active` 反映的是 **mode** 的 env 活跃位。
+
+### 10.6 部署矩阵（首个管理员密码 · 忘密恢复 · 轮换）
+
+| 场景 | 做法 | 行为 |
+|---|---|---|
+| 服务器 compose | `.env` 注入 `JEV_ADMIN_PASSWORD` + `JEV_AUTH_TOKENS` + `JEV_SWITCH_MODE=cloud`（§一 快速开始） | env 优先于文件；重启后仍是 env 值 |
+| 桌面 / 本地 | toml 写 `admin_password` / `auth_tokens`（Q4=b 明文哲学，0600 文件） | 不设 env 则文件即真值 |
+| 忘配密码但想开 cloud | `PUT /mode {"mode":"cloud","admin_password":"…"}` **一发激活** | 无密码且不带 → **400** 指引文案（fail-closed 不破）；带了 → 写文件+立即生效+会话代际作废+激活 |
+| **忘密恢复（cloud 运行中）** | 本机（loopback）一行 curl `PUT /v1/admin/password`，**无需任何会话** | Q4 本地信任=root 等价；零重启修复部署矩阵最后一个洞。**远程**非 loopback 无会话 → 401（必须 SSH/本机） |
+| 密码轮换 | 任一路径（mode 携带 / password 端点）都走**同一内部入口**（`set_admin_password`） | 写 toml + 运行时生效 + **全部旧会话作废**（代际 +1）+ env 警示 |
+| 旧会话语义 | 改密后旧 session token 立即 401 | 浏览器需重新 login（自动触发） |
+| remote 翻转顺序 | local 态下**远程无法**调 `/v1/admin/mode`（403 天然挡住）——**先在本机翻到 cloud 才能远程管理** | 这是正确语义非 bug；且激活那一发就带上第一个密码（10.6 闭环），之后远程持会话接管 |
+
+### 10.7 `GET /v1/admin/status` —— 首页仪表盘 / 运维一眼自检
+
+```bash
+curl http://127.0.0.1:11435/v1/admin/status
+# cloud 态带会话：-H "Authorization: Bearer <会话>"
+# → {"mode":"cloud","bind":"0.0.0.0:11435","bind_explicit":false,
+#    "env_override_active":false,"password_set":true,
+#    "version":"0.1.0","uptime_s":120}
+```
+
+| 字段 | 含义 |
+|---|---|
+| `mode` | 当前运行模式（Rebind/热切后即时） |
+| `bind` | **实际当前监听地址**（Rebind 后实时反映） |
+| `bind_explicit` | 是否显式配置 bind（true = mode 翻转不改监听） |
+| `env_override_active` | `JEV_SWITCH_MODE` 环境变量活跃（文件会被覆盖） |
+| `password_set` | 管理密码是否已配置——**绝不返回任何密码值** |
+| `version` / `uptime_s` | 进程版本 / 启动至今秒数 |
+
+**运维用法**：一条 curl 定位「当前什么模式、监听在哪、是不是显式钉死、env 在不在覆盖、密码设没设、进程活了多久」——7 键形状冻结（单测守形状）；鉴权同 admin 集合（cloud 会话 / local loopback，login 除外规则不变），未登录 → 401 三键。
+
+**新增端点备案**（contracts/05 §1 端点表之外，同 §五 login 处理方式——契约文件不改，本节即备案）：
+`PUT /v1/admin/mode`、`PUT|GET /v1/admin/listen`、`PUT /v1/admin/password`、`GET /v1/admin/status`。错误体一律 §3 三键形状（listen 失败 = 400 解析 / 500 try-bind 失败 / 503 无 supervisor）。
