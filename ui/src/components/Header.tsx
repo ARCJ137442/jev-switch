@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchHealth } from '../api';
+import { PORT, fetchHealth } from '../api';
 
 interface Props {
   serverStatus: 'unknown' | 'ok' | 'error';
@@ -54,9 +54,9 @@ export function Header({ serverStatus, modelsCount, providersEnabled, providersT
             />
             <span className="text-inkMuted">
               {serverStatus === 'ok'
-                ? '11435 ok'
+                ? `${PORT} ok`
                 : serverStatus === 'error'
-                  ? '11435 down'
+                  ? `${PORT} down`
                   : 'connecting…'}
             </span>
           </span>

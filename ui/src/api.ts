@@ -1,5 +1,5 @@
 /**
- * Jev-Switch API client — talks to the Rust daemon at http://127.0.0.1:11435
+ * Jev-Switch API client — talks to the Rust daemon at `BASE` (derived from `PORT`).
  *
  * Types are aligned with rs/src/protocol.rs (planned per docs/06-MVP-实现计划.md §阶段 2).
  * The Rust endpoint `POST /v1/systemone` accepts `SystemOneRequest` and returns
@@ -121,7 +121,14 @@ export interface ProviderInfo {
   description: string;
 }
 
-const DEFAULT_BASE = 'http://127.0.0.1:11435';
+/**
+ * 端口与 base 的单一来源（single source of truth）。
+ * ui/src 内任何展示/请求端点都必须从这里派生，禁止再写死字面量。
+ */
+export const PORT = 11435;
+export const BASE = `http://127.0.0.1:${PORT}`;
+
+const DEFAULT_BASE = BASE;
 
 function getBase(): string {
   if (typeof window !== 'undefined') {

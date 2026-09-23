@@ -5,6 +5,7 @@ import { ModelSelect } from './components/ModelSelect';
 import { TestPanel } from './components/TestPanel';
 import { ExampleChips } from './components/ExampleChips';
 import {
+  BASE,
   DEFAULT_MODEL_OPTIONS,
   PROVIDERS,
   fetchModels,
@@ -145,8 +146,7 @@ export default function App() {
                 <Row label="GET" value="/v1/models" />
                 <Row label="GET" value="/health" />
                 <div className="mt-2 border-t border-border pt-2 text-inkSubtle">
-                  base ={' '}
-                  <span className="text-ink">http://127.0.0.1:11435</span>
+                  base = <span className="text-ink">{BASE}</span>
                 </div>
               </div>
             </section>
@@ -175,7 +175,7 @@ export default function App() {
                 </span>
               </div>
               <pre className="overflow-x-auto border border-border bg-bg p-3 font-mono text-[11px] leading-relaxed text-ink">
-{`curl -X POST http://127.0.0.1:11435/v1/systemone \\
+{`curl -X POST ${BASE}/v1/systemone \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "${model}",
