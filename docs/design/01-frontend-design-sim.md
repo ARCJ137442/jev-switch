@@ -117,7 +117,7 @@ Playground 页**保留**极简黑白等宽 DNA；Providers / Routing 采用「CC
 │   <Page = Providers | Routing | Playground>              │
 │                                                          │
 ├──────────────────────────────────────────────────────────┤
-│  endpoint 127.0.0.1:8765 · /v1/systemone ·  file=truth   │
+│  endpoint 127.0.0.1:11435 · /v1/systemone ·  file=truth  │
 └──────────────────────────────────────────────────────────┘
 ```
 
