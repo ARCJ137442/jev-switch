@@ -8,11 +8,19 @@
 # `JEV_SWITCH_CONFIG="rs\providers.example.toml"`），不是本文件/manifest 所在目录。
 # cargo workspace 拆分（rs/Cargo.toml → crates/*）不改变该基准。
 #
+# 密钥（Q4=b 默认档 · contracts/04 §1 · A7）：
+#   - 明文 `api_key = "sk-…"`（**优先读取**；示例不写真实 key，仅注释示意）
+#   - `api_key_env = "…"`（环境变量名，**兼容保留**；明文缺省时回退到此）
+#   - 真值文件应 0600、~/.jev-switch/ 目录 0700（Windows 降级为启动/写回告警）
+#   - UI/API 只出 `api_key_masked`（如 sk-****a1b2），永无读回明文接口
+#   - admin PUT 写回会保留本文件其它段，但**注释不保留**（toml 往返限制）
+#
 # MVP 范围（M0）：2 provider + 模型路由 DAG（[[routes]]）+ 旧 [router] 兼容表。
 
 [providers.vercel]
 kind = "vercel"
 base = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
+# 明文 key（优先）示意：api_key = "sk-…"   ← 不写真实值；或改用下方 env
 api_key_env = "AI_GATEWAY_API_KEY"
 enabled = true
 

@@ -12,8 +12,9 @@ path = "src/main.rs"
 
 [features]
 default = []
-# ts-rs 类型导出（生成物 → ui/src/generated/）：转发协议 crate 同名 feature
-ts-rs = ["dep:ts-rs", "jev-protocol/ts-rs"]
+# ts-rs 类型导出（生成物 → ui/src/generated/）：转发协议/内核 crate 同名 feature
+# （RouteEdge 等路由类型由 jev-core 一份真值导出，daemon 不镜像第二份）
+ts-rs = ["dep:ts-rs", "jev-protocol/ts-rs", "jev-core/ts-rs"]
 
 [dependencies]
 jev-protocol = { workspace = true }
@@ -29,8 +30,14 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tower-http = { workspace = true }
+# A7 probe：HTTP 连通探测（GET base；与 adapters 同用 workspace reqwest）
+reqwest = { workspace = true }
 ts-rs = { version = "12.0.1", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 async-trait = { workspace = true }
+# A7/A8：进程内 oneshot 集成基座
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+wiremock = { workspace = true }

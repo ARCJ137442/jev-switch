@@ -166,6 +166,12 @@ impl Registry {
         &self.router
     }
 
+    /// 热替换路由边表（A7 admin `PUT /v1/admin/routes` 整表替换、无重启）。
+    /// 已注册上游与重试策略不动；调用方先 [`crate::router::check_acyclic`] 校验。
+    pub fn replace_edges(&self, edges: Vec<RouteEdge>) {
+        self.router.replace_edges(edges);
+    }
+
     /// 当前重试策略。
     pub fn retry_policy(&self) -> &RetryPolicy {
         &self.retry

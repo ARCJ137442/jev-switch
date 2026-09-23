@@ -633,6 +633,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "ts-rs",
 ]
 
 [[package]]
@@ -651,18 +652,22 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "http-body-util",
  "jev-adapters",
  "jev-core",
  "jev-protocol",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "toml",
+ "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",
  "ts-rs",
+ "wiremock",
 ]
 
 [[package]]

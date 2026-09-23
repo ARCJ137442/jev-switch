@@ -54,6 +54,11 @@ pub enum RouterError {
 
 /// 边匹配模式：`exact`（默认）| `prefix`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum MatchMode {
     #[default]
@@ -63,6 +68,11 @@ pub enum MatchMode {
 
 /// 粘性策略：`none`（默认）| `session`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Sticky {
     #[default]
@@ -72,6 +82,11 @@ pub enum Sticky {
 
 /// 失败策略：`next`（默认，可重试错误试下一候选）| `fail`（首错即返）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum OnError {
     #[default]
@@ -83,7 +98,15 @@ pub enum OnError {
 ///
 /// 字段与 contracts/03 §2 表逐一对齐；默认值：`match=exact`、`priority=0`、
 /// `sticky=none`、`on_error=next`、`upstream_model=空`（发上游前不改写 model）。
+///
+/// A7 ts-rs：admin `GET/PUT /v1/admin/routes` 与 UI 共用本类型一份真值
+/// （core 加 feature `ts-rs` 导出 —— 不在 daemon 镜像第二份 `RouteView`）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 pub struct RouteEdge {
     /// 边起点：对外 id / 别名 / 前缀模式。
     pub left: String,
@@ -166,7 +189,9 @@ pub struct PlanItem {
 }
 
 pub struct Router {
-    edges: Vec<RouteEdge>,
+    /// 边表：`RwLock` 支撑 A7 admin `PUT /v1/admin/routes` 运行时热替换
+    /// （无重启；已注册上游不受影响）。读路径全同步，guard 不跨 await。
+    edges: std::sync::RwLock<Vec<RouteEdge>>,
     upstreams: HashMap<UpstreamId, Box<dyn UpstreamAdapter>>,
     /// sticky_key → 上次成功候选（session 粘性记忆）。
     sticky: std::sync::Mutex<HashMap<String, UpstreamId>>,
@@ -178,7 +203,7 @@ impl Router {
         upstreams: HashMap<String, Box<dyn UpstreamAdapter>>,
     ) -> Self {
         Self {
-            edges,
+            edges: std::sync::RwLock::new(edges),
             upstreams,
             sticky: std::sync::Mutex::new(HashMap::new()),
         }
@@ -203,6 +228,14 @@ impl Router {
         self.upstreams.insert(up.id().to_string(), up);
     }
 
+    /// 热替换边表（A7 admin `PUT /v1/admin/routes`：整表替换、无重启）。
+    /// 同时清空 sticky 记忆 —— 拓扑变了，旧粘性候选不再可信。
+    /// 调用方负责先校验无环（[`check_acyclic`]）。
+    pub fn replace_edges(&self, edges: Vec<RouteEdge>) {
+        *self.edges.write().expect("edges lock") = edges;
+        self.sticky.lock().expect("sticky lock").clear();
+    }
+
     /* ── 选路 ──────────────────────────────────────────────── */
 
     /// 选路主入口（供 handler failover）：有序计划项（含末跳边 `on_error`/`sticky`）。
@@ -215,15 +248,16 @@ impl Router {
         model: &str,
         ctx: &RouteCtx,
     ) -> Result<Vec<PlanItem>, RouterError> {
+        let edges = self.edges.read().expect("edges lock");
         let mut out: Vec<PlanItem> = Vec::new();
         let mut dangling: Vec<NodeId> = Vec::new();
         let mut any_match = false;
 
-        for e in &self.edges {
+        for e in edges.iter() {
             if e.matches(model) {
                 any_match = true;
                 let mut path = Vec::new();
-                self.resolve(e, model, Vec::new(), None, &mut path, &mut out, &mut dangling);
+                self.resolve(e, model, Vec::new(), None, &edges, &mut path, &mut out, &mut dangling);
             }
         }
 
@@ -289,6 +323,7 @@ impl Router {
 
     /// 沿一条命中边展开到终端上游（多跳：right 指向别名节点时递归）。
     /// `path` 为路径级防环（配置加载已拒环；运行时再兜底）。
+    /// `edges` = 当前读锁下的边表切片（与 `plan` 的 guard 同源）。
     #[allow(clippy::too_many_arguments)]
     fn resolve(
         &self,
@@ -296,6 +331,7 @@ impl Router {
         origin_model: &str,
         hops_so_far: Vec<NodeId>,
         overlay: Option<String>,
+        edges: &[RouteEdge],
         path: &mut Vec<NodeId>,
         out: &mut Vec<PlanItem>,
         dangling: &mut Vec<NodeId>,
@@ -327,8 +363,7 @@ impl Router {
         }
 
         // 别名节点：按 exact left == right 展开（prefix 只在顶层对 model 匹配）
-        let children: Vec<RouteEdge> = self
-            .edges
+        let children: Vec<RouteEdge> = edges
             .iter()
             .filter(|e| e.left == right && e.r#match == MatchMode::Exact)
             .cloned()
@@ -344,6 +379,7 @@ impl Router {
                 origin_model,
                 hops.clone(),
                 overlay.clone(),
+                edges,
                 path,
                 out,
                 dangling,
@@ -372,15 +408,17 @@ impl Router {
 
     /// 所有对外可见的 model id（全部边的 left 去重排序；含 prefix 模式）。
     pub fn list_models(&self) -> Vec<String> {
-        let mut v: Vec<String> = self.edges.iter().map(|e| e.left.clone()).collect();
+        let edges = self.edges.read().expect("edges lock");
+        let mut v: Vec<String> = edges.iter().map(|e| e.left.clone()).collect();
         v.sort();
         v.dedup();
         v
     }
 
-    /// 全部边（admin/审计视图）。
-    pub fn edges(&self) -> &[RouteEdge] {
-        &self.edges
+    /// 全部边快照（admin/审计视图 —— `GET /v1/admin/routes` 读这里；
+    /// 内部 RwLock → 返回克隆而非 `&[RouteEdge]`）。
+    pub fn edges(&self) -> Vec<RouteEdge> {
+        self.edges.read().expect("edges lock").clone()
     }
 
     /// 所有上游的 capability 列表（用于 `/v1/models` 端点）。
@@ -892,5 +930,58 @@ mod tests {
         let plan = r.plan("jev", &RouteCtx::default()).unwrap();
         assert_eq!(plan[0].on_error, OnError::Fail);
         assert_eq!(plan[1].on_error, OnError::Next);
+    }
+
+    /* ── A7：边表热替换（admin PUT /v1/admin/routes） ───────────── */
+
+    #[test]
+    fn replace_edges_hot_swaps_topology_without_rebuild() {
+        let r = Router::new(
+            vec![edge("jev", "vercel", 10)],
+            ups(&[("vercel", &[QuestionType::Boolean])]),
+        );
+        assert!(r.select("jev", &RouteCtx::default()).is_ok());
+
+        // 整表替换：旧边消失、新边生效（上游注册不动）
+        r.replace_edges(vec![edge("new-model", "vercel", 5)]);
+        assert!(matches!(
+            r.select("jev", &RouteCtx::default()),
+            Err(RouterError::UnknownModel(_))
+        ));
+        let c = r.select("new-model", &RouteCtx::default()).unwrap();
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].upstream_id, "vercel");
+        assert_eq!(r.edges().len(), 1);
+        assert_eq!(r.list_models(), vec!["new-model"]);
+    }
+
+    #[test]
+    fn replace_edges_clears_sticky_memory() {
+        let r = Router::new(
+            vec![
+                edge("jev", "vercel", 10),
+                RouteEdge {
+                    sticky: Sticky::Session,
+                    ..edge("jev", "laya", 30)
+                },
+            ],
+            ups(&[
+                ("vercel", &[QuestionType::Boolean]),
+                ("laya", &[QuestionType::Noul]),
+            ]),
+        );
+        r.note_success("sess-1", "laya");
+        r.replace_edges(vec![
+            edge("jev", "vercel", 10),
+            RouteEdge {
+                sticky: Sticky::Session,
+                ..edge("jev", "laya", 30)
+            },
+        ]);
+        // 拓扑变更 → 粘性记忆清空，select 按 priority 回到 vercel 首位
+        let mut ctx = RouteCtx::default();
+        ctx.sticky_key = Some("sess-1".into());
+        let c = r.select("jev", &ctx).unwrap();
+        assert_eq!(c[0].upstream_id, "vercel", "热替换后 sticky 记忆应失效");
     }
 }

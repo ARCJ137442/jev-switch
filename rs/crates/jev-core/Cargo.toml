@@ -14,6 +14,12 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 # A6：Registry 同候选退避需要时钟（分层禁 axum/reqwest，tokio 不在禁列）
 tokio = { workspace = true }
+# A7：RouteEdge 等路由类型 ts-rs 导出（feature 门控，保默认依赖面不膨胀）
+ts-rs = { version = "12.0.1", optional = true }
+
+[features]
+# 类型导出：daemon ts-rs feature 转发至此（RouteEdge 一份真值，不镜像 RouteView）
+ts-rs = ["dep:ts-rs"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt", "test-util"] }

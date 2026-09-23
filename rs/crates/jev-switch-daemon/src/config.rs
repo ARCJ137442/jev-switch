@@ -13,7 +13,10 @@
 //!
 //! 其余简化：
 //! - 单文件（不分 server/observability/cli 等段）
-//! - api_key 从 `api_key_env` 字段读环境变量
+//! - **密钥读取**（Q4=b / contracts/04 §1 默认档）：明文 `api_key` 字段**优先**；
+//!   `api_key_env`（读环境变量）**兼容保留** —— 二者并存时明文赢
+//! - **文件权限**：`providers.toml` 0600、`~/.jev-switch/` 0700（Unix 落地；
+//!   Windows 按用户裁决降级为启动/写回 warning）
 //! - **加载时检环**（contracts/03 §4 DAG 约束）：合并后的边图含环 → 拒绝加载
 
 use jev_core::router::{check_acyclic, RouteEdge};
@@ -39,10 +42,15 @@ pub enum ConfigError {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
+#[allow(dead_code)] // kind 目前只作配置标注（装配按 provider id 选 adapter），随 toml 往返保留
 pub struct ProviderConfig {
     pub kind: String,
     pub base: String,
+    /// 明文密钥（Q4=b 默认档；0600 文件）。**读取优先级高于 `api_key_env`**。
+    /// 仅存在于 daemon —— 永不进 GET 响应 / 日志 / tracing（contracts/04 §2）。
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// 环境变量名（兼容保留；明文缺省时回退到此）。
     #[serde(default)]
     pub api_key_env: Option<String>,
     #[serde(default = "default_enabled")]
@@ -66,16 +74,21 @@ pub struct Config {
 }
 
 impl Config {
+    /// 解析配置文件路径（`JEV_SWITCH_CONFIG` → 否则 `~/.jev-switch/providers.toml`）。
+    /// admin 读改写同一文件时也用它（contracts/04 §1 真值源）。
+    pub fn resolve_path() -> PathBuf {
+        std::env::var("JEV_SWITCH_CONFIG")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| default_config_path())
+    }
+
     /// 加载 config 文件。
     ///
     /// 路径优先：`JEV_SWITCH_CONFIG` 环境变量 → 否则 `~/.jev-switch/providers.toml`。
     /// 相对路径按进程 CWD 解析（见模块文档）。
     /// **加载即检环**：合并后的边图含环 → [`ConfigError::Cycle`]（DAG 约束）。
     pub fn load_default() -> Result<Self, ConfigError> {
-        let path = std::env::var("JEV_SWITCH_CONFIG")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| default_config_path());
-        Self::load(&path)
+        Self::load(&Self::resolve_path())
     }
 
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
@@ -106,20 +119,36 @@ impl Config {
         check_acyclic(&self.route_edges()).map_err(|e| ConfigError::Cycle(e.to_string()))
     }
 
-    /// 读 provider 的 API key（按 `api_key_env` 字段读 env）。
+    /// 读 provider 的 API key。
+    ///
+    /// 优先级（Q4=b + 任务书「明文字段优先读，env 兼容保留」）：
+    /// 1. 明文 `api_key`（非空）→ 直接返回，不查 env
+    /// 2. 否则 `api_key_env` → 读环境变量
+    /// 3. 两者皆无 / env 缺失 → [`ConfigError::MissingEnv`]
     pub fn read_api_key(&self, provider_id: &str) -> Result<String, ConfigError> {
         let p = self
             .providers
             .get(provider_id)
             .ok_or_else(|| ConfigError::MissingKind(provider_id.into()))?;
+        if let Some(k) = p.api_key.as_deref() {
+            if !k.is_empty() {
+                return Ok(k.to_string());
+            }
+        }
         let var = p.api_key_env.as_deref().ok_or_else(|| ConfigError::MissingEnv {
             provider: provider_id.into(),
-            var: "<api_key_env unset>".into(),
+            var: "<api_key unset and api_key_env unset>".into(),
         })?;
         std::env::var(var).map_err(|_| ConfigError::MissingEnv {
             provider: provider_id.into(),
             var: var.into(),
         })
+    }
+
+    /// provider 的有效密钥（明文或 env 解析成功 → `Some`；否则 `None`）。
+    /// admin GET 掩码 / `api_key_set` 用；**不回传明文**。
+    pub fn effective_api_key(&self, provider_id: &str) -> Option<String> {
+        self.read_api_key(provider_id).ok().filter(|k| !k.is_empty())
     }
 }
 
@@ -132,6 +161,83 @@ fn default_config_path() -> PathBuf {
         PathBuf::from(home).join(".jev-switch").join("providers.toml")
     } else {
         PathBuf::from("providers.toml")
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   文件权限（contracts/04 §1：providers.toml 0600、目录 0700）
+   Unix：真实 chmod；Windows：NTFS ACL 不在本期 —— 按用户裁决降级为 warning。
+   ══════════════════════════════════════════════════════════════════ */
+
+/// 写回配置文件后收紧为 **0600**（admin PUT 落盘路径调用）。
+///
+/// - Unix：`chmod 0600`；失败 → warning（不中断写入）
+/// - Windows：无 POSIX 权限位 —— **降级为 warning**（用户已裁决的平台降级）
+pub fn enforce_config_perms(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perm = std::fs::Permissions::from_mode(0o600);
+        if let Err(e) = std::fs::set_permissions(path, perm) {
+            tracing::warn!(path = %path.display(), error = %e,
+                "failed to chmod 0600 providers.toml");
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = path;
+        tracing::warn!(
+            "providers.toml 0600 权限无法在 Windows 强制（POSIX 权限位不适用；NTFS ACL 不在本期）—— 按用户裁决降级为本警告。请确认配置目录仅本用户可读。"
+        );
+    }
+}
+
+/// 配置**目录**收紧为 **0700**（`~/.jev-switch/`；contracts/04 §1）。同平台策略。
+pub fn enforce_dir_perms(dir: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perm = std::fs::Permissions::from_mode(0o700);
+        if let Err(e) = std::fs::set_permissions(dir, perm) {
+            tracing::warn!(dir = %dir.display(), error = %e,
+                "failed to chmod 0700 config dir");
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = dir;
+        tracing::warn!(
+            "配置目录 0700 权限无法在 Windows 强制 —— 按用户裁决降级为本警告。"
+        );
+    }
+}
+
+/// 启动时检查配置文件权限并告警（contracts/04 §7 验收）。
+///
+/// - Unix：实际读 mode；非 0600 → warning（列出当前权限）
+/// - Windows：无法判定 POSIX 位 → 恒 warning（平台降级，用户已裁决）
+pub fn check_config_perms_warn(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        match std::fs::metadata(path) {
+            Ok(md) => {
+                let mode = md.permissions().mode() & 0o777;
+                if mode != 0o600 {
+                    tracing::warn!(path = %path.display(), mode = format_args!("{mode:o}"),
+                        "providers.toml 权限为 {mode:o}，期望 0600（contracts/04 §1）—— 请收紧");
+                }
+            }
+            Err(e) => tracing::warn!(path = %path.display(), error = %e,
+                "无法读取 providers.toml 权限"),
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = path;
+        tracing::warn!(
+            "启动权限检查：Windows 无 POSIX 权限位，providers.toml 0600 检查降级为本警告（用户已裁决）—— 请确认配置文件仅本用户可读。"
+        );
     }
 }
 
@@ -332,5 +438,134 @@ enabled = false
         let cfg: Config = toml::from_str(toml).unwrap();
         let p = cfg.providers.get("vercel").unwrap();
         assert!(!p.enabled);
+    }
+
+    /* ── A7：明文 api_key 优先 + env 兼容 ────────────────────────── */
+
+    #[test]
+    fn plaintext_api_key_read_and_takes_precedence_over_env() {
+        // 明文优先（Q4=b 默认档）；env 指向不存在的变量 —— 明文赢则不报错
+        let toml = r#"
+[providers.vercel]
+kind = "vercel"
+base = "https://x"
+api_key = "sk-test1234abcd"
+api_key_env = "JEV_SWITCH_TEST_NO_SUCH_VAR_ZZZ"
+enabled = true
+"#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert_eq!(
+            cfg.read_api_key("vercel").unwrap(),
+            "sk-test1234abcd",
+            "明文字段必须优先于 env"
+        );
+        assert_eq!(
+            cfg.effective_api_key("vercel").as_deref(),
+            Some("sk-test1234abcd")
+        );
+    }
+
+    #[test]
+    fn env_fallback_used_when_plaintext_absent() {
+        // 明文缺省 → env 兼容路径保留（本测试 env 未设 → MissingEnv）
+        let toml = r#"
+[providers.vercel]
+kind = "vercel"
+base = "https://x"
+api_key_env = "JEV_SWITCH_TEST_NO_SUCH_VAR_ZZZ"
+enabled = true
+"#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert!(cfg.providers["vercel"].api_key.is_none());
+        let err = cfg.read_api_key("vercel").unwrap_err();
+        assert!(matches!(err, ConfigError::MissingEnv { .. }), "got: {err}");
+        assert_eq!(cfg.effective_api_key("vercel"), None);
+    }
+
+    #[test]
+    fn empty_plaintext_falls_back_to_env() {
+        // PUT 清除语义：明文空串视为未设 → 回退 env
+        let toml = r#"
+[providers.vercel]
+kind = "vercel"
+base = "https://x"
+api_key = ""
+api_key_env = "JEV_SWITCH_TEST_NO_SUCH_VAR_ZZZ"
+enabled = true
+"#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert!(matches!(
+            cfg.read_api_key("vercel"),
+            Err(ConfigError::MissingEnv { .. })
+        ));
+    }
+
+    /* ── A7：文件权限 0600（Unix assert / Windows warning 降级） ── */
+
+    fn touch_config(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "jev-perm-{}-{}",
+            name,
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("providers.toml");
+        std::fs::write(&path, "[providers.x]\nkind=\"k\"\nbase=\"b\"\n").unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn enforce_config_perms_sets_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let path = touch_config("unix");
+        // 预置宽权限，验证 enforce 收紧
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        enforce_config_perms(&path);
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "写回后 providers.toml 必须 0600");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn enforce_dir_perms_sets_0700() {
+        use std::os::unix::fs::PermissionsExt;
+        let path = touch_config("unix-dir");
+        let dir = path.parent().unwrap().to_path_buf();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        enforce_dir_perms(&dir);
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "配置目录必须 0700");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_config_perms_warns_on_wrong_mode() {
+        // 非 0600 → 不 panic，仅走告警路径（tracing 未初始化时静默）
+        use std::os::unix::fs::PermissionsExt;
+        let path = touch_config("unix-warn");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        check_config_perms_warn(&path); // 命中 warning 分支
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        check_config_perms_warn(&path); // 合规 → 无告警
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Windows 分支（用户已裁决降级）：无 POSIX 位可断言 ——
+    /// 验证三函数均走 warning 路径且不报错（cfg 测）。
+    #[cfg(windows)]
+    #[test]
+    fn windows_permission_helpers_degrade_to_warning() {
+        let path = touch_config("win");
+        enforce_config_perms(&path);
+        enforce_dir_perms(path.parent().unwrap());
+        check_config_perms_warn(&path);
+        // 文件本体不受影响（warning 不是 error）
+        assert!(path.exists());
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("[providers.x]"));
+        let _ = std::fs::remove_file(&path);
     }
 }
