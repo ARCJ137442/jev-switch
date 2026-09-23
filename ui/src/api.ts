@@ -117,14 +117,6 @@ function normalizeModels(raw: unknown): ModelsResponse {
   return { object: 'list', data };
 }
 
-export interface ProviderInfo {
-  id: 'vercel' | 'laya';
-  label: string;
-  enabled: boolean;
-  base: string;
-  description: string;
-}
-
 /**
  * 端口与 base 的单一来源（single source of truth）。
  * ui/src 内任何展示/请求端点都必须从这里派生，禁止再写死字面量。
@@ -134,7 +126,7 @@ export const BASE = `http://127.0.0.1:${PORT}`;
 
 const DEFAULT_BASE = BASE;
 
-function getBase(): string {
+export function getBase(): string {
   if (typeof window !== 'undefined') {
     const fromGlobal = (window as unknown as { __JEV_BASE__?: string }).__JEV_BASE__;
     if (typeof fromGlobal === 'string' && fromGlobal.length > 0) return fromGlobal;
@@ -198,23 +190,6 @@ export async function postSystemOne(req: SystemOneRequest): Promise<SystemOneRes
   }
   return body as SystemOneResponse;
 }
-
-export const PROVIDERS: ProviderInfo[] = [
-  {
-    id: 'vercel',
-    label: 'Vercel',
-    enabled: true,
-    base: 'https://ai-gateway.vercel.sh/v4/ai/evaluation-model',
-    description: 'Vercel AI Gateway — noul↔boolean translation layer',
-  },
-  {
-    id: 'laya',
-    label: 'Laya',
-    enabled: true,
-    base: 'http://127.0.0.1:18765/v1/systemone',
-    description: 'Local Laya daemon — pass-through Jev protocol',
-  },
-];
 
 export const DEFAULT_MODEL_OPTIONS = [
   { value: 'laya-english', label: 'laya-english  (Laya)' },
