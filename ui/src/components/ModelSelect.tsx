@@ -1,38 +1,54 @@
 interface Option {
   value: string;
   label: string;
+  upstream?: string;
 }
 
 interface Props {
   options: Option[];
   value: string;
   onChange: (v: string) => void;
+  serverReachable: boolean;
 }
 
-export function ModelSelect({ options, value, onChange }: Props) {
+/**
+ * Model 选择器 — 等宽字体 + 极简标签
+ * 不再用大段说明文字，只显示 model id 和 upstream hint
+ */
+export function ModelSelect({ options, value, onChange, serverReachable }: Props) {
+  const current = options.find((o) => o.value === value);
   return (
-    <section className="rounded-lg border border-border bg-panel p-4">
-      <header className="mb-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-400">
+    <section className="border border-border bg-panel">
+      <header className="flex items-baseline justify-between border-b border-border px-4 py-2.5">
+        <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
           Model
         </h2>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+          {serverReachable ? 'from server' : 'fallback'}
+        </span>
       </header>
-      <select
-        className="w-full rounded border border-border bg-black/40 px-3 py-2 font-mono text-sm text-neutral-100 outline-none focus:border-accent"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label="select model"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      <p className="mt-2 text-xs text-neutral-500">
-        Model selects which upstream receives the request. The router picks the provider based on
-        the model id.
-      </p>
+      <div className="px-4 py-3">
+        <label className="flex items-center gap-3">
+          <span className="font-mono text-xs text-inkSubtle">/v1/systemone</span>
+          <select
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="flex-1 appearance-none border border-border bg-bg px-3 py-1.5 font-mono text-sm text-ink"
+            aria-label="select model"
+          >
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.value}
+              </option>
+            ))}
+          </select>
+          {current?.upstream && (
+            <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+              → {current.upstream}
+            </span>
+          )}
+        </label>
+      </div>
     </section>
   );
 }
