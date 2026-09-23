@@ -405,6 +405,129 @@ export async function putRoutes(routes: Route[]): Promise<RoutesResponse> {
   }
 }
 
+/* ---------- status / mode / listen（块 5 首页 · 类型单源 = ts-rs generated） ---------- */
+
+import type { StatusResponse } from '../generated/StatusResponse';
+import type { PutModeBody as GenPutModeBody } from '../generated/PutModeBody';
+import type { PutModeResponse } from '../generated/PutModeResponse';
+import type { PutListenResponse } from '../generated/PutListenResponse';
+import type { PutPasswordResponse } from '../generated/PutPasswordResponse';
+import type { RebindInfo } from '../generated/RebindInfo';
+
+/** GET /v1/admin/status 响应别名（7 键冻结 — ts-rs 单源，勿手写字段） */
+export type AdminStatus = StatusResponse;
+export type ModeRebind = RebindInfo;
+export type ModeResponse = PutModeResponse;
+export type ListenResponse = PutListenResponse;
+export type { PutPasswordResponse };
+export type PutModeBody = GenPutModeBody;
+
+/** status fixture — 与既有 adminMode 开关对齐（无第二套开关）；真端点 404 期间兜底，Mode 二进制合入即切真 */
+const STATUS_FIXTURE: AdminStatus = {
+  mode: 'local',
+  bind: '127.0.0.1:11435',
+  bind_explicit: false,
+  env_override_active: false,
+  password_set: false,
+  version: '0.1.0',
+  uptime_s: 2 * 3600 + 15 * 60,
+};
+
+/**
+ * GET /v1/admin/status → {status, source}。
+ * - adminMode=mock → fixture（source='mock'）
+ * - live 且端点 404（Mode 二进制未重建）→ fixture（source='mock'）
+ * - live 200 → 真值（source='live'）；401/403 照常上抛触发登录窗
+ */
+export async function getStatus(): Promise<{ status: AdminStatus; source: 'live' | 'mock' }> {
+  if (adminMode === 'mock') {
+    await delay(60);
+    return { status: { ...STATUS_FIXTURE }, source: 'mock' };
+  }
+  try {
+    const status = await request<AdminStatus>('/v1/admin/status');
+    return { status, source: 'live' };
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (msg.includes('404')) return { status: { ...STATUS_FIXTURE }, source: 'mock' };
+    throw e;
+  }
+}
+
+/**
+ * PUT /v1/admin/mode —— cloud 激活密码闸 400 文案由服务端给出
+ * （含 `admin password required` → 调用方弹设密对话框后带 admin_password 重发）。
+ * generated PutModeBody.admin_password 为 `string | null`（非可选）— 统一显式携带。
+ */
+export async function putMode(body: PutModeBody): Promise<ModeResponse> {
+  if (adminMode === 'mock') {
+    await delay(120);
+    if (body.mode === 'cloud' && !body.admin_password) {
+      throw new Error(
+        'admin password required to activate cloud: include admin_password in this request, or set JEV_ADMIN_PASSWORD / toml admin_password first',
+      );
+    }
+    return {
+      mode: body.mode as StatusResponse['mode'],
+      persisted: true,
+      env_override_active: false,
+      rebind: {
+        from: '127.0.0.1:11435',
+        to: body.mode === 'cloud' ? '0.0.0.0:11435' : '127.0.0.1:11435',
+        ok: true,
+        reason: null,
+      },
+    };
+  }
+  return request<ModeResponse>('/v1/admin/mode', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** PUT /v1/admin/listen —— addr 可为 ip:port 或 "auto"（恢复 mode 成对默认）；失败旧监听保持 */
+export async function putListen(addr: string): Promise<ListenResponse> {
+  if (adminMode === 'mock') {
+    await delay(120);
+    return { addr: addr === 'auto' ? '127.0.0.1:11435' : addr, rebound: true, reason: addr === 'auto' ? 'auto' : null };
+  }
+  return request<ListenResponse>('/v1/admin/listen', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ addr }),
+  });
+}
+
+/**
+ * PUT /v1/admin/password {password} → {updated, env_override_active}。
+ * 门外端点（in-handler 鉴权）；**改后全员重登录** — 成功后调用方必须
+ * clearAdminSession() 清本地会话存储回登录态（contracts/04：密码不落 UI）。
+ */
+export async function putPassword(password: string): Promise<PutPasswordResponse> {
+  if (adminMode === 'mock') {
+    await delay(120);
+    return { updated: true, env_override_active: false };
+  }
+  return request<PutPasswordResponse>('/v1/admin/password', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+}
+
+/** 改密后清 admin 会话（内存 + localStorage）— UI 回登录态 */
+export function clearAdminSession(): void {
+  if (typeof window !== 'undefined') {
+    delete (window as unknown as { __JEV_ADMIN_SESSION__?: string }).__JEV_ADMIN_SESSION__;
+    try {
+      window.localStorage.removeItem('jev_admin_session');
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /* ---------- toml 片段解析（贴 toml Tab） ---------- */
 
 export interface TomlParseResult {

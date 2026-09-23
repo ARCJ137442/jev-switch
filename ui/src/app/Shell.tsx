@@ -6,21 +6,23 @@ import { AdminLogin } from '../components/AdminLogin';
 import { StatusBadge, type BadgeTone } from '../components/ui/StatusBadge';
 import { FeedbackProvider, useConflictControl, useToast } from './feedback';
 import { useI18n } from '../i18n';
+import { ThemeToggle } from '../components/ui/ThemeToggle';
+import { LangToggle } from '../components/ui/LangToggle';
 import pkg from '../../package.json';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
 
-export type Route = 'providers' | 'routing' | 'playground';
+export type Route = 'home' | 'providers' | 'routing' | 'playground';
 
-const ROUTES: readonly Route[] = ['providers', 'routing', 'playground'];
-const DEFAULT_ROUTE: Route = 'playground';
+const ROUTES: readonly Route[] = ['home', 'providers', 'routing', 'playground'];
+const DEFAULT_ROUTE: Route = 'home';
 
 function parseHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, '').split(/[?#]/)[0];
   return (ROUTES as readonly string[]).includes(path) ? (path as Route) : DEFAULT_ROUTE;
 }
 
-/** `/#/providers` · `/#/routing` · `/#/playground`（默认） */
+/** `/#/home`（默认）· `/#/providers` · `/#/routing` · `/#/playground` */
 export function useHashRoute(): Route {
   const [route, setRoute] = useState<Route>(() =>
     typeof window === 'undefined' ? DEFAULT_ROUTE : parseHash(window.location.hash),
@@ -75,7 +77,8 @@ interface ShellProps {
   children: ReactNode;
 }
 
-const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navProviders' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
+const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navHome' | 'shell.navProviders' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
+  { route: 'home', labelKey: 'shell.navHome', href: '#/home' },
   { route: 'providers', labelKey: 'shell.navProviders', href: '#/providers' },
   { route: 'routing', labelKey: 'shell.navRouting', href: '#/routing' },
   { route: 'playground', labelKey: 'shell.navPlayground', href: '#/playground' },
@@ -94,7 +97,7 @@ function ShellFrame({ route, children }: ShellProps) {
   const server = useServerStatus();
   const { conflict, handlers } = useConflictControl();
   const { toasts } = useToast();
-  const { t, lang, toggleLang } = useI18n();
+  const { t } = useI18n();
   const endpointLabel = BASE.replace(/^https?:\/\//, '');
 
   // #43 cloud 态：任一 admin 请求 401/403 → 登录小窗；成功后整页刷新重拉
@@ -104,24 +107,6 @@ function ShellFrame({ route, children }: ShellProps) {
     setAuthErrorHandler(() => setNeedLogin(true));
     return () => setAuthErrorHandler(null);
   }, []);
-
-  /* 主题切换（块 2）：data-theme 由 main.tsx 首帧初始化；此处只读当前值 + 翻转持久化 */
-  const [theme, setThemeState] = useState<'light' | 'dark'>(
-    () =>
-      (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light') as
-        | 'light'
-        | 'dark',
-  );
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem('jev_theme', next);
-    } catch {
-      /* 隐私模式 → 仅本会话生效 */
-    }
-    setThemeState(next);
-  };
 
   const daemonTone: BadgeTone =
     server.status === 'ok' ? 'ok' : server.status === 'error' ? 'danger' : 'muted';
@@ -146,7 +131,7 @@ function ShellFrame({ route, children }: ShellProps) {
       <header className="border-b border-border bg-bg">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-3">
           <a
-            href="#/playground"
+            href="#/home"
             className="flex items-center gap-2 font-mono text-base font-semibold tracking-tight text-ink"
           >
             <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-primaryFill text-sm font-bold text-white">
@@ -184,28 +169,9 @@ function ShellFrame({ route, children }: ShellProps) {
             <span className="flex items-center gap-3">
               <span className="text-inkMuted">masked-key</span>
               <span className="text-inkMuted tabular">v{pkg.version}</span>
-              {/* 主题切换钮：mono 工具感文字钮（块 2） */}
-              <button
-                type="button"
-                onClick={toggleTheme}
-                aria-label={
-                  theme === 'dark' ? t('shell.themeToLight') : t('shell.themeToDark')
-                }
-                aria-pressed={theme === 'dark'}
-                className="inline-flex items-center gap-1 rounded-ctl border border-border bg-panel px-2 py-0.5 text-inkMuted transition-colors hover:border-primaryBright hover:bg-soft hover:text-primary"
-              >
-                <span aria-hidden>{theme === 'dark' ? '☾' : '☀'}</span>
-                <span>{theme === 'dark' ? 'DARK' : 'LIGHT'}</span>
-              </button>
-              {/* 语言切换钮（块 3）：紧邻主题钮；显示当前语言，点击对切 */}
-              <button
-                type="button"
-                onClick={toggleLang}
-                aria-label={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
-                className="inline-flex items-center rounded-ctl border border-border bg-panel px-2 py-0.5 text-inkMuted transition-colors hover:border-primaryBright hover:bg-soft hover:text-primary"
-              >
-                <span>{lang === 'en' ? 'EN' : '中'}</span>
-              </button>
+              {/* 主题 + 语言切换（块 2/3 建，块 5 抽共享组件 — 首页操作区同源渲染） */}
+              <ThemeToggle />
+              <LangToggle />
             </span>
           </div>
         </div>
