@@ -2,12 +2,16 @@
 //!
 //! 参考 03-上游类别与协议兼容矩阵 §2.4：
 //! - 入站：Jev `type: noul` → Vercel `type: boolean`（仅重命名 type，criteria 保持）。
-//! - 出站：Vercel `boolean: true/false`（**Vercel 实际还返回 `probability`，** 用它）→ Jev `noul`。
-//! - Vercel 不报 `confidence`：从 `probabilities` 推断（`max(probs)`）。
+//! - 出站：`build_jev_response_from_vercel` 是**唯一**出口翻译路径：
+//!   - 概率取值优先级：`probability`（Vercel 单值）> `probabilities["true"]`
+//!     > boolean 档位估计（0.95 / 0.05）。
+//!   - 形态跟随原始请求：原本 `noul` → 翻译回 `noul`；原本 `boolean` → 保持 `boolean`
+//!     （修复：早期实现无条件把 boolean 改写成 noul，boolean 调用方会拿到错形态）。
+//! - Vercel 不报 `confidence`：从概率推断 `max(p, 1-p)`（上游有报则透传）。
 //!
-//! 为什么单独成文件：router 调用 `vercel_normalize_request` 后再交给
-//! `VercelUpstream::evaluate`，调用方视角的 request 完全保持 Jev 标准
-//! `type: noul`，协议差异对调用方不可见。
+//! 为什么单独成文件：`VercelUpstream::evaluate` 入站调 `normalize_request_for_vercel`、
+//! 出站调 `build_jev_response_from_vercel`，调用方视角的 request/response 始终保持
+//! Jev 标准形态，协议差异对调用方不可见。
 
 use crate::protocol::{DecisionAnswer, DecisionQuestion, SystemOneRequest, SystemOneResponse};
 use std::collections::BTreeMap;
@@ -32,69 +36,14 @@ pub fn normalize_request_for_vercel(req: SystemOneRequest) -> SystemOneRequest {
     out
 }
 
-/// 把 Vercel 响应翻译回 Jev 形态。
+/// 从 Vercel raw 形态构造 Jev `SystemOneResponse`（唯一出口翻译路径）。
 ///
-/// 入口条件：上游是 Vercel，发出的 request 已经是 `normalize_request_for_vercel` 的结果。
-/// 这里需要原始请求以知道哪些 qid 原本是 `noul`（要翻译回 `noul`）。
-///
-/// Vercel boolean 的概率信息：
-/// - 实测 jev-decision-lab TS 看到 `probability` 字段（[0, 1]，true 的概率）
-/// - 一些早期 Vercel 版本只给 `boolean: true/false`（没有概率）→ fallback 到 0.95 / 0.05
-#[allow(dead_code)]
-pub fn denormalize_response_from_vercel(
-    resp: SystemOneResponse,
-    original_request: &SystemOneRequest,
-) -> SystemOneResponse {
-    let mut out = resp;
-    for (qid, ans) in out.answers.iter_mut() {
-        let was_noul = matches!(
-            original_request.questions.get(qid),
-            Some(DecisionQuestion::Noul { .. })
-        );
-        if !was_noul {
-            continue;
-        }
-        // 从 Vercel 的 boolean/probability 派生 Jev 的 noul。
-        // 优先级：probability > boolean（probability 含更多信息）。
-        let probability: f64 = if let Some(p) = ans.boolean {
-            if p { 0.95 } else { 0.05 }
-        } else {
-            // 既无 boolean 也无 probability：保持原样（best-effort）
-            continue;
-        };
-        // 同时兼容 Vercel 在 boolean 答案里附的 probability 字段
-        // （用 probabilities["true"] 优先）
-        let noul_value = ans
-            .probabilities
-            .as_ref()
-            .and_then(|p| p.get("true").copied())
-            .unwrap_or(probability)
-            .clamp(0.0, 1.0);
-
-        ans.r#type = Some("noul".to_string());
-        ans.noul = Some(noul_value);
-        // 从 noul 推断 boolean（仅在 raw boolean 缺失时补）
-        if ans.boolean.is_none() {
-            ans.boolean = Some(noul_value >= 0.5);
-        }
-        // 补 probabilities
-        let probs = BTreeMap::from([
-            ("true".to_string(), noul_value),
-            ("false".to_string(), 1.0 - noul_value),
-        ]);
-        ans.probabilities = Some(probs);
-        // 补 confidence（Vercel 不报，从 noul 推断）
-        if ans.confidence.is_none() {
-            ans.confidence = Some(noul_value.max(1.0 - noul_value));
-        }
-    }
-    out
-}
-
-/// 从 Vercel raw 形态构造 Jev `SystemOneResponse`。
-///
-/// 上游 `VercelUpstream` 直接拿到 Vercel HTTP 响应 body（VercelAnswer 形态），
-/// 这里统一转换为调用方能消费的 `SystemOneResponse`。
+/// 上游 `VercelUpstream` 直接拿到 Vercel HTTP 响应 body（`VercelAnswer` 形态），
+/// 这里统一转换为调用方能消费的 `SystemOneResponse`：
+/// - boolean 答案：按 `original_request` 判断原本是 `noul` 还是 `boolean`，
+///   分别翻译成对应形态；概率按 `probability > probabilities["true"] > 0.95/0.05`
+///   优先级取值（修复：早期实现丢弃 Vercel 的 `probability` 字段，恒用假值 0.95/0.05）。
+/// - choice / score / 未知 type：best-effort 字段平移。
 pub fn build_jev_response_from_vercel(
     raw: &crate::protocol::VercelResponse,
     original_request: &SystemOneRequest,
@@ -105,16 +54,39 @@ pub fn build_jev_response_from_vercel(
             let mut ans = DecisionAnswer::default();
             match va.r#type.as_deref() {
                 Some("boolean") => {
-                    // 真 boolean 答案：上游确实只返回 boolean（不返回 probability）
-                    let prob = if va.boolean.unwrap_or(false) { 0.95 } else { 0.05 };
-                    ans.r#type = Some("noul".to_string());
-                    ans.noul = Some(prob);
-                    ans.boolean = va.boolean;
-                    ans.probabilities = Some(BTreeMap::from([
+                    // 概率取值优先级：单值 probability > probabilities["true"] > 档位估计
+                    let prob = va
+                        .probability
+                        .or_else(|| {
+                            va.probabilities.as_ref().and_then(|p| p.get("true").copied())
+                        })
+                        .unwrap_or(if va.boolean.unwrap_or(false) {
+                            0.95
+                        } else {
+                            0.05
+                        })
+                        .clamp(0.0, 1.0);
+                    let probs = BTreeMap::from([
                         ("true".to_string(), prob),
                         ("false".to_string(), 1.0 - prob),
-                    ]));
-                    ans.confidence = Some(prob.max(1.0 - prob));
+                    ]);
+                    // 形态跟随原始请求：noul 出口翻译成 noul，boolean 出口保持 boolean
+                    let was_noul = matches!(
+                        original_request.questions.get(qid),
+                        Some(DecisionQuestion::Noul { .. })
+                    );
+                    if was_noul {
+                        ans.r#type = Some("noul".to_string());
+                        ans.noul = Some(prob);
+                        ans.boolean = va.boolean;
+                    } else {
+                        ans.r#type = Some("boolean".to_string());
+                        ans.boolean = va.boolean;
+                    }
+                    ans.probabilities = Some(probs);
+                    ans.confidence = va
+                        .confidence
+                        .or(Some(prob.max(1.0 - prob)));
                 }
                 Some("choice") => {
                     ans.r#type = Some("choice".to_string());
@@ -139,64 +111,17 @@ pub fn build_jev_response_from_vercel(
             answers.insert(qid.clone(), ans);
         }
     }
-    let mut resp = SystemOneResponse {
+    SystemOneResponse {
         model: raw.model.clone(),
         answers,
         usage: raw.usage.clone(),
-    };
-    // 应用最终 denormalize（处理从 boolean 派生的 noul 等）
-    denormalize_response_from_vercel_inplace(&mut resp, original_request);
-    resp
-}
-
-/// in-place 版本：在已有的 `SystemOneResponse` 上应用 Vercel boolean → noul 翻译。
-///
-/// 这是 `denormalize_response_from_vercel` 的可变借用版，因为上游可能想在构造
-/// 响应后立即应用翻译（避免中间变量）。
-pub fn denormalize_response_from_vercel_inplace(
-    resp: &mut SystemOneResponse,
-    original_request: &SystemOneRequest,
-) {
-    for (qid, ans) in resp.answers.iter_mut() {
-        let was_noul = matches!(
-            original_request.questions.get(qid),
-            Some(DecisionQuestion::Noul { .. })
-        );
-        if !was_noul {
-            continue;
-        }
-        let probability: f64 = if let Some(b) = ans.boolean {
-            if b { 0.95 } else { 0.05 }
-        } else {
-            continue;
-        };
-        let noul_value = ans
-            .probabilities
-            .as_ref()
-            .and_then(|p| p.get("true").copied())
-            .unwrap_or(probability)
-            .clamp(0.0, 1.0);
-
-        ans.r#type = Some("noul".to_string());
-        ans.noul = Some(noul_value);
-        if ans.boolean.is_none() {
-            ans.boolean = Some(noul_value >= 0.5);
-        }
-        let probs = BTreeMap::from([
-            ("true".to_string(), noul_value),
-            ("false".to_string(), 1.0 - noul_value),
-        ]);
-        ans.probabilities = Some(probs);
-        if ans.confidence.is_none() {
-            ans.confidence = Some(noul_value.max(1.0 - noul_value));
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::DecisionAnswer;
+    use crate::protocol::{VercelAnswer, VercelResponse};
     use std::collections::BTreeMap;
 
     fn make_original_noul_request() -> SystemOneRequest {
@@ -212,6 +137,24 @@ mod tests {
             model: "typesafe-ai/jev".into(),
             state: serde_json::json!("hi"),
             questions: q,
+        }
+    }
+
+    fn make_vercel_response(qid: &str, va: VercelAnswer) -> VercelResponse {
+        let mut answers = BTreeMap::new();
+        answers.insert(qid.to_string(), va);
+        VercelResponse {
+            answers: Some(answers),
+            model: Some("typesafe-ai/jev".into()),
+            ..Default::default()
+        }
+    }
+
+    fn boolean_answer(boolean: bool) -> VercelAnswer {
+        VercelAnswer {
+            r#type: Some("boolean".into()),
+            boolean: Some(boolean),
+            ..Default::default()
         }
     }
 
@@ -249,21 +192,14 @@ mod tests {
 
     #[test]
     fn vercel_boolean_true_to_noul() {
+        // 生产路径：build_jev_response_from_vercel（不再测死代码孪生函数）
         let original = make_original_noul_request();
-        let mut answers = BTreeMap::new();
-        let mut ans = DecisionAnswer::default();
-        ans.r#type = Some("boolean".to_string());
-        ans.boolean = Some(true);
-        answers.insert("q".to_string(), ans);
-        let resp = SystemOneResponse {
-            model: Some("typesafe-ai/jev".into()),
-            answers,
-            usage: None,
-        };
-        let translated = denormalize_response_from_vercel(resp, &original);
-        let q = translated.answers.get("q").unwrap();
+        let resp =
+            build_jev_response_from_vercel(&make_vercel_response("q", boolean_answer(true)), &original);
+        let q = resp.answers.get("q").unwrap();
         assert_eq!(q.r#type.as_deref(), Some("noul"));
         assert_eq!(q.noul, Some(0.95));
+        assert_eq!(q.boolean, Some(true));
         assert_eq!(q.confidence, Some(0.95));
         assert_eq!(
             q.probabilities.as_ref().unwrap().get("true"),
@@ -274,41 +210,60 @@ mod tests {
     #[test]
     fn vercel_boolean_false_to_noul() {
         let original = make_original_noul_request();
-        let mut answers = BTreeMap::new();
-        let mut ans = DecisionAnswer::default();
-        ans.r#type = Some("boolean".to_string());
-        ans.boolean = Some(false);
-        answers.insert("q".to_string(), ans);
-        let resp = SystemOneResponse {
-            model: Some("typesafe-ai/jev".into()),
-            answers,
-            usage: None,
-        };
-        let translated = denormalize_response_from_vercel(resp, &original);
-        let q = translated.answers.get("q").unwrap();
+        let resp = build_jev_response_from_vercel(
+            &make_vercel_response("q", boolean_answer(false)),
+            &original,
+        );
+        let q = resp.answers.get("q").unwrap();
+        assert_eq!(q.r#type.as_deref(), Some("noul"));
         assert_eq!(q.noul, Some(0.05));
         assert_eq!(q.confidence, Some(0.95)); // max(0.05, 0.95)
     }
 
     #[test]
-    fn vercel_probability_field_used_directly() {
-        // 如果 Vercel 返回了 probability 字段，优先用它
+    fn vercel_probability_field_honored() {
+        // 修复回归测试：Vercel 单值 probability 字段必须优先于 0.95/0.05 档位估计
         let original = make_original_noul_request();
-        let mut answers = BTreeMap::new();
-        let mut ans = DecisionAnswer::default();
-        ans.r#type = Some("boolean".to_string());
-        ans.boolean = Some(true);
-        ans.probabilities = Some(BTreeMap::from([("true".to_string(), 0.73)]));
-        answers.insert("q".to_string(), ans);
-        let resp = SystemOneResponse {
-            model: None,
-            answers,
-            usage: None,
+        let va = VercelAnswer {
+            probability: Some(0.73),
+            ..boolean_answer(true)
         };
-        let translated = denormalize_response_from_vercel(resp, &original);
-        let q = translated.answers.get("q").unwrap();
+        let resp = build_jev_response_from_vercel(&make_vercel_response("q", va), &original);
+        let q = resp.answers.get("q").unwrap();
         assert_eq!(q.noul, Some(0.73));
         assert_eq!(q.confidence, Some(0.73));
+        assert_eq!(
+            q.probabilities.as_ref().unwrap().get("true"),
+            Some(&0.73)
+        );
+    }
+
+    #[test]
+    fn boolean_origin_stays_boolean() {
+        // 修复回归测试：调用方原本就发 boolean，出口不得改写成 noul
+        let mut q = BTreeMap::new();
+        q.insert(
+            "b".to_string(),
+            DecisionQuestion::Boolean {
+                instructions: "x".into(),
+                criteria: Some(serde_json::json!({"true": "y", "false": "n"})),
+            },
+        );
+        let original = SystemOneRequest {
+            model: "typesafe-ai/jev".into(),
+            state: serde_json::Value::Null,
+            questions: q,
+        };
+        let resp =
+            build_jev_response_from_vercel(&make_vercel_response("b", boolean_answer(true)), &original);
+        let a = resp.answers.get("b").unwrap();
+        assert_eq!(a.r#type.as_deref(), Some("boolean"));
+        assert_eq!(a.boolean, Some(true));
+        assert!(a.noul.is_none());
+        assert_eq!(
+            a.probabilities.as_ref().unwrap().get("true"),
+            Some(&0.95)
+        );
     }
 
     #[test]
@@ -327,20 +282,15 @@ mod tests {
             state: serde_json::Value::Null,
             questions: q,
         };
-        let mut answers = BTreeMap::new();
-        let mut ans = DecisionAnswer::default();
-        ans.r#type = Some("choice".to_string());
-        ans.choice = Some("A".to_string());
-        ans.probabilities = Some(BTreeMap::from([("A".to_string(), 0.7)]));
-        ans.confidence = Some(0.7);
-        answers.insert("c".to_string(), ans);
-        let resp = SystemOneResponse {
-            model: None,
-            answers,
-            usage: None,
+        let va = VercelAnswer {
+            r#type: Some("choice".into()),
+            choice: Some("A".into()),
+            probabilities: Some(BTreeMap::from([("A".to_string(), 0.7)])),
+            confidence: Some(0.7),
+            ..Default::default()
         };
-        let translated = denormalize_response_from_vercel(resp, &original);
-        let c = translated.answers.get("c").unwrap();
+        let resp = build_jev_response_from_vercel(&make_vercel_response("c", va), &original);
+        let c = resp.answers.get("c").unwrap();
         assert_eq!(c.choice.as_deref(), Some("A"));
         assert_eq!(c.r#type.as_deref(), Some("choice"));
     }

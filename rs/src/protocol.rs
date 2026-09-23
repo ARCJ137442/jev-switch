@@ -80,6 +80,16 @@ impl DecisionQuestion {
         }
     }
 
+    /// 问题类型 → capability 校验枚举（handler 转发前调 `Router::check_capability`）。
+    pub fn question_type(&self) -> crate::upstream::QuestionType {
+        match self {
+            DecisionQuestion::Choice { .. } => crate::upstream::QuestionType::Choice,
+            DecisionQuestion::Score { .. } => crate::upstream::QuestionType::Score,
+            DecisionQuestion::Noul { .. } => crate::upstream::QuestionType::Noul,
+            DecisionQuestion::Boolean { .. } => crate::upstream::QuestionType::Boolean,
+        }
+    }
+
     #[allow(dead_code)]
     pub fn instructions(&self) -> &str {
         match self {

@@ -113,7 +113,6 @@ pub struct Capabilities {
 }
 
 impl Capabilities {
-    #[allow(dead_code)]
     pub fn supports(&self, qt: QuestionType) -> bool {
         if self.noul_via_boolean && qt == QuestionType::Noul {
             // Vercel 通过翻译层接 noul；这里返回 true 让路由能选它

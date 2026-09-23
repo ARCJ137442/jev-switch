@@ -161,17 +161,15 @@ struct ModelsResponse {
 }
 
 async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
+    // 只列出真正可路由的 model（修复：原先把 upstream 未注册的 model 也列出，
+    // upstream 显示为空串，UI 判断可用、点击即 404）
     let mut models: Vec<ModelEntry> = state
         .router
         .list_models()
         .into_iter()
-        .map(|m| {
-            let upstream = state
-                .router
-                .route(&m)
-                .map(|u| u.id().to_string())
-                .unwrap_or_default();
-            ModelEntry { model: m, upstream }
+        .filter_map(|m| {
+            let upstream = state.router.route(&m).ok()?.id().to_string();
+            Some(ModelEntry { model: m, upstream })
         })
         .collect();
     models.sort_by(|a, b| a.model.cmp(&b.model));
@@ -221,6 +219,13 @@ async fn systemone_handler(
         }
     };
     let upstream_id = upstream.id().to_string();
+
+    // 1.5 capability 校验：题型不被上游支持 → 422（修复：原先为死代码，从未接线）
+    let qts: Vec<_> = req.questions.values().map(|q| q.question_type()).collect();
+    if let Err(e) = state.router.check_capability(&req.model, &qts) {
+        tracing::warn!(model = %req.model, error = %e, "capability check failed");
+        return Err(jev_error_to_response(e));
+    }
 
     // 2. call upstream
     let raw = match upstream.evaluate(req).await {

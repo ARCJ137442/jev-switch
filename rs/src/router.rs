@@ -1,8 +1,8 @@
 //! 简单 Router（M0.6）
 //!
 //! MVP 策略：静态 `model → upstream` 映射（来自 config.toml）。
-//! capability 校验交给 upstream trait（调用方 contract 一致，capability 不
-//! 匹配由 handler 转 422）。
+//! capability 校验由 handler 在转发前调用 `check_capability`，不匹配转 422
+//! （见 main.rs `systemone_handler`）。
 //!
 //! 参考 06- §阶段 5 Router。
 
@@ -63,7 +63,6 @@ impl Router {
     }
 
     /// 校验 capability：检查 request 的所有问题类型是否被目标 upstream 接受。
-    #[allow(dead_code)]
     pub fn check_capability(
         &self,
         model: &str,
