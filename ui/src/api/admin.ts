@@ -6,14 +6,18 @@ import { ROUTES_FIXTURE } from '../fixtures/routes.mock';
  * Admin API 客户端（contracts/05 §2 形状字面）。
  *
  * mock/真 API 开关 —— 集中在此一处：
- * - DEV 默认 mock（B2/B3 mock-first；A7 admin 未上线也能全功能开发）
- * - H3（A7 合入）：把下行 DEV 分支改为 'live'，或运行时 setAdminMode('live')
- * - 响应永远只有 api_key_masked，UI 无读回明文（契约 04 §2）
+ * - **H3 已切真（A7 `254b4ff` 合入）：默认 'live' 直连 daemon admin API**
+ * - 回退 mock：构建期 `VITE_ADMIN_MODE=mock`，或运行时 `setAdminMode('mock')`（调试用，fixtures 保留）
+ * - 响应永远只有 api_key_masked，UI 无读回明文（契约 04 §2 红线）
+ * - A7 接口备注（已核对）：
+ *   1. PUT providers 省略/null `api_key` = 保留；空串 = 清除；**整表替换**（未列出者删除）
+ *   2. PUT 响应：providers/routes 均 200 回显 masked 全表（与 GET 同形）
+ *   3. 环 400 文案 = `路由配置存在环 (cycle): …`（含「环」，下方 catch 已命中）
  */
 
 export type AdminMode = 'mock' | 'live';
 
-let adminMode: AdminMode = import.meta.env.DEV ? 'mock' : 'live';
+let adminMode: AdminMode = import.meta.env.VITE_ADMIN_MODE === 'mock' ? 'mock' : 'live';
 
 export function getAdminMode(): AdminMode {
   return adminMode;
@@ -39,7 +43,7 @@ export interface ProvidersResponse {
   providers: AdminProvider[];
 }
 
-/** PUT /v1/admin/providers 条目 — api_key 仅写入时携带；省略 = 保留原密钥（H3 与 A7 核对省略语义） */
+/** PUT /v1/admin/providers 条目 — api_key 仅写入时携带；省略/null = 保留、空串 = 清除、非空 = 替换（A7 已核对）；整表替换语义见文件头 */
 export interface AdminProviderWrite {
   id: string;
   kind: string;
@@ -98,7 +102,9 @@ const MOCK_PROBE_LATENCY: Record<string, number> = { vercel: 42, laya: 18 };
 
 /**
  * 仅供 dev 验证冲突横幅（GET 深比较驱动）：
- * 在 mock 内存里模拟「外部改了 toml」。H3 后此路径由真 toml mtime 承担。
+ * 在 mock 内存里模拟「外部改了 toml」。
+ * 注：冲突检测现役机制 = GET 快照深比较（admin API 暂无 mtime/hash 字段，
+ * contracts/04 §3 的 mtime 方案待 API 扩展后切换）。
  */
 export function mutateMockExternally(): void {
   const n = mockProviders.length + 1;
@@ -126,7 +132,7 @@ function assertProvidersShape(list: AdminProviderWrite[]): void {
   }
 }
 
-/** PUT → 响应 masked 全表（形状同 GET；H3 与 A7 核对） */
+/** PUT → 响应 masked 全表（已与 A7 核对：200 {providers:[…]} 与 GET 同形；A7 无键时 api_key_masked=""，mock 兼容 null——显示层同 falsy 处理） */
 function mockPut(list: AdminProviderWrite[]): ProvidersResponse {
   mockProviders = list.map((w) => {
     const prev = mockProviders.find((x) => x.id === w.id);
@@ -307,7 +313,8 @@ export async function putRoutes(routes: Route[]): Promise<RoutesResponse> {
       body: JSON.stringify({ routes: normalized }),
     });
   } catch (e) {
-    // 真 API 400 环错误消息含「环」时按 AdminApiError 上抛（H3 后按 A7 实际文案对齐）
+    // 已对齐 A7 实际文案：`路由配置存在环 (cycle): a -> b -> a`（含「环」→ 命中）；
+    // right 非法 400（「既不是已注册 provider…」）不命中 → 按普通失败回滚，语义正确
     const msg = (e as Error).message;
     if (msg.includes('环')) throw new AdminApiError(msg, 400, findCyclicEdgeKeys(normalized));
     throw e;
