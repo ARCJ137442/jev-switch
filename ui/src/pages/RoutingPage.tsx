@@ -153,7 +153,7 @@ export function RoutingPage() {
 
   /* ---- 变更操作（全部乐观进 state，由 debounce effect 统一 PUT） ---- */
 
-  const onCreateEdge = (left: string, right: string) => {
+  const onCreateEdge = (left: string, right: string, model?: string | null) => {
     const key = edgeKey(left, right);
     const cur = routesRef.current;
     if (cur.some((r) => edgeKey(r.left, r.right) === key)) {
@@ -168,6 +168,8 @@ export function RoutingPage() {
       priority: priors.length > 0 ? Math.max(...priors) + 10 : 10,
       sticky: 'none',
       on_error: 'next',
+      // 端口落点 = 钉死模型（透传端口 model=null / 卡片空白 undefined → 不写 = exact 同名钉死）
+      ...(model ? { upstream_model: model } : {}),
     } as Route);
     setRoutes([...cur, route]);
     setErrorEdges(new Set());
@@ -280,6 +282,9 @@ export function RoutingPage() {
           </span>
           <span className="font-mono text-xs text-inkMuted tabular">
             {routes.length} edges
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+            model endpoint → model endpoint
           </span>
           <span aria-live="polite">{statusBadge}</span>
           {lastError && (
