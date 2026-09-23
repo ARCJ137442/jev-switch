@@ -20,7 +20,7 @@
 //! - **加载时检环**（contracts/03 §4 DAG 约束）：合并后的边图含环 → 拒绝加载
 
 use jev_core::router::{check_acyclic, RouteEdge};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -41,24 +41,40 @@ pub enum ConfigError {
     Cycle(String),
     #[error("invalid mode '{0}' (expected local|cloud)")]
     InvalidMode(String),
+    #[error("invalid bind '{0}' (expected ip:port)")]
+    InvalidBind(String),
 }
 
 /* ══════════════════════════════════════════════════════════════════
    双态开关（docs/12 §一 · 任务 #43 —— 裁决已锁）
-   local：绑 127.0.0.1，完全免鉴权（现状零变化）
-   cloud：绑 0.0.0.0（部署形态偏差，见 docs/deployment.md），
-          /v1 需 Bearer 调用 token，admin 需登录会话 —— mode 只管鉴权，
+   local：loopback 免鉴权（非 loopback peer → 403 应用层兜底）
+   cloud：/v1 需 Bearer 调用 token，admin 需登录会话 —— mode 只管鉴权，
           **不涉及上游拓扑**（拓扑不区分原则，docs/12 §一）。
+
+   bind 与 mode 关系（ListenSupervisor 修订裁决 —— 方案一「成对默认 + 热 Rebind」）：
+   - **未显式配置 `bind`**（文件与 `JEV_BIND` 皆无）→ 成对默认：
+     local = 127.0.0.1:11435、cloud = 0.0.0.0:11435；`PUT /v1/admin/mode`
+     翻转时自动热 Rebind 到对端默认（local 态对 LAN **内核级关闭**端口）。
+   - **显式 `bind`**（文件 `bind` 或 env `JEV_BIND`）→ 恒绑显式值，mode 翻转
+     **不**改监听（响应 `rebind.skipped = "explicit bind"`），此时 local 态由
+     鉴权中间件的 **peer loopback 校验兜底**（非 loopback → 403）。
+   - 运行时改监听走 `PUT /v1/admin/listen`（热 Rebind，零进程重启）。
    ══════════════════════════════════════════════════════════════════ */
 
-/// 运行双态（配置 `mode = "local" | "cloud"`，默认 local；env `JEV_SWITCH_MODE` 可覆盖）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+/// 运行双态（配置 `mode = "local" | "cloud"`，默认 local；env `JEV_SWITCH_MODE` 可覆盖；
+/// 运行时热切：`PUT /v1/admin/mode` —— `AuthState.mode` 为 `RwLock`，逐请求读锁）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 pub enum RunMode {
-    /// 本机免鉴权（loopback 绑定）。
+    /// 本机免鉴权（成对默认绑 127.0.0.1；显式 bind 时 peer 校验兜底）。
     #[default]
     Local,
-    /// 云中转（0.0.0.0 绑定 + Bearer/会话鉴权）。
+    /// 云中转（成对默认绑 0.0.0.0 + Bearer/会话鉴权）。
     Cloud,
 }
 
@@ -72,16 +88,46 @@ impl RunMode {
         }
     }
 
-    /// 监听地址：local = 127.0.0.1:11435；cloud = 0.0.0.0:11435
-    /// （cloud 绑全接口是 contracts/05「Admin 仅绑 127.0.0.1」的**部署形态偏差** ——
-    /// cloud 态由鉴权而非绑定位承担防护；偏差备案见 docs/deployment.md）。
-    pub fn bind_addr(self) -> std::net::SocketAddr {
-        let ip: [u8; 4] = match self {
-            RunMode::Local => [127, 0, 0, 1],
-            RunMode::Cloud => [0, 0, 0, 0],
-        };
-        std::net::SocketAddr::from((ip, 11435))
+    /// 解析出的模式名（小写，写回 toml / 响应体用）。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RunMode::Local => "local",
+            RunMode::Cloud => "cloud",
+        }
     }
+}
+
+/// 默认端口（两 mode 共用；仅 IP 随 mode 成对切换）。
+pub const DEFAULT_PORT: u16 = 11435;
+
+/// 成对默认监听地址（**未显式配置 `bind` 时**）：
+/// local → `127.0.0.1:11435`（loopback 天然仅本机）；cloud → `0.0.0.0:11435`
+/// （容器内必需；cloud 由鉴权承担防护 —— 部署形态偏差备案 docs/deployment.md）。
+pub fn paired_default(mode: RunMode) -> std::net::SocketAddr {
+    let ip: [u8; 4] = match mode {
+        RunMode::Local => [127, 0, 0, 1],
+        RunMode::Cloud => [0, 0, 0, 0],
+    };
+    std::net::SocketAddr::from((ip, DEFAULT_PORT))
+}
+
+/// bind 解析（纯函数，供无 env 污染的单测）。优先级：
+/// env `JEV_BIND`（非空）→ 文件 `bind`（非空）→ 成对默认（随 `mode`）。
+/// 返回 `(地址, 是否显式)` —— 显式时 mode 翻转不 Rebind。
+pub fn resolve_bind(
+    file_bind: Option<&str>,
+    env: Option<&str>,
+    mode: RunMode,
+) -> Result<(std::net::SocketAddr, bool), ConfigError> {
+    for raw in [env, file_bind] {
+        if let Some(s) = raw.map(str::trim).filter(|s| !s.is_empty()) {
+            let addr: std::net::SocketAddr = s
+                .parse()
+                .map_err(|_| ConfigError::InvalidBind(s.to_string()))?;
+            return Ok((addr, true));
+        }
+    }
+    Ok((paired_default(mode), false))
 }
 
 /// cloud 态 `/v1` 调用 token 条目 —— 同时接受两种写法（任务书字面）：
@@ -183,9 +229,14 @@ pub struct Config {
     /// 模型路由 DAG 边（contracts/03 §2 `[[routes]]`）。
     #[serde(default)]
     pub routes: Vec<RouteEdge>,
-    /// 双态开关（默认 local；env `JEV_SWITCH_MODE` 覆盖 —— 解析在 [`Config::effective_mode`]）。
+    /// 双态开关（默认 local；env `JEV_SWITCH_MODE` 覆盖 —— 解析在 [`Config::effective_mode`]；
+    /// 运行时热切 `PUT /v1/admin/mode`）。
     #[serde(default)]
     pub mode: RunMode,
+    /// 显式监听地址 `ip:port`（env `JEV_BIND` 覆盖；缺省 = 成对默认随 mode，
+    /// 见 [`paired_default`]）。显式配置时 mode 翻转**不** Rebind。
+    #[serde(default)]
+    pub bind: Option<String>,
     /// cloud 态 `/v1` Bearer 调用 token 列表（两种写法见 [`AuthToken`]）。
     /// local 态忽略。env `JEV_AUTH_TOKENS`（逗号分隔）覆盖。
     #[serde(default)]
@@ -212,6 +263,16 @@ impl Config {
         resolve_admin_password(
             self.admin_password.as_deref(),
             std::env::var("JEV_ADMIN_PASSWORD").ok().as_deref(),
+        )
+    }
+
+    /// 生效监听地址：env `JEV_BIND` ← 文件 `bind` ← 成对默认（随 `mode`）。
+    /// 返回 `(地址, 是否显式)`；非法 bind 字符串 → [`ConfigError::InvalidBind`]（启动硬拒）。
+    pub fn effective_bind(&self, mode: RunMode) -> Result<(std::net::SocketAddr, bool), ConfigError> {
+        resolve_bind(
+            self.bind.as_deref(),
+            std::env::var("JEV_BIND").ok().as_deref(),
+            mode,
         )
     }
 }
@@ -723,17 +784,66 @@ enabled = true
     }
 
     #[test]
-    fn parse_mode_cloud_and_bind_addrs() {
+    fn parse_mode_cloud_keeps_mode_parse_semantics() {
         let cfg: Config = toml::from_str(r#"mode = "cloud""#).unwrap();
         assert_eq!(cfg.mode, RunMode::Cloud);
-        // 偏差字面：cloud 绑 0.0.0.0、local 绑 127.0.0.1（docs/deployment.md 备案）
-        assert_eq!(
-            RunMode::Local.bind_addr().to_string(),
-            "127.0.0.1:11435"
-        );
-        assert_eq!(RunMode::Cloud.bind_addr().to_string(), "0.0.0.0:11435");
-        // 非法 mode 字符串 → toml 反序列化失败
+        // 非法 mode 字符串 → toml 反序列化失败（带病不上线）
         assert!(toml::from_str::<Config>(r#"mode = "prod""#).is_err());
+        assert_eq!(RunMode::parse("Cloud").unwrap(), RunMode::Cloud);
+        assert!(RunMode::parse("prod").is_err());
+    }
+
+    /* ── bind 独立配置：成对默认 + env/文件显式覆盖（方案一裁决） ── */
+
+    #[test]
+    fn bind_paired_default_by_mode_when_unspecified() {
+        // 未显式配置 → 成对默认：local=127.0.0.1:11435 / cloud=0.0.0.0:11435
+        let (addr, explicit) = resolve_bind(None, None, RunMode::Local).unwrap();
+        assert_eq!(addr.to_string(), "127.0.0.1:11435");
+        assert!(!explicit, "缺省 = 非显式（mode 翻转要热 Rebind）");
+        let (addr, explicit) = resolve_bind(None, None, RunMode::Cloud).unwrap();
+        assert_eq!(addr.to_string(), "0.0.0.0:11435");
+        assert!(!explicit);
+        // paired_default 与 resolve_bind 一致
+        assert_eq!(paired_default(RunMode::Local).to_string(), "127.0.0.1:11435");
+        assert_eq!(paired_default(RunMode::Cloud).to_string(), "0.0.0.0:11435");
+    }
+
+    #[test]
+    fn bind_explicit_file_and_env_override_with_env_winning() {
+        // 文件显式 bind：优先于成对默认，且恒显式（mode 翻转不 Rebind）
+        let (addr, explicit) =
+            resolve_bind(Some("192.168.1.9:2222"), None, RunMode::Local).unwrap();
+        assert_eq!(addr.to_string(), "192.168.1.9:2222");
+        assert!(explicit);
+        // env JEV_BIND 覆盖文件
+        let (addr, explicit) = resolve_bind(
+            Some("192.168.1.9:2222"),
+            Some("0.0.0.0:9999"),
+            RunMode::Cloud,
+        )
+        .unwrap();
+        assert_eq!(addr.to_string(), "0.0.0.0:9999");
+        assert!(explicit);
+        // env 空串视为未设 → 文件值
+        let (addr, _) = resolve_bind(Some("127.0.0.1:3333"), Some("  "), RunMode::Local).unwrap();
+        assert_eq!(addr.to_string(), "127.0.0.1:3333");
+        // 非法 bind → 硬错（启动即拒）
+        assert!(matches!(
+            resolve_bind(Some("not-an-addr"), None, RunMode::Local),
+            Err(ConfigError::InvalidBind(m)) if m == "not-an-addr"
+        ));
+    }
+
+    #[test]
+    fn bind_config_field_roundtrip() {
+        let cfg: Config = toml::from_str(r#"bind = "127.0.0.1:11436""#).unwrap();
+        assert_eq!(cfg.bind.as_deref(), Some("127.0.0.1:11436"));
+        let (addr, explicit) = cfg.effective_bind(RunMode::Cloud).unwrap();
+        assert_eq!(addr.to_string(), "127.0.0.1:11436");
+        assert!(explicit, "文件显式 bind 优先于 mode 成对默认");
+        let cfg2: Config = toml::from_str("").unwrap();
+        assert!(cfg2.bind.is_none());
     }
 
     #[test]
@@ -766,6 +876,9 @@ token = "tok-test-ccc"
 
     #[test]
     fn resolve_mode_env_overrides_file_and_rejects_invalid() {
+        // 启动期语义不变：env JEV_SWITCH_MODE 非空覆盖文件 mode；非法硬拒。
+        // （新语义下 mode 只决定**初始鉴权策略 + 非显式 bind 的初始地址**，
+        //   运行时热切走 PUT /v1/admin/mode —— 不再是「mode 驱动 bind」的唯一入口。）
         assert_eq!(
             resolve_mode(RunMode::Local, Some("cloud")).unwrap(),
             RunMode::Cloud

@@ -10,12 +10,21 @@
 //! - `PUT  /v1/admin/routes` → 整表替换：字段校验 → **检环 400**（文案含 环/cycle）
 //!   → right 引用校验 → 落盘 → `Registry::replace_edges` 热替换（无重启）
 //! - `POST /v1/admin/providers/{id}/probe` → `{ok,latency_ms,status,error}`
+//! - `PUT  /v1/admin/mode` → **mode 热切**（不重启）：可选 `admin_password`
+//!   激活/轮换 → 写 toml `mode` → 写 `AuthState.mode` RwLock → 非显式 bind 时
+//!   联动 ListenSupervisor 热 Rebind 到成对默认（见 [`crate::listen`]）
+//! - `PUT/GET /v1/admin/listen` → **监听热 Rebind**：`{"addr":"ip:port"}` 显式化 /
+//!   `{"addr":"auto"}` 恢复成对默认；try-bind 失败保旧（带病不上线）
+//! - `PUT  /v1/admin/password` → admin 密码热更（**门外**端点，in-handler 鉴权：
+//!   local=loopback；cloud=有效会话 **或** loopback peer —— 服务器 SSH 上机一行
+//!   curl 忘密恢复）；一切密码变更统一走 [`set_admin_password`]
 //!
 //! 防偷（contracts/04 §2）：
 //! - 响应 DTO [`ProviderView`] 只有 `api_key_masked` / `api_key_set` —— 序列化面
 //!   上不存在 `api_key` 字段（单测①⑦双重把守）
 //! - 所有错误体 / 探测错误串过 `jev_core::redact`（已知明文 + `sk-` 通用 + Bearer）
 //! - 落盘后 `enforce_config_perms`（0600；Windows 降级 warning —— 用户已裁决）
+//! - **密码永不回传**：mode/password 响应只出布尔警示字段，无 password 键
 //!
 //! 落盘策略（Q5=a 读改写同一文件，其余段不动 —— toml::Value 往返）：
 //! - providers PUT：仅替换 `providers` 表；`routes`/`router` 及其它段原样保留
@@ -23,6 +32,7 @@
 //!   旧扁平映射全部视为已被新表覆盖（payload 若来自 GET 即合并真值；残留任一条
 //!   都会在下次加载时重复合并出多余边 / 复活已删边）。**注释不随 toml 往返保留**
 //!   （toml crate 不保注释 —— A7 报告备案项）。
+//! - mode/password/listen PUT：写对应单键，其余段原样（同上注释不保）。
 
 use crate::config::{enforce_config_perms, enforce_dir_perms, Config, ProviderConfig};
 use crate::{error_response, known_keys_snapshot, AppState};
@@ -39,6 +49,7 @@ use jev_core::{
 };
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 /* ══════════════════════════════════════════════════════════════════
@@ -196,7 +207,7 @@ fn providers_doc(cfg: &Config, keys: &[String]) -> ProvidersDoc {
 }
 
 /// 读配置文件为 `toml::Value`（读改写用 —— 其余段原样保真；注释不保留）。
-fn read_value(path: &Path) -> Result<toml::Value, Response> {
+pub(crate) fn read_value(path: &Path) -> Result<toml::Value, Response> {
     let raw = std::fs::read_to_string(path).map_err(|e| {
         err_plain(StatusCode::INTERNAL_SERVER_ERROR, format!("config read failed: {e}"))
     })?;
@@ -207,7 +218,7 @@ fn read_value(path: &Path) -> Result<toml::Value, Response> {
 
 /// 落盘 + 权限收紧（0600 文件；0700 仅限默认配置目录 `~/.jev-switch` ——
 /// `JEV_SWITCH_CONFIG` 可能指向仓库内示例，不乱 chmod 其父目录）。
-fn write_value(path: &Path, value: &toml::Value) -> Result<(), Response> {
+pub(crate) fn write_value(path: &Path, value: &toml::Value) -> Result<(), Response> {
     let s = toml::to_string(value).map_err(|e| {
         err_plain(StatusCode::INTERNAL_SERVER_ERROR, format!("config encode failed: {e}"))
     })?;
@@ -449,6 +460,519 @@ pub async fn put_routes(State(state): State<AppState>, body: Bytes) -> Response 
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   PUT /v1/admin/mode · PUT|GET /v1/admin/listen · PUT /v1/admin/password
+   （mode 热切 / listen 热 Rebind / 密码热更 —— 零进程重启）
+   ══════════════════════════════════════════════════════════════════ */
+
+/// `PUT /v1/admin/mode` 请求体。`admin_password` 可选：
+/// - cloud 激活且**从未配置过密码** → **必带**（400 指引文案，fail-closed 不破）；
+/// - 已有密码且带了 → **轮换语义**（覆盖持久化 + 会话代际作废）。
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutModeBody {
+    pub mode: String,
+    #[serde(default)]
+    pub admin_password: Option<String>,
+}
+
+/// Rebind 信息（`PUT /mode` 响应成员）：执行了 → `{from,to,ok[,reason]}`；
+/// 未执行 → `{"skipped":"explicit bind" | "no listener"}`（untagged 判别）。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+#[serde(untagged)]
+pub enum RebindInfo {
+    Done {
+        from: String,
+        to: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    Skipped {
+        skipped: String,
+    },
+}
+
+/// `PUT /v1/admin/mode` 响应。
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutModeResponse {
+    pub mode: crate::config::RunMode,
+    pub persisted: bool,
+    /// env 覆盖警示：`JEV_SWITCH_MODE` 非空（下次启动覆盖文件 mode），
+    /// 或本次写了密码且 `JEV_ADMIN_PASSWORD` 非空（下次启动覆盖回去）。
+    pub env_override_active: bool,
+    pub rebind: RebindInfo,
+}
+
+/// `PUT /v1/admin/listen` 请求体（`"auto"` = 恢复成对默认，按当前 mode）。
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutListenBody {
+    pub addr: String,
+}
+
+/// `PUT /v1/admin/listen` 成功响应。
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutListenResponse {
+    pub addr: String,
+    pub rebound: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// `GET /v1/admin/listen` 响应（当前实际监听地址）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct GetListenResponse {
+    pub addr: String,
+}
+
+/// 进程启动时刻（`build_state` 初始化一次；`GET /v1/admin/status.uptime_s` 用）。
+pub(crate) static PROCESS_START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+/// `GET /v1/admin/status` 响应 —— **7 键冻结**（首页仪表盘数据源，UI 已钉死字段名）。
+/// `password_set` 只是布尔；**任何字段都不得携带密码值**（contracts/04 §2）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct StatusResponse {
+    pub mode: crate::config::RunMode,
+    /// 实际当前监听地址（Rebind 后实时反映；无 supervisor 的 oneshot 路径回退
+    /// 配置解析值）。
+    pub bind: String,
+    /// 是否显式配置 bind（true 时 mode 翻转不改监听）。
+    pub bind_explicit: bool,
+    /// env `JEV_SWITCH_MODE` 活跃（下次启动覆盖文件 mode）。
+    pub env_override_active: bool,
+    /// 管理密码是否已配置（**绝不返回密码值**）。
+    pub password_set: bool,
+    pub version: String,
+    /// 进程启动至今秒数。（ts-rs：u64 默认 bigint，wire 是 JSON number → 覆盖）
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
+    pub uptime_s: u64,
+}
+
+/// `GET /v1/admin/status` —— 首页仪表盘 / 运维一眼自检（模式、监听、是否设密）。
+/// 鉴权走 admin 门（cloud=会话；local=loopback —— 与同集合端点一致，login 除外规则不变）。
+pub async fn get_status(State(state): State<AppState>) -> Response {
+    let mode = crate::auth::current_mode(&state);
+    let (bind, bind_explicit) = match state.listen.get() {
+        Some(h) => (h.bound().to_string(), h.is_explicit()),
+        // 无 supervisor（oneshot 单测）：回退配置解析值（成对默认 / 显式 bind）
+        None => match Config::load(&state.config_path)
+            .ok()
+            .and_then(|c| c.effective_bind(mode).ok())
+        {
+            Some((addr, exp)) => (addr.to_string(), exp),
+            None => (String::new(), false),
+        },
+    };
+    Json(StatusResponse {
+        mode,
+        bind,
+        bind_explicit,
+        env_override_active: state.auth.env_mode_override.load(Ordering::SeqCst),
+        password_set: state
+            .auth
+            .admin_password
+            .read()
+            .expect("password lock")
+            .is_some(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime_s: PROCESS_START
+            .get_or_init(Instant::now)
+            .elapsed()
+            .as_secs(),
+    })
+    .into_response()
+}
+
+/// `PUT /v1/admin/password` 请求体。
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutPasswordBody {
+    pub password: String,
+}
+
+/// `PUT /v1/admin/password` 响应（**无 password 键** —— 防偷红线）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutPasswordResponse {
+    pub updated: bool,
+    /// env `JEV_ADMIN_PASSWORD` 非空警示（下次启动覆盖回文件值）。
+    pub env_override_active: bool,
+}
+
+/// **一切密码变更的统一内部入口**（mode 激活 / mode 轮换 / password 端点三路
+/// 共用，防语义漂移）：
+/// 1. 持久化：toml 写 `admin_password = "…"`（0600，Q4=b 与 `api_key` PUT 同模式）；
+/// 2. 立即生效：`AuthState.admin_password` RwLock 写入（登录即用新值）；
+/// 3. **会话代际 +1 + `sessions.clear()`** —— 作废一切旧会话；
+/// 4. 新密码纳入 redact known_keys 集（contracts/04 §2）。
+///
+/// 密码值**绝不进日志/tracing/响应**。失败 → 三键错误体 500（调用方不得继续
+/// 激活 mode —— fail-closed 优先）。
+pub(crate) fn set_admin_password(state: &AppState, new_password: &str) -> Result<(), Response> {
+    let mut value = read_value(&state.config_path)?;
+    match value.as_table_mut() {
+        Some(table) => {
+            table.insert(
+                "admin_password".into(),
+                toml::Value::String(new_password.to_string()),
+            );
+        }
+        None => {
+            return Err(err_plain(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "config root is not a table",
+            ))
+        }
+    }
+    write_value(&state.config_path, &value)?;
+    // 运行时生效（读锁先释放再写 —— std RwLock 不可重入）
+    *state
+        .auth
+        .admin_password
+        .write()
+        .expect("password lock") = Some(new_password.to_string());
+    // 会话代际作废：清空 + 计数器 +1（旧 token 即刻 401）
+    state
+        .auth
+        .sessions
+        .write()
+        .expect("admin sessions lock")
+        .clear();
+    state.auth.session_generation.fetch_add(1, Ordering::SeqCst);
+    // redact 集扩容（旧密码保留也无妨 —— 防旧值仍出现在历史串里）
+    {
+        let mut keys = state.known_keys.write().expect("known_keys lock");
+        if !new_password.is_empty() && !keys.iter().any(|k| k == new_password) {
+            keys.push(new_password.to_string());
+        }
+    }
+    tracing::info!("admin password updated (value not logged)");
+    Ok(())
+}
+
+/// `PUT /v1/admin/mode` —— mode 热切（鉴权策略 + 可选 Rebind + 持久化）。
+///
+/// 鉴权由 `require_admin_session` 中间件承担（cloud → 有效会话；local → loopback
+/// peer —— 显式 0.0.0.0 bind 时非 loopback 已被 403 挡在门外）。
+///
+/// 执行序（校验先行，fail-closed 不破）：
+/// 1. 解析 mode（非法 400）+ 密码字段校验（空串 400）；
+/// 2. cloud 激活且从未配置密码且未带 → **400 指引**；
+/// 3. 带了密码 → [`set_admin_password`]（持久化+代际作废；失败 500 不激活）；
+/// 4. 写 toml `mode` → 500（此时密码已改、mode 未翻 —— 保守安全态）；
+/// 5. 写 `AuthState.mode` RwLock → 后续请求立即生效；
+/// 6. 非显式 bind → Rebind 成对默认；显式 → `skipped:"explicit bind"`。
+pub async fn put_mode(State(state): State<AppState>, body: Bytes) -> Response {
+    // 1. 解析
+    let req: PutModeBody = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid mode body: {e}")),
+    };
+    let new_mode = match crate::config::RunMode::parse(&req.mode) {
+        Ok(m) => m,
+        Err(e) => return err(&state, StatusCode::BAD_REQUEST, e.to_string()),
+    };
+    if let Some(pw) = &req.admin_password {
+        if pw.trim().is_empty() {
+            return err(&state, StatusCode::BAD_REQUEST, "admin_password must not be empty");
+        }
+    }
+
+    // 同步运行时密码（Q5 文件真值：外部手改/env 在激活路径拾起）。
+    // 注意：判空必须在**独立语句**完成 —— 若写在 `if cond {}` 条件里，read 临时
+    // guard 会横跨整个 if 块，块内再 take write → 同线程死锁（RwLock 不可重入）。
+    let need_password_sync = state
+        .auth
+        .admin_password
+        .read()
+        .expect("password lock")
+        .is_none();
+    if need_password_sync {
+        if let Ok(file_cfg) = Config::load(&state.config_path) {
+            if let Some(eff) = file_cfg.effective_admin_password() {
+                *state
+                    .auth
+                    .admin_password
+                    .write()
+                    .expect("password lock") = Some(eff);
+            }
+        }
+    }
+    let has_password = state
+        .auth
+        .admin_password
+        .read()
+        .expect("password lock")
+        .is_some();
+
+    // 2. cloud 激活密码闸（从未配置 → 必带第一个密码）
+    if new_mode == crate::config::RunMode::Cloud && !has_password && req.admin_password.is_none() {
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "admin password required to activate cloud: include admin_password in this request, or set JEV_ADMIN_PASSWORD / toml admin_password first",
+        );
+    }
+
+    // 3. 密码热更（可选 —— 首设或轮换）；失败 500 且不激活
+    let mut password_written = false;
+    if let Some(pw) = &req.admin_password {
+        if let Err(r) = set_admin_password(&state, pw) {
+            return r;
+        }
+        password_written = true;
+    }
+
+    // 4. 持久化 mode（Q5 文件真值）
+    let mut value = match read_value(&state.config_path) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    match value.as_table_mut() {
+        Some(table) => {
+            table.insert(
+                "mode".into(),
+                toml::Value::String(new_mode.as_str().to_string()),
+            );
+        }
+        None => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "config root is not a table",
+            )
+        }
+    }
+    if let Err(r) = write_value(&state.config_path, &value) {
+        return r;
+    }
+
+    // 5. 运行时翻转（后续请求立即生效；在途请求跑完旧策略）
+    *state.auth.mode.write().expect("mode lock") = new_mode;
+    tracing::info!(mode = new_mode.as_str(), "mode hot-switched");
+
+    // 6. Rebind 联动（非显式 bind 才动监听）
+    let rebind = match state.listen.get() {
+        None => RebindInfo::Skipped {
+            skipped: "no listener".into(),
+        },
+        Some(h) if h.is_explicit() => RebindInfo::Skipped {
+            skipped: "explicit bind".into(),
+        },
+        Some(h) => {
+            let to = h.defaults().for_mode(new_mode);
+            match h.rebind(to).await {
+                Ok((from, to)) => RebindInfo::Done {
+                    from: from.to_string(),
+                    to: to.to_string(),
+                    ok: true,
+                    reason: None,
+                },
+                Err(e) => RebindInfo::Done {
+                    from: h.bound().to_string(),
+                    to: to.to_string(),
+                    ok: false,
+                    reason: Some(e.to_string()),
+                },
+            }
+        }
+    };
+
+    let env_override_active = state.auth.env_mode_override.load(Ordering::SeqCst)
+        || (password_written && state.auth.env_password_override.load(Ordering::SeqCst));
+    Json(PutModeResponse {
+        mode: new_mode,
+        persisted: true,
+        env_override_active,
+        rebind,
+    })
+    .into_response()
+}
+
+/// `PUT /v1/admin/listen` —— 监听热 Rebind（try-bind 失败保旧，带病不上线）。
+///
+/// - `{"addr":"127.0.0.1:2222"}` → Rebind + **写回 toml `bind`**（此后变显式绑定，
+///   mode 翻转不再动监听）；
+/// - `{"addr":"auto"}` → 恢复成对默认（按**当前** mode）+ **移除 toml `bind` 键**。
+///
+/// 鉴权同 mode（admin 中间件）。失败：解析 400 / supervisor 缺失 503 /
+/// try-bind 失败 500 —— 均三键错误体（contracts/05 §3），旧监听原样保留。
+pub async fn put_listen(State(state): State<AppState>, body: Bytes) -> Response {
+    let req: PutListenBody = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid listen body: {e}")),
+    };
+    let Some(handle) = state.listen.get() else {
+        return err(&state, StatusCode::SERVICE_UNAVAILABLE, "listen supervisor unavailable");
+    };
+
+    // 目标地址：auto → 当前 mode 成对默认；否则解析显式值
+    let (target, explicit_after) = if req.addr.trim().eq_ignore_ascii_case("auto") {
+        (
+            handle.defaults().for_mode(crate::auth::current_mode(&state)),
+            false,
+        )
+    } else {
+        match req.addr.trim().parse::<std::net::SocketAddr>() {
+            Ok(a) => (a, true),
+            Err(_) => {
+                return err(
+                    &state,
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid bind addr '{}' (expected ip:port, or \"auto\")", req.addr),
+                )
+            }
+        }
+    };
+
+    // Rebind（失败 → 旧监听未动 / 已恢复；不写文件）
+    if let Err(e) = handle.rebind(target).await {
+        return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("rebind failed: {e}"));
+    }
+
+    // 持久化 bind 键（显式化 / auto 移除）
+    let mut value = match read_value(&state.config_path) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    match value.as_table_mut() {
+        Some(table) => {
+            if explicit_after {
+                table.insert("bind".into(), toml::Value::String(target.to_string()));
+            } else {
+                table.remove("bind");
+            }
+        }
+        None => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "config root is not a table",
+            )
+        }
+    }
+    if let Err(r) = write_value(&state.config_path, &value) {
+        return r;
+    }
+    handle.set_explicit(explicit_after);
+    tracing::info!(addr = %target, explicit = explicit_after, "listen rebound");
+
+    Json(PutListenResponse {
+        addr: target.to_string(),
+        rebound: true,
+        reason: if explicit_after { None } else { Some("auto".into()) },
+    })
+    .into_response()
+}
+
+/// `GET /v1/admin/listen` —— 当前实际监听地址（查询用，admin 门内）。
+pub async fn get_listen(State(state): State<AppState>) -> Response {
+    match state.listen.get() {
+        Some(h) => Json(GetListenResponse {
+            addr: h.bound().to_string(),
+        })
+        .into_response(),
+        None => err(
+            &state,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "listen supervisor unavailable",
+        ),
+    }
+}
+
+/// `PUT /v1/admin/password` —— 密码热更（**门外端点，in-handler 鉴权**）：
+/// - **local**：loopback peer（None=oneshot 信任）否则 403；
+/// - **cloud**：有效 admin 会话 **或** loopback peer（本机=root 等价，Q4 本地信任
+///   —— 服务器忘密恢复 = SSH 上机一行 curl）；非 loopback 无会话 → 401。
+///
+/// 行为统一走 [`set_admin_password`]：写 toml + 运行时生效 + 会话全废（代际+1）
+/// + env 活跃警示。**响应不含密码**。
+pub async fn put_password(
+    State(state): State<AppState>,
+    connect: Option<axum::extract::ConnectInfo<std::net::SocketAddr>>,
+    headers: axum::http::HeaderMap,
+    body: Bytes,
+) -> Response {
+    use crate::auth::{addr_is_loopback, bearer_token, current_mode, has_valid_session};
+    // in-handler 鉴权（password 不在 admin 中间件门内 —— login 同理）
+    let loopback = addr_is_loopback(connect.as_ref().map(|axum::extract::ConnectInfo(a)| a));
+    match current_mode(&state) {
+        crate::config::RunMode::Local => {
+            if !loopback {
+                return crate::auth::forbidden(&state, "local mode: loopback only");
+            }
+        }
+        crate::config::RunMode::Cloud => {
+            if !loopback && !has_valid_session(&state, bearer_token(&headers)) {
+                return crate::auth::unauthorized_pub(
+                    &state,
+                    "admin session required (POST /v1/admin/login)",
+                );
+            }
+        }
+    }
+
+    let req: PutPasswordBody = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return err(&state, StatusCode::BAD_REQUEST, format!("invalid password body: {e}"))
+        }
+    };
+    if req.password.trim().is_empty() {
+        return err(&state, StatusCode::BAD_REQUEST, "password must not be empty");
+    }
+    if let Err(r) = set_admin_password(&state, &req.password) {
+        return r;
+    }
+    Json(PutPasswordResponse {
+        updated: true,
+        env_override_active: state.auth.env_password_override.load(Ordering::SeqCst),
+    })
+    .into_response()
+}
+
+/* ══════════════════════════════════════════════════════════════════
    POST · providers/{id}/probe
    ══════════════════════════════════════════════════════════════════ */
 
@@ -613,6 +1137,67 @@ priority = 10
             .unwrap();
         assert_eq!(laya["api_key_set"], false);
         assert_eq!(laya["api_key_masked"], "");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /* ── GET /v1/admin/status：7 键形状冻结 + 无密码值 ──────────── */
+
+    #[tokio::test]
+    async fn status_shape_frozen_seven_keys_without_password_value() {
+        let cfg = format!(
+            r#"
+mode = "local"
+admin_password = "{FAKE_KEY_PLACEHOLDER}"
+[providers.laya]
+kind = "laya"
+base = "http://127.0.0.1:18765/v1/systemone"
+enabled = true
+"#,
+            // 密码字段用独立假值（FAKE_KEY 是 key 形态，密码另起）
+            FAKE_KEY_PLACEHOLDER = "pw-test-status-1"
+        );
+        let path = temp_config("status-shape", &cfg);
+        let (app, _state) = app_at(path.clone());
+
+        let (status, body) = send(app, "GET", "/v1/admin/status", None).await;
+        assert_eq!(status, 200, "{body}");
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let obj = v.as_object().expect("status 是对象");
+        // 恰 7 键（字段名冻结 —— UI 仪表盘契约）
+        assert_eq!(obj.len(), 7, "7 键冻结: {body}");
+        for k in [
+            "mode",
+            "bind",
+            "bind_explicit",
+            "env_override_active",
+            "password_set",
+            "version",
+            "uptime_s",
+        ] {
+            assert!(obj.contains_key(k), "缺键 {k}: {body}");
+        }
+        assert_eq!(v["mode"], "local");
+        // oneshot 无 supervisor → bind 回退配置解析值（成对默认 local）
+        assert_eq!(v["bind"], "127.0.0.1:11435", "{body}");
+        assert_eq!(v["bind_explicit"], false, "{body}");
+        assert_eq!(v["env_override_active"], false, "{body}");
+        assert_eq!(v["password_set"], true, "已配密码 → true: {body}");
+        assert!(v["version"].is_string(), "{body}");
+        assert!(v["uptime_s"].is_u64(), "{body}");
+        // 绝不携带密码值（红线：序列化面无 password 字段名/值）
+        assert!(!body.contains("pw-test-status-1"), "泄露密码值: {body}");
+        assert!(obj.get("password").is_none() && obj.get("admin_password").is_none());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn status_password_set_false_when_unset() {
+        let path = temp_config("status-nopw", "# empty\n");
+        let (app, _state) = app_at(path.clone());
+        let (status, body) = send(app, "GET", "/v1/admin/status", None).await;
+        assert_eq!(status, 200, "{body}");
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["password_set"], false, "{body}");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

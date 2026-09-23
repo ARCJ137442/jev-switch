@@ -10,14 +10,21 @@
 //! - `GET/PUT /v1/admin/providers`、`GET/PUT /v1/admin/routes`、
 //!   `POST /v1/admin/providers/{id}/probe` — Admin（A7）
 //! - `POST /v1/admin/login` — #43 cloud 态管理登录（换短时会话 token；门外免会话）
+//! - `PUT  /v1/admin/mode`  — mode 热切（零重启；门外密码激活见 admin 模块）
+//! - `PUT/GET /v1/admin/listen` — 监听热 Rebind（ListenSupervisor，任务级小网关）
+//! - `PUT  /v1/admin/password` — admin 密码热更（门外：会话或 loopback）
+//! - `GET  /v1/admin/status` — 首页仪表盘自检（mode/bind/设密/uptime，7 键冻结）
 //! - `GET  /`、`/assets/*` 等 — 静态 UI（`tower_http::ServeDir` 挂 `JEV_UI_DIST`，
 //!   默认 `ui/dist`；同源托管简化 CORS —— #43 容器交付）
 //!
-//! **双态（#43，docs/12 §一）**：`mode=local`（默认）= 上述端点全部免鉴权、
-//! 绑 `127.0.0.1:11435`（现状零变化）；`mode=cloud` = `/v1` 调用 token、
-//! admin 会话密码门（见 [`auth`]），绑 `0.0.0.0:11435`（部署形态偏差 ——
-//! 鉴权而非绑定位承担防护，备案 `docs/deployment.md`）。**mode 只管鉴权，
-//! 不涉及上游拓扑**（拓扑不区分原则）。
+//! **双态（#43，docs/12 §一）**：`mode=local`（默认）= loopback peer 免鉴权
+//! （非 loopback → 403 兜底）；`mode=cloud` = `/v1` 调用 token、admin 会话密码门
+//! （见 [`auth`]）。**mode 只管鉴权，不涉及上游拓扑**（拓扑不区分原则）。
+//!
+//! **bind 与 mode 解耦 + 热切（ListenSupervisor 修订裁决）**：非显式 bind 时
+//! 成对默认（local → `127.0.0.1:11435`、cloud → `0.0.0.0:11435`），mode 翻转
+//! 联动热 Rebind；显式 bind（文件/`JEV_BIND`）恒绑不动、peer 校验兜底。
+//! Listen 层独立 supervisor 任务（[`listen`]）—— 换地址零进程重启、零内核重建。
 //!
 //! 错误映射：JevError → HTTP 状态码由 JevError::http_status() 决定。
 //! 错误体 `error` 字符串一律过 `jev_core::redact`（contracts/04 §2 红线 4）。
@@ -25,6 +32,7 @@
 pub mod admin;
 pub mod auth;
 pub mod config;
+pub mod listen;
 
 use axum::{
     body::Bytes,
@@ -32,7 +40,7 @@ use axum::{
     http::{header, HeaderValue, Method, StatusCode},
     middleware,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
     Json, Router,
 };
 use config::{Config, ConfigError};
@@ -67,6 +75,10 @@ pub struct AppState {
     pub known_keys: Arc<RwLock<Vec<String>>>,
     /// #43 双态鉴权运行态（mode / 调用 token / admin 密码 / 内存会话）。
     pub auth: Arc<auth::AuthState>,
+    /// ListenSupervisor 句柄（`main`/测试经 [`listen::start`] 注入；
+    /// `OnceLock` = build_state 时 supervisor 尚未创建）。缺失时 mode 翻转
+    /// `rebind.skipped="no listener"`、`PUT /listen` → 503（oneshot 测试路径）。
+    pub listen: Arc<std::sync::OnceLock<listen::ListenHandle>>,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -112,6 +124,8 @@ fn known_keys_snapshot(state: &AppState) -> Vec<String> {
 /// - `read_api_key` 现为「明文 api_key 优先、api_key_env 兼容」（Q4=b）
 /// - 启动即收集已知密钥供 redact
 pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
+    // 进程启动时刻（status.uptime_s 基准；多次 build_state 只取首次 —— 测试同进程共享）
+    admin::PROCESS_START.get_or_init(std::time::Instant::now);
     let route_edges = config.route_edges();
     let mut registry = Registry::new(route_edges);
 
@@ -184,20 +198,24 @@ pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
         config_path,
         known_keys: Arc::new(RwLock::new(known_keys)),
         auth: Arc::new(auth::AuthState::from_config(&config)),
+        listen: Arc::new(std::sync::OnceLock::new()),
     }
 }
 
 /// 可测装配入口（A8 基座）：state → axum `Router`（CORS 白名单 + 双态鉴权中间件
 /// + admin 路由 + 静态 UI 托管）。
 ///
-/// 服务器由调用方绑定（`main` 按 `mode` 选绑：local → `127.0.0.1:11435`
-/// —— contracts/05 §1 原状；cloud → `0.0.0.0:11435` —— **部署形态偏差**，
-/// 鉴权而非绑定位承担防护，备案 `docs/deployment.md`）。
+/// 服务器由调用方经 [`listen::start`] 绑定（`main` 传 [`config::effective_bind`]
+/// 结果：非显式 → 成对默认（local `127.0.0.1:11435` / cloud `0.0.0.0:11435`）；
+/// 显式 bind 优先）。**bind 与 mode 解耦**，换地址走 ListenSupervisor 热 Rebind
+/// —— 零进程重启；偏差备案 `docs/deployment.md`。
 ///
-/// #43 中间件挂载拓扑（**local 态两门皆直通 —— 端点行为与接入前逐字节一致**）：
-/// - 公开门：`GET /health`（探活放行）、`POST /v1/admin/login`（换会话，自身不能有门）
+/// #43 中间件挂载拓扑（**local 态 loopback 两门直通 —— 端点行为与接入前一致**；
+/// 非 loopback peer → 403 兜底）：
+/// - 公开门：`GET /health`（探活放行）、`POST /v1/admin/login`（换会话，自身不能有门）、
+///   `PUT /v1/admin/password`（in-handler 鉴权：会话 **或** loopback —— 忘密恢复）
 /// - `/v1/systemone` + `/v1/models` → [`auth::require_call_token`]
-/// - 其余 `/v1/admin/*` → [`auth::require_admin_session`]
+/// - 其余 `/v1/admin/*`（含 `mode`、`listen`）→ [`auth::require_admin_session`]
 /// - 非以上路径 → [`ServeDir`]（`JEV_UI_DIST`，默认 `ui/dist`；同源托管简化 CORS）
 pub fn build_app(state: AppState) -> Router {
     // CORS 白名单（contracts/05 §5 M1+；替换 very_permissive 已知债务）：
@@ -217,12 +235,13 @@ pub fn build_app(state: AppState) -> Router {
     let ui_dist =
         std::env::var("JEV_UI_DIST").unwrap_or_else(|_| "ui/dist".to_string());
 
-    // 公开门（无鉴权中间件）
+    // 公开门（无鉴权中间件 —— login/password 自带逻辑：password in-handler 鉴权）
     let public = Router::new()
         .route("/health", get(health_handler))
-        .route("/v1/admin/login", post(auth::admin_login));
+        .route("/v1/admin/login", post(auth::admin_login))
+        .route("/v1/admin/password", put(admin::put_password));
 
-    // 调用 token 门（cloud；local 直通）
+    // 调用 token 门（cloud；local loopback 直通、非 loopback 403）
     let v1 = Router::new()
         .route("/v1/systemone", post(systemone_handler))
         .route("/v1/models", get(models_handler))
@@ -231,7 +250,8 @@ pub fn build_app(state: AppState) -> Router {
             auth::require_call_token,
         ));
 
-    // admin 会话门（cloud；local 直通）
+    // admin 会话门（cloud；local loopback 直通、非 loopback 403）——
+    // mode / listen 热切端点在此门内（cloud 翻转需会话，防匿名拆锁）
     let admin_routes = Router::new()
         .route(
             "/v1/admin/providers",
@@ -245,6 +265,12 @@ pub fn build_app(state: AppState) -> Router {
             "/v1/admin/providers/:id/probe",
             post(admin::probe_provider),
         )
+        .route("/v1/admin/mode", put(admin::put_mode))
+        .route(
+            "/v1/admin/listen",
+            get(admin::get_listen).put(admin::put_listen),
+        )
+        .route("/v1/admin/status", get(admin::get_status))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_admin_session,

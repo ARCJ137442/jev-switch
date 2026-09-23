@@ -19,15 +19,27 @@
 #
 # ── 双态开关（#43 · docs/12 §一）────────────────────────────────────
 # mode 只管鉴权，**不涉及上游拓扑**（拓扑不区分：以内核所在位置访问上游）。
-#   mode = "local"   # 默认：绑 127.0.0.1:11435，完全不校验 token/密码（现状）
-#   mode = "cloud"   # 绑 0.0.0.0:11435，/v1 要 Bearer 调用 token，admin 要会话
+#   mode = "local"   # 默认：loopback 免鉴权（非 loopback peer → 403 应用层兜底）
+#   mode = "cloud"   # /v1 要 Bearer 调用 token，admin 要会话
 # env 覆盖：JEV_SWITCH_MODE=local|cloud（非法值拒绝启动）。
+# **运行时热切（零进程重启）**：PUT /v1/admin/mode {"mode":"cloud"}
+#   —— 无密码首次激活 cloud 必须同请求带 admin_password（fail-closed 指引）。
+#
+# ── 监听地址（bind 与 mode 解耦 · ListenSupervisor 热 Rebind）────────
+# 未配置 bind（默认）→ 成对默认随 mode：local=127.0.0.1:11435、cloud=0.0.0.0:11435；
+# mode 翻转自动热 Rebind 到对端默认（local 对 LAN 内核级关端口）。
+#   # bind = "0.0.0.0:11435"   # 显式 bind（或 env JEV_BIND）：恒绑此值，mode 翻转不动
+#                              #   监听（rebind.skipped="explicit bind"），local 态由
+#                              #   peer 403 兜底；运行时改址：PUT /v1/admin/listen
+#                              #   {"addr":"ip:port"} 显式化 / {"addr":"auto"} 恢复成对默认
 #
 # cloud 态鉴权（可选；local 态忽略这两项）：
 #   auth_tokens = ["tok-…"]        # /v1 调用 token（也可写 [[auth_tokens]] token="…"
 #                                  #   或 env JEV_AUTH_TOKENS=逗号分隔，env 优先）
 #   admin_password = "…"           # admin 登录密码（明文 toml —— Q4=b 哲学，0600 文件；
-#                                  #   env JEV_ADMIN_PASSWORD 优先；UI 只见会话，永不见密码）
+#                                  #   env JEV_ADMIN_PASSWORD 优先；UI 只见会话，永不见密码；
+#                                  #   运行时热更：PUT /v1/admin/password（会话全废）——
+#                                  #   cloud 忘密恢复 = 本机 loopback 一行 curl）
 # 部署细节与风险块：docs/deployment.md。
 
 [providers.vercel]

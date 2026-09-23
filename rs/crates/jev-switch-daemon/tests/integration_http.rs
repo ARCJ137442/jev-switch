@@ -49,13 +49,15 @@ fn temp_config(name: &str, content: &str) -> std::path::PathBuf {
 
 /// 直接构造 state（自定义 Registry —— fake/wiremock 上游；admin 路径用 temp config）。
 /// `auth` 用 `Default`（mode=local —— 集成基座跑 local 态回归；cloud 态鉴权有
-/// `auth.rs` 模块测试专覆盖）。
+/// `auth.rs` 模块测试专覆盖）。`listen` 留空 OnceLock（oneshot 路径：
+/// mode 翻转 rebind.skipped="no listener"、`PUT /listen` → 503）。
 fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
     AppState {
         registry: Arc::new(registry),
         config_path,
         known_keys: Arc::new(RwLock::new(Vec::new())),
         auth: Arc::new(jev_switch_daemon::auth::AuthState::default()),
+        listen: Arc::new(std::sync::OnceLock::new()),
     }
 }
 
