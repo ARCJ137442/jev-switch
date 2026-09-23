@@ -37,6 +37,11 @@ enabled = true
 [router]
 "laya-english" = "laya"
 "typesafe-ai/jev" = "vercel"
+# 同一 Laya 提供商（同一地址 18765）下的更多模型 —— 一个 API 地址 = 一个提供商，
+# 多 checkpoint = 同提供商不同模型（LM Studio 同款标准；见 docs/11-提供商与模型接口路由.md）。
+# 服务端 scripts/laya_multi_server.py 按 model id 分派 english / multilingual / router。
+"laya-multilingual" = "laya"
+"laya-router" = "laya"
 
 # ── 模型路由 DAG（contracts/03 §2 [[routes]]）────────────────────────
 # 示例一：对外 id "jev" 双候选（同模型可切换）——
@@ -67,4 +72,15 @@ left = "local/*"
 match = "prefix"
 right = "laya"
 priority = 40
+on_error = "next"
+
+# 示例三：公共 id 落到「提供商内的模型接口」——
+# "jev-zh" 经 upstream_model 改写为 Laya 提供商的多语言模型接口 laya-multilingual
+# （路由终点 = (提供商, 模型) 二元组，不是裸提供商；见 docs/11-提供商与模型接口路由.md）。
+[[routes]]
+left = "jev-zh"
+match = "exact"
+right = "laya"
+upstream_model = "laya-multilingual"
+priority = 20
 on_error = "next"
