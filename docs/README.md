@@ -24,6 +24,7 @@
 | `09-用户叙事评估报告-MiMo.md` | 10 叙事 vs v0.1.0 匹配度 + 三标记（openai-compat 不做 / fallback·shadow 待讨论 / 端口 11435 已做）（作者 **MiMo mimo-v2.6-flash**） | 已存档 |
 | `10-v0.5.0-验收报告.md` | 全量 DoD 复跑 + **P2-7 CDP 12/12**（第九节 + 截图归档 `design/screenshots-v0.5.0/`） | 已验收 |
 | `11-提供商与模型接口路由.md` | **可调用端点 = 地址×模型×token 三固定**；Laya 单提供商多模型实证；Routing UI「提供商卡片 + 端口」表现（作者 **MiMo mimo-v2.6-flash**） | 已写 |
+| `12-路线收缩与三线作战计划.md` | **双态战略（本地可路由·云端可中转）** + 冻结清单 + UI/Docker/Tauri 三线计划 + 今晚开源 checklist（super-questioning 8 题裁决存档，作者 **MiMo mimo-v2.6-flash**） | **现行计划** |
 | **`contracts/00-INDEX.md`** | **六份契约正文入口**（作者 **Mimo-V2.6-Pro**） | **Phase 0 完成** |
 | `contracts/01-协议契约.md` | Jev 内核类型与不变量 | 定稿 |
 | `contracts/02-扩展点契约.md` | serde 同构：冻结 trait + 黄金测试 | 定稿 |
