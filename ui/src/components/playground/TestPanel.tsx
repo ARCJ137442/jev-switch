@@ -69,8 +69,9 @@ export function TestPanel({
 
     const req: JevRequest = {
       model,
-      // state 语义 = unknown（contracts/01 §2：必填，允许 null/标量 — 编辑器解析后直发）
-      state: parsedState,
+      // JSON.parse 产物 ⊆ JsonValue（contracts/01 §2：必填，允许 null/标量）；
+      // 解析句柄声明为 unknown，此处收窄到生成类型 `state: JsonValue`（B5）
+      state: parsedState as JevRequest['state'],
       questions: parsedQuestions as JevRequest['questions'],
     };
 
@@ -415,6 +416,19 @@ function AnswerSummary({
   );
 }
 
+/**
+ * wire 双拼写读容忍（contracts/01 §5）— 生成 `Usage` 只有 Rust 侧 snake 字段，
+ * camel 别名（jev-life 驼峰）在渲染层兜读：结构超集，可直接赋值无需 cast。
+ */
+interface UsageWire {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  reasoning_tokens?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  reasoningTokens?: number | null;
+}
+
 /** 计量区（contracts/01 §5 / contracts/06 §5 / design/01 §6.3 计量行） */
 function Metering({
   response,
@@ -427,7 +441,7 @@ function Metering({
   measuredLatencyMs: number | null;
   className?: string;
 }) {
-  const u = response.usage;
+  const u: UsageWire | null | undefined = response.usage;
   // snake 优先、camel 读容忍（contracts/01 §5 双拼写）
   const pick = (snake: unknown, camel: unknown): number | null =>
     typeof snake === 'number' ? snake : typeof camel === 'number' ? camel : null;

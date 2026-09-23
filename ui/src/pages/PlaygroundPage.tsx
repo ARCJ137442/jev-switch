@@ -7,7 +7,7 @@ import {
   BASE,
   DEFAULT_MODEL_OPTIONS,
   fetchModels,
-  type ModelInfo,
+  type ModelEntry,
 } from '../api';
 import { EXAMPLES, type ExamplePayload } from '../examples';
 
@@ -18,7 +18,7 @@ import { EXAMPLES, type ExamplePayload } from '../examples';
  */
 export function PlaygroundPage() {
   const [model, setModel] = useState<string>(DEFAULT_MODEL_OPTIONS[0].value);
-  const [serverModels, setServerModels] = useState<ModelInfo[]>([]);
+  const [serverModels, setServerModels] = useState<ModelEntry[]>([]);
   const server = useServerStatus();
 
   // Inputs — lifted up so example chips can rewrite them
