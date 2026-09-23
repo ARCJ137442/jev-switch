@@ -16,6 +16,19 @@
 #   - admin PUT 写回会保留本文件其它段，但**注释不保留**（toml 往返限制）
 #
 # MVP 范围（M0）：2 provider + 模型路由 DAG（[[routes]]）+ 旧 [router] 兼容表。
+#
+# ── 双态开关（#43 · docs/12 §一）────────────────────────────────────
+# mode 只管鉴权，**不涉及上游拓扑**（拓扑不区分：以内核所在位置访问上游）。
+#   mode = "local"   # 默认：绑 127.0.0.1:11435，完全不校验 token/密码（现状）
+#   mode = "cloud"   # 绑 0.0.0.0:11435，/v1 要 Bearer 调用 token，admin 要会话
+# env 覆盖：JEV_SWITCH_MODE=local|cloud（非法值拒绝启动）。
+#
+# cloud 态鉴权（可选；local 态忽略这两项）：
+#   auth_tokens = ["tok-…"]        # /v1 调用 token（也可写 [[auth_tokens]] token="…"
+#                                  #   或 env JEV_AUTH_TOKENS=逗号分隔，env 优先）
+#   admin_password = "…"           # admin 登录密码（明文 toml —— Q4=b 哲学，0600 文件；
+#                                  #   env JEV_ADMIN_PASSWORD 优先；UI 只见会话，永不见密码）
+# 部署细节与风险块：docs/deployment.md。
 
 [providers.vercel]
 kind = "vercel"

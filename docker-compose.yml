@@ -1,0 +1,38 @@
+# Jev-Switch 单命令云部署（任务 #43 · docs/12 §四线1）
+#
+# 用法：
+#   1.（首次）准备 .env —— **cloud 态两个凭据必填**（缺失 = fail-closed 全 401）：
+#        JEV_AUTH_TOKENS=tok-…        # /v1 调用 token（逗号可列多个）
+#        JEV_ADMIN_PASSWORD=…         # admin 登录密码
+#        AI_GATEWAY_API_KEY=sk-…      # 可选：Vercel 上游 key（providers.toml 用）
+#   2. docker compose up -d
+#   3. curl http://127.0.0.1:11435/health
+#
+# 配置真值：./data/providers.toml（宿主 bind mount；首启自动从 example 播种）。
+# 用目录挂载而非单文件 —— 宿主文件不存在时 docker 会误建**同名目录**的经典坑。
+# .env 已在 .gitignore（密钥不进仓库）；providers.toml 里的明文 key 同理勿提交。
+
+services:
+  jev-switch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jev-switch:latest
+    container_name: jev-switch
+    ports:
+      # 容器内 mode=cloud 绑 0.0.0.0:11435（部署形态偏差，见 docs/deployment.md）
+      - "11435:11435"
+    environment:
+      # 默认 cloud（本文件就是云部署线）；要本机免鉴权体验可 .env 设 JEV_SWITCH_MODE=local
+      JEV_SWITCH_MODE: ${JEV_SWITCH_MODE:-cloud}
+      # 非空 env 完全覆盖 providers.toml 内 auth_tokens（env 注入，值不进镜像/日志）
+      JEV_AUTH_TOKENS: ${JEV_AUTH_TOKENS:-}
+      # env 优先于 providers.toml 内 admin_password
+      JEV_ADMIN_PASSWORD: ${JEV_ADMIN_PASSWORD:-}
+      # Vercel 上游（providers.example.toml 的 api_key_env 指向它；不设则跳过该上游）
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      # 配置真值源（contracts/04 §1）：./data/providers.toml —— 0600 由 daemon 写回时收紧
+      - ./data:/data
+    restart: unless-stopped

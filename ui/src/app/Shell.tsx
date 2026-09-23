@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BASE, fetchHealth } from '../api';
+import { setAuthErrorHandler } from '../api/admin';
 import { ConflictBanner } from '../components/ConflictBanner';
+import { AdminLogin } from '../components/AdminLogin';
 import { FeedbackProvider, useConflictControl, useToast } from './feedback';
 import pkg from '../../package.json';
 
@@ -92,8 +94,24 @@ function ShellFrame({ route, children }: ShellProps) {
   const { toasts } = useToast();
   const endpointLabel = BASE.replace(/^https?:\/\//, '');
 
+  // #43 cloud 态：任一 admin 请求 401/403 → 登录小窗；成功后整页刷新重拉
+  // （极简：避免逐页接线重拉逻辑；local 态服务端不产 401，回调永不触发）。
+  const [needLogin, setNeedLogin] = useState(false);
+  useEffect(() => {
+    setAuthErrorHandler(() => setNeedLogin(true));
+    return () => setAuthErrorHandler(null);
+  }, []);
+
   return (
     <div className="flex min-h-full flex-col bg-bg text-ink">
+      {needLogin && (
+        <AdminLogin
+          onSuccess={() => {
+            setNeedLogin(false);
+            window.location.reload();
+          }}
+        />
+      )}
       {/* 顶栏第一行：logo + 三页导航 */}
       <header className="border-b border-border bg-bg">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-3.5">

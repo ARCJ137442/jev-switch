@@ -55,8 +55,41 @@ export function getBase(): string {
   if (typeof window !== 'undefined') {
     const fromGlobal = (window as unknown as { __JEV_BASE__?: string }).__JEV_BASE__;
     if (typeof fromGlobal === 'string' && fromGlobal.length > 0) return fromGlobal;
+    // #43 同源托管：页面由 daemon 自己服务（端口 11435 = 本 daemon）→ 空 base
+    // = 相对路径 = 当前源。否则 cloud 态远程浏览器会把 API 打到**它自己的**
+    // 127.0.0.1:11435（本地 dev 5173 不命中此分支，仍走 DEFAULT_BASE）。
+    // 反代到 443/80 等其它端口 → 运行时设 `window.__JEV_BASE__`（见 docs/deployment.md）。
+    if (window.location.port === String(PORT)) return '';
   }
   return DEFAULT_BASE;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   #43 cloud 态调用 token（双 token 分权之「/v1 调用 token」）：
+   有则附带 `Authorization: Bearer …`，无则一个头都不加 —— **local 态零打扰**
+   （不设 token 的现状请求逐字节不变）。
+   取值优先级：`window.__JEV_TOKEN__` → `localStorage['jev_token']`。
+   admin 会话是另一枚 token，见 api/admin.ts（不共用）。
+   ══════════════════════════════════════════════════════════════════ */
+
+export function getCallToken(): string | null {
+  if (typeof window !== 'undefined') {
+    const fromGlobal = (window as unknown as { __JEV_TOKEN__?: string }).__JEV_TOKEN__;
+    if (typeof fromGlobal === 'string' && fromGlobal.length > 0) return fromGlobal;
+    try {
+      const stored = window.localStorage.getItem('jev_token');
+      if (stored && stored.length > 0) return stored;
+    } catch {
+      // localStorage 不可用（隐私模式等）→ 视为未设
+    }
+  }
+  return null;
+}
+
+/** 有调用 token 才出 `Authorization` 头（cloud）；local 态恒为空对象。 */
+function callAuthHeaders(): Record<string, string> {
+  const token = getCallToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 /**
@@ -66,7 +99,7 @@ export function getBase(): string {
  * （旧纯文本 `jev-switch MVP` 兼容分支已删）。
  */
 export async function fetchHealth(): Promise<HealthBody> {
-  const res = await fetch(`${getBase()}/health`);
+  const res = await fetch(`${getBase()}/health`, { headers: callAuthHeaders() });
   if (!res.ok) throw new Error(`health ${res.status}`);
   let body: unknown;
   try {
@@ -85,7 +118,7 @@ export async function fetchHealth(): Promise<HealthBody> {
  * （`normalizeModels` 兼容桥与旧 `{models:…}` 键已随 H1 删除）。
  */
 export async function fetchModels(): Promise<ModelsResponse> {
-  const res = await fetch(`${getBase()}/v1/models`);
+  const res = await fetch(`${getBase()}/v1/models`, { headers: callAuthHeaders() });
   if (!res.ok) throw new Error(`models ${res.status}`);
   return (await res.json()) as ModelsResponse;
 }
@@ -115,7 +148,7 @@ export class SystemOneError extends Error {
 export async function postSystemOne(req: JevRequest): Promise<JevResponse> {
   const res = await fetch(`${getBase()}/v1/systemone`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...callAuthHeaders() },
     body: JSON.stringify(req),
   });
   const text = await res.text();

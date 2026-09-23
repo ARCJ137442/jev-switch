@@ -1,0 +1,15 @@
+# 构建 context 最小化（任务 #43 容器交付配套 —— 报告已备案：
+# 白名单外新增根文件；不排除则 rs/target ≈ 8GB + node_modules 全量进 context，
+# compose build 实际不可用）
+.git
+rs/target
+ui/node_modules
+# ui/dist 由容器内 stage ui 重新构建，宿主产物不进 context
+ui/dist
+# 运行时数据与密钥绝不进镜像
+data
+.env
+.env.*
+*.log
+docs
+scripts

@@ -59,10 +59,59 @@ export interface ProbeResponse {
   error: string | null;
 }
 
-/* ---------- 通用请求 ---------- */
+/* ---------- 通用请求（#43 cloud：admin 会话附带 + 401/403 全局上报） ---------- */
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getBase()}${path}`, init);
+/**
+ * #43 admin 会话（双 token 分权之「管理会话」，**与 api.ts 调用 token 分池**）：
+ * `POST /v1/admin/login {password}` → `{token, expires_in}` → 存
+ * `window.__JEV_ADMIN_SESSION__` + `localStorage['jev_admin_session']`。
+ * 后续 admin 请求带 `Authorization: Bearer <会话>`。密码**只进 login 一次**，
+ * 绝不落 localStorage（contracts/04：暴露面必须密文 —— 会话即短时凭据）。
+ * local 态：服务端不校验，未登录也不带头 → 零打扰（现状不变）。
+ */
+export function getAdminSession(): string | null {
+  if (typeof window !== 'undefined') {
+    const fromGlobal = (window as unknown as { __JEV_ADMIN_SESSION__?: string })
+      .__JEV_ADMIN_SESSION__;
+    if (typeof fromGlobal === 'string' && fromGlobal.length > 0) return fromGlobal;
+    try {
+      const stored = window.localStorage.getItem('jev_admin_session');
+      if (stored && stored.length > 0) return stored;
+    } catch {
+      // localStorage 不可用 → 视为未登录
+    }
+  }
+  return null;
+}
+
+function storeAdminSession(token: string): void {
+  if (typeof window !== 'undefined') {
+    (window as unknown as { __JEV_ADMIN_SESSION__?: string }).__JEV_ADMIN_SESSION__ = token;
+    try {
+      window.localStorage.setItem('jev_admin_session', token);
+    } catch {
+      // 存不下则本次会话仅内存态（刷新后重登）—— 不阻断
+    }
+  }
+}
+
+/** 401/403 全局上报回调（Shell 注册 → 弹登录小窗）。null = 未注册（local 态恒 null 触发不到）。 */
+let authErrorHandler: ((status: number) => void) | null = null;
+
+export function setAuthErrorHandler(fn: ((status: number) => void) | null): void {
+  authErrorHandler = fn;
+}
+
+/**
+ * `POST /v1/admin/login` → 成功则存会话 token（不返回给调用方 —— 密码只经此一跳）。
+ * 失败抛 `AdminApiError`（401 密码错 / 500 未配置 —— UI 显示 message 即可）。
+ */
+export async function loginAdmin(password: string): Promise<void> {
+  const res = await fetch(`${getBase()}/v1/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
   const text = await res.text();
   let body: unknown = null;
   try {
@@ -75,6 +124,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body !== null && typeof body === 'object' && 'error' in body
         ? String((body as { error: unknown }).error)
         : `HTTP ${res.status}`;
+    throw new AdminApiError(message, res.status);
+  }
+  if (body === null || typeof body !== 'object') {
+    throw new AdminApiError(`bad login response (status ${res.status})`, res.status);
+  }
+  const token = (body as { token?: unknown }).token;
+  if (typeof token !== 'string' || token.length === 0) {
+    throw new AdminApiError('login response missing token', res.status);
+  }
+  storeAdminSession(token);
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  const session = getAdminSession();
+  if (session) headers.set('Authorization', `Bearer ${session}`);
+  const res = await fetch(`${getBase()}${path}`, { ...init, headers });
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = null;
+  }
+  if (!res.ok) {
+    const message =
+      body !== null && typeof body === 'object' && 'error' in body
+        ? String((body as { error: unknown }).error)
+        : `HTTP ${res.status}`;
+    if (res.status === 401 || res.status === 403) {
+      // cloud 态会话缺失/过期 → 全局登录小窗（Shell 注册）；页面照常拿到异常
+      authErrorHandler?.(res.status);
+      throw new AdminApiError(message, res.status);
+    }
     throw new Error(message);
   }
   if (body === null) throw new Error(`bad JSON (status ${res.status})`);

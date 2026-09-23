@@ -12,6 +12,10 @@
 //! 6. failover：双候选首败次成 → 200 + `upstream_calls==2`（wiremock）
 //! 7. `GET /v1/models` 不可路由过滤（**回归护栏**：6af3a47）
 //! 8. `GET /v1/admin/providers` 无明文（HTTP 级复核 —— 与 A7 单测不同层）
+//!
+//! #43 注：基座全部 local 态（`state_with` → `AuthState::default()`）——
+//! 上述 8 条同时兼任「local 态零鉴权回归」的 HTTP 级护栏；cloud 态鉴权
+//! 401/200/login 全套在 `src/auth.rs` 模块测试。
 
 use axum::body::Body;
 use axum::http::Request;
@@ -44,11 +48,14 @@ fn temp_config(name: &str, content: &str) -> std::path::PathBuf {
 }
 
 /// 直接构造 state（自定义 Registry —— fake/wiremock 上游；admin 路径用 temp config）。
+/// `auth` 用 `Default`（mode=local —— 集成基座跑 local 态回归；cloud 态鉴权有
+/// `auth.rs` 模块测试专覆盖）。
 fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
     AppState {
         registry: Arc::new(registry),
         config_path,
         known_keys: Arc::new(RwLock::new(Vec::new())),
+        auth: Arc::new(jev_switch_daemon::auth::AuthState::default()),
     }
 }
 

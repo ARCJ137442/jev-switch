@@ -1,25 +1,36 @@
 //! Jev-Switch daemon 库（A7 拆出 —— bin 只剩装配入口；`tests/` 集成基座可
 //! `use jev_switch_daemon::{build_app, build_state, AppState}` 进程内起 app）。
 //!
-//! 整合：jev-protocol / jev-core / jev-adapters / config / axum HTTP server。
+//! 整合：jev-protocol / jev-core / jev-adapters / config / auth / axum HTTP server。
 //!
 //! 路由：
 //! - `POST /v1/systemone` — 主入口：Jev 协议请求
-//! - `GET  /health`        — liveness
+//! - `GET  /health`        — liveness（**双态皆放行** —— 探活需要）
 //! - `GET  /v1/models`     — 列出可达 model + upstream + capability
 //! - `GET/PUT /v1/admin/providers`、`GET/PUT /v1/admin/routes`、
-//!   `POST /v1/admin/providers/{id}/probe` — Admin（A7；loopback 服务器天然仅本机）
+//!   `POST /v1/admin/providers/{id}/probe` — Admin（A7）
+//! - `POST /v1/admin/login` — #43 cloud 态管理登录（换短时会话 token；门外免会话）
+//! - `GET  /`、`/assets/*` 等 — 静态 UI（`tower_http::ServeDir` 挂 `JEV_UI_DIST`，
+//!   默认 `ui/dist`；同源托管简化 CORS —— #43 容器交付）
+//!
+//! **双态（#43，docs/12 §一）**：`mode=local`（默认）= 上述端点全部免鉴权、
+//! 绑 `127.0.0.1:11435`（现状零变化）；`mode=cloud` = `/v1` 调用 token、
+//! admin 会话密码门（见 [`auth`]），绑 `0.0.0.0:11435`（部署形态偏差 ——
+//! 鉴权而非绑定位承担防护，备案 `docs/deployment.md`）。**mode 只管鉴权，
+//! 不涉及上游拓扑**（拓扑不区分原则）。
 //!
 //! 错误映射：JevError → HTTP 状态码由 JevError::http_status() 决定。
 //! 错误体 `error` 字符串一律过 `jev_core::redact`（contracts/04 §2 红线 4）。
 
 pub mod admin;
+pub mod auth;
 pub mod config;
 
 use axum::{
     body::Bytes,
     extract::State,
     http::{header, HeaderValue, Method, StatusCode},
+    middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -37,7 +48,10 @@ use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    services::ServeDir,
+};
 
 /// daemon 装配状态（`build_state` 造、`build_app` 消费；`Clone` 供 axum + 测试共享句柄）。
 #[derive(Clone)]
@@ -51,6 +65,8 @@ pub struct AppState {
     /// 需要脱敏的已知明文密钥集（配置 api_key + 启动/GET/PUT 时刷新）——
     /// ErrorBody / tracing / admin 响应共用（contracts/04 §2 Redact）。
     pub known_keys: Arc<RwLock<Vec<String>>>,
+    /// #43 双态鉴权运行态（mode / 调用 token / admin 密码 / 内存会话）。
+    pub auth: Arc<auth::AuthState>,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -150,46 +166,95 @@ pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
             }
         }
     }
+    // #43：调用 token / admin 密码也纳入 redact 集（ErrorBody / tracing 若意外
+    // 拼进凭据值 → 掩码；contracts/04 §2 红线 4 扩展面）。
+    for t in config.effective_auth_tokens() {
+        if !t.is_empty() && !known_keys.contains(&t) {
+            known_keys.push(t);
+        }
+    }
+    if let Some(pw) = config.effective_admin_password() {
+        if !pw.is_empty() && !known_keys.contains(&pw) {
+            known_keys.push(pw);
+        }
+    }
 
     AppState {
         registry: Arc::new(registry),
         config_path,
         known_keys: Arc::new(RwLock::new(known_keys)),
+        auth: Arc::new(auth::AuthState::from_config(&config)),
     }
 }
 
-/// 可测装配入口（A8 基座）：state → axum `Router`（含 CORS 白名单 + admin 路由）。
+/// 可测装配入口（A8 基座）：state → axum `Router`（CORS 白名单 + 双态鉴权中间件
+/// + admin 路由 + 静态 UI 托管）。
 ///
-/// 服务器由调用方绑定；生产路径 `main` 绑 `127.0.0.1:11435`（loopback 天然仅本机
-/// —— contracts/05 §1「Admin 仅绑 127.0.0.1」）。
+/// 服务器由调用方绑定（`main` 按 `mode` 选绑：local → `127.0.0.1:11435`
+/// —— contracts/05 §1 原状；cloud → `0.0.0.0:11435` —— **部署形态偏差**，
+/// 鉴权而非绑定位承担防护，备案 `docs/deployment.md`）。
+///
+/// #43 中间件挂载拓扑（**local 态两门皆直通 —— 端点行为与接入前逐字节一致**）：
+/// - 公开门：`GET /health`（探活放行）、`POST /v1/admin/login`（换会话，自身不能有门）
+/// - `/v1/systemone` + `/v1/models` → [`auth::require_call_token`]
+/// - 其余 `/v1/admin/*` → [`auth::require_admin_session`]
+/// - 非以上路径 → [`ServeDir`]（`JEV_UI_DIST`，默认 `ui/dist`；同源托管简化 CORS）
 pub fn build_app(state: AppState) -> Router {
     // CORS 白名单（contracts/05 §5 M1+；替换 very_permissive 已知债务）：
     // vite dev 两种打开方式都可能 —— 127.0.0.1 与 localhost 都放行。
-    // admin 挂同一 loopback server → 沿用同一白名单（A7 备案：契约 §5「Admin 默认
-    // 不跨源」与 dev 形态的张力 —— 不擅自收紧，偏差项交主会话/用户裁决，见 A7 报告）。
+    // ADMINISTRATION 头：cloud 态 dev UI 跨源携带 `Authorization`（调用 token /
+    // admin 会话）需要预检放行 —— 只加请求头，**origin 白名单不扩**（任务书 B：不扩
+    // 公网 origin；跨源访问自行配置见 docs/deployment.md）。
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list([
             HeaderValue::from_static("http://127.0.0.1:5173"),
             HeaderValue::from_static("http://localhost:5173"),
         ]))
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
-        .allow_headers([header::CONTENT_TYPE]);
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
-    Router::new()
-        .route("/v1/systemone", post(systemone_handler))
+    // 静态 UI 目录：容器内指到 /app/ui/dist；本地默认仓库相对 ui/dist。
+    let ui_dist =
+        std::env::var("JEV_UI_DIST").unwrap_or_else(|_| "ui/dist".to_string());
+
+    // 公开门（无鉴权中间件）
+    let public = Router::new()
         .route("/health", get(health_handler))
+        .route("/v1/admin/login", post(auth::admin_login));
+
+    // 调用 token 门（cloud；local 直通）
+    let v1 = Router::new()
+        .route("/v1/systemone", post(systemone_handler))
         .route("/v1/models", get(models_handler))
-        // Admin（contracts/05 §1 端点表）
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_call_token,
+        ));
+
+    // admin 会话门（cloud；local 直通）
+    let admin_routes = Router::new()
         .route(
             "/v1/admin/providers",
             get(admin::get_providers).put(admin::put_providers),
         )
-        .route("/v1/admin/routes", get(admin::get_routes).put(admin::put_routes))
+        .route(
+            "/v1/admin/routes",
+            get(admin::get_routes).put(admin::put_routes),
+        )
         .route(
             "/v1/admin/providers/:id/probe",
             post(admin::probe_provider),
         )
-        .layer(cors)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_admin_session,
+        ));
+
+    public
+        .merge(v1)
+        .merge(admin_routes)
+        .layer(cors) // 最后加的层 = 最外层：预检 OPTIONS 先过 CORS
+        .fallback_service(ServeDir::new(ui_dist))
         .with_state(state)
 }
 
@@ -729,6 +794,8 @@ mod tests {
     }
 
     /// CORS 白名单 origin 字面量冻结（vite dev 两种打开方式）。
+    /// #43：allow_headers 扩 `AUTHORIZATION`（cloud 态 dev UI 携带 Bearer 预检）——
+    /// origin 白名单**不扩**（不加公网 origin）。
     #[test]
     fn cors_allowlist_origins_frozen() {
         let layer = CorsLayer::new()
@@ -737,7 +804,7 @@ mod tests {
                 HeaderValue::from_static("http://localhost:5173"),
             ]))
             .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
-            .allow_headers([header::CONTENT_TYPE]);
+            .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
         // tower-http 不提供只读 introspection；构造成功 + 预检行为由 curl 实测覆盖。
         // 此处至少锁定构造路径可编译（防 very_permissive 回潮需人工改回本函数）。
         let _ = layer;

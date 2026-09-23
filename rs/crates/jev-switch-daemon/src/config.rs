@@ -39,6 +39,118 @@ pub enum ConfigError {
     MissingKind(String),
     #[error("invalid route graph: {0}")]
     Cycle(String),
+    #[error("invalid mode '{0}' (expected local|cloud)")]
+    InvalidMode(String),
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   双态开关（docs/12 §一 · 任务 #43 —— 裁决已锁）
+   local：绑 127.0.0.1，完全免鉴权（现状零变化）
+   cloud：绑 0.0.0.0（部署形态偏差，见 docs/deployment.md），
+          /v1 需 Bearer 调用 token，admin 需登录会话 —— mode 只管鉴权，
+          **不涉及上游拓扑**（拓扑不区分原则，docs/12 §一）。
+   ══════════════════════════════════════════════════════════════════ */
+
+/// 运行双态（配置 `mode = "local" | "cloud"`，默认 local；env `JEV_SWITCH_MODE` 可覆盖）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RunMode {
+    /// 本机免鉴权（loopback 绑定）。
+    #[default]
+    Local,
+    /// 云中转（0.0.0.0 绑定 + Bearer/会话鉴权）。
+    Cloud,
+}
+
+impl RunMode {
+    /// 解析字符串为模式（大小写不敏感；非法 → [`ConfigError::InvalidMode`]）。
+    pub fn parse(s: &str) -> Result<Self, ConfigError> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "local" => Ok(RunMode::Local),
+            "cloud" => Ok(RunMode::Cloud),
+            other => Err(ConfigError::InvalidMode(other.to_string())),
+        }
+    }
+
+    /// 监听地址：local = 127.0.0.1:11435；cloud = 0.0.0.0:11435
+    /// （cloud 绑全接口是 contracts/05「Admin 仅绑 127.0.0.1」的**部署形态偏差** ——
+    /// cloud 态由鉴权而非绑定位承担防护；偏差备案见 docs/deployment.md）。
+    pub fn bind_addr(self) -> std::net::SocketAddr {
+        let ip: [u8; 4] = match self {
+            RunMode::Local => [127, 0, 0, 1],
+            RunMode::Cloud => [0, 0, 0, 0],
+        };
+        std::net::SocketAddr::from((ip, 11435))
+    }
+}
+
+/// cloud 态 `/v1` 调用 token 条目 —— 同时接受两种写法（任务书字面）：
+/// `auth_tokens = ["tok-a", "tok-b"]` 与 `[[auth_tokens]] token = "…"`。
+/// 单账号语义：无 id/label/权限维度，**不做 token 管理体系**（docs/12 §二.6）。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum AuthToken {
+    /// 扁平写法：`auth_tokens = ["tok-…"]`
+    Plain(String),
+    /// 表写法：`[[auth_tokens]] token = "tok-…"`（多余键忽略）。
+    Table {
+        token: String,
+        #[serde(default)]
+        #[allow(dead_code)] // 仅容错占位，不参与鉴权语义
+        name: Option<String>,
+    },
+}
+
+impl AuthToken {
+    pub fn value(&self) -> &str {
+        match self {
+            AuthToken::Plain(s) => s,
+            AuthToken::Table { token, .. } => token,
+        }
+    }
+}
+
+/// `JEV_SWITCH_MODE` 覆盖解析（纯函数，供无 env 污染的单测）。
+pub fn resolve_mode(file_mode: RunMode, env: Option<&str>) -> Result<RunMode, ConfigError> {
+    match env.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) => RunMode::parse(s),
+        None => Ok(file_mode),
+    }
+}
+
+/// `JEV_AUTH_TOKENS`（逗号分隔）覆盖解析（纯函数；env 非空 → 完全取代文件列表）。
+pub fn resolve_auth_tokens(file_tokens: &[AuthToken], env: Option<&str>) -> Vec<String> {
+    let env_list: Vec<String> = env
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    if !env_list.is_empty() {
+        return env_list;
+    }
+    file_tokens
+        .iter()
+        .map(|t| t.value().trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// `JEV_ADMIN_PASSWORD` 优先（任务书字面；env 非空才赢，空串视为未设）。
+pub fn resolve_admin_password(
+    file_password: Option<&str>,
+    env: Option<&str>,
+) -> Option<String> {
+    if let Some(pw) = env.map(str::trim).filter(|s| !s.is_empty()) {
+        return Some(pw.to_string());
+    }
+    file_password
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,6 +183,37 @@ pub struct Config {
     /// 模型路由 DAG 边（contracts/03 §2 `[[routes]]`）。
     #[serde(default)]
     pub routes: Vec<RouteEdge>,
+    /// 双态开关（默认 local；env `JEV_SWITCH_MODE` 覆盖 —— 解析在 [`Config::effective_mode`]）。
+    #[serde(default)]
+    pub mode: RunMode,
+    /// cloud 态 `/v1` Bearer 调用 token 列表（两种写法见 [`AuthToken`]）。
+    /// local 态忽略。env `JEV_AUTH_TOKENS`（逗号分隔）覆盖。
+    #[serde(default)]
+    pub auth_tokens: Vec<AuthToken>,
+    /// cloud 态 admin 登录密码（明文 toml —— Q4=b 哲学，0600 文件）。
+    /// env `JEV_ADMIN_PASSWORD` 优先。**永不回传、不进日志**（contracts/04 §2）。
+    #[serde(default)]
+    pub admin_password: Option<String>,
+}
+
+impl Config {
+    /// 生效模式：文件 `mode` ← env `JEV_SWITCH_MODE`（非法 env 值 → [`ConfigError::InvalidMode`]）。
+    pub fn effective_mode(&self) -> Result<RunMode, ConfigError> {
+        resolve_mode(self.mode, std::env::var("JEV_SWITCH_MODE").ok().as_deref())
+    }
+
+    /// 生效调用 token 列表：文件 `auth_tokens` ← env `JEV_AUTH_TOKENS`（非空 env 完全取代）。
+    pub fn effective_auth_tokens(&self) -> Vec<String> {
+        resolve_auth_tokens(&self.auth_tokens, std::env::var("JEV_AUTH_TOKENS").ok().as_deref())
+    }
+
+    /// 生效 admin 密码：文件 `admin_password` ← env `JEV_ADMIN_PASSWORD`（非空 env 优先）。
+    pub fn effective_admin_password(&self) -> Option<String> {
+        resolve_admin_password(
+            self.admin_password.as_deref(),
+            std::env::var("JEV_ADMIN_PASSWORD").ok().as_deref(),
+        )
+    }
 }
 
 impl Config {
@@ -567,5 +710,116 @@ enabled = true
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("[providers.x]"));
         let _ = std::fs::remove_file(&path);
+    }
+
+    /* ── #43 双态：mode / auth_tokens / admin_password ─────────────── */
+
+    #[test]
+    fn mode_defaults_to_local_when_absent() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.mode, RunMode::Local, "缺省 mode 必须 local（现状回归）");
+        assert!(cfg.auth_tokens.is_empty());
+        assert!(cfg.admin_password.is_none());
+    }
+
+    #[test]
+    fn parse_mode_cloud_and_bind_addrs() {
+        let cfg: Config = toml::from_str(r#"mode = "cloud""#).unwrap();
+        assert_eq!(cfg.mode, RunMode::Cloud);
+        // 偏差字面：cloud 绑 0.0.0.0、local 绑 127.0.0.1（docs/deployment.md 备案）
+        assert_eq!(
+            RunMode::Local.bind_addr().to_string(),
+            "127.0.0.1:11435"
+        );
+        assert_eq!(RunMode::Cloud.bind_addr().to_string(), "0.0.0.0:11435");
+        // 非法 mode 字符串 → toml 反序列化失败
+        assert!(toml::from_str::<Config>(r#"mode = "prod""#).is_err());
+    }
+
+    #[test]
+    fn parse_auth_tokens_both_forms_and_admin_password() {
+        // 扁平写法 + admin_password
+        let cfg: Config = toml::from_str(
+            r#"
+auth_tokens = ["tok-test-aaa", "tok-test-bbb"]
+admin_password = "pw-test-1234"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            cfg.auth_tokens.iter().map(|t| t.value()).collect::<Vec<_>>(),
+            ["tok-test-aaa", "tok-test-bbb"]
+        );
+        assert_eq!(cfg.admin_password.as_deref(), Some("pw-test-1234"));
+
+        // 表写法 [[auth_tokens]]
+        let cfg2: Config = toml::from_str(
+            r#"
+[[auth_tokens]]
+token = "tok-test-ccc"
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg2.auth_tokens.len(), 1);
+        assert_eq!(cfg2.auth_tokens[0].value(), "tok-test-ccc");
+    }
+
+    #[test]
+    fn resolve_mode_env_overrides_file_and_rejects_invalid() {
+        assert_eq!(
+            resolve_mode(RunMode::Local, Some("cloud")).unwrap(),
+            RunMode::Cloud
+        );
+        assert_eq!(
+            resolve_mode(RunMode::Cloud, Some(" local ")).unwrap(),
+            RunMode::Local
+        );
+        // env 空串/未设 → 文件值
+        assert_eq!(resolve_mode(RunMode::Cloud, Some("")).unwrap(), RunMode::Cloud);
+        assert_eq!(resolve_mode(RunMode::Local, None).unwrap(), RunMode::Local);
+        // 非法 env → 硬错（启动即拒，防带病上线）
+        assert!(matches!(
+            resolve_mode(RunMode::Local, Some("prod")),
+            Err(ConfigError::InvalidMode(m)) if m == "prod"
+        ));
+    }
+
+    #[test]
+    fn resolve_auth_tokens_env_full_replace() {
+        let file = vec![
+            AuthToken::Plain("tok-file-1".into()),
+            AuthToken::Table { token: "tok-file-2".into(), name: None },
+        ];
+        // env 非空 → 完全取代文件
+        assert_eq!(
+            resolve_auth_tokens(&file, Some("tok-env-a, tok-env-b ,,")),
+            ["tok-env-a", "tok-env-b"]
+        );
+        // env 空/未设 → 文件列表（空条目过滤）
+        assert_eq!(
+            resolve_auth_tokens(&file, Some("")),
+            ["tok-file-1", "tok-file-2"]
+        );
+        assert_eq!(
+            resolve_auth_tokens(&file, None),
+            ["tok-file-1", "tok-file-2"]
+        );
+    }
+
+    #[test]
+    fn resolve_admin_password_env_wins() {
+        assert_eq!(
+            resolve_admin_password(Some("pw-file"), Some("pw-env")).as_deref(),
+            Some("pw-env"),
+            "env 非空必须赢"
+        );
+        assert_eq!(
+            resolve_admin_password(Some("pw-file"), Some("")).as_deref(),
+            Some("pw-file"),
+            "env 空串视为未设"
+        );
+        assert_eq!(resolve_admin_password(None, None), None);
+        // 空文件值 → None
+        assert_eq!(resolve_admin_password(Some("  "), None), None);
     }
 }
