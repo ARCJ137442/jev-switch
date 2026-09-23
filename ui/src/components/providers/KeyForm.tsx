@@ -46,14 +46,14 @@ export function KeyForm({ onSave, onCancel }: Props) {
           autoComplete="new-password"
           spellCheck={false}
           autoFocus
-          className="w-56 border border-border bg-panel px-2 py-1 font-mono text-xs text-ink placeholder:text-inkSubtle"
+          className="h-8 w-56 border border-border bg-panel px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
           aria-label="new api key（仅密文输入，不提供明文显示）"
         />
       </label>
       <button
         type="submit"
         disabled={saving || value.length === 0}
-        className="border border-ink bg-ink px-2.5 py-1 font-mono text-[11px] text-bg hover:bg-bg hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 border border-ink bg-ink px-2.5 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
       >
         {saving ? 'Saving…' : 'Save'}
       </button>
@@ -61,7 +61,7 @@ export function KeyForm({ onSave, onCancel }: Props) {
         type="button"
         onClick={onCancel}
         disabled={saving}
-        className="border border-border bg-panel px-2.5 py-1 font-mono text-[11px] text-inkMuted hover:text-ink disabled:opacity-50"
+        className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-inkMuted hover:text-ink disabled:opacity-50"
       >
         Cancel
       </button>

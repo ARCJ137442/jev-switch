@@ -281,6 +281,44 @@ export function BipartiteCanvas({
       style={{ height }}
       onClick={() => onSelectEdge(null)}
     >
+      {/* 左列节点（Tab 序 = 视觉序：左列 → 边 → 右列，design/01 §8） */}
+      {leftBoxes.map((b) => (
+        <div
+          key={`L-${b.id}`}
+          tabIndex={0}
+          role="group"
+          aria-label={`model ${b.id}, ${b.badge}`}
+          className="absolute z-10 border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
+          style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex h-full items-center justify-between gap-2">
+            <span className="min-w-0 truncate font-mono text-xs font-medium text-ink tabular" title={b.id}>
+              {b.id}
+            </span>
+            <span
+              className={
+                'shrink-0 border px-1 py-0.5 font-mono text-[10px] uppercase tracking-widest ' +
+                (b.badge === 'PREFIX' || b.badge === 'ALIAS'
+                  ? 'border-border text-inkMuted'
+                  : 'border-ink text-ink')
+              }
+            >
+              {b.badge}
+            </span>
+          </div>
+          {/* 拖线锚点 */}
+          <button
+            type="button"
+            aria-label={`从 ${b.id} 拖出连线到提供商`}
+            title="拖到右侧提供商建边"
+            onPointerDown={(e) => startDrag(b.id, e)}
+            className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 cursor-crosshair border border-ink bg-panel hover:bg-ink"
+            style={{ touchAction: 'none' }}
+          />
+        </div>
+      ))}
+
       {/* SVG 边层 */}
       <svg width={width} height={height} className="absolute inset-0" aria-hidden={false}>
         <defs>
@@ -303,7 +341,7 @@ export function BipartiteCanvas({
               const isErr = errorEdges.has(e.key);
               const sticky = e.route.sticky === 'session';
               const label = sticky ? `p=${e.route.priority} · sticky` : `p=${e.route.priority}`;
-              const bw = label.length * 5.8 + 12;
+              const bw = label.length * 7.2 + 14;
               return (
                 <g key={e.key} role="listitem">
                   {/* 可命中的宽 hit 区 */}
@@ -361,9 +399,13 @@ export function BipartiteCanvas({
                     />
                     <text
                       textAnchor="middle"
-                      y={3.5}
+                      y={4}
                       className="fill-ink"
-                      style={{ fontSize: 9, fontFamily: 'var(--font-mono)' }}
+                      style={{
+                        fontSize: 12,
+                        fontFamily: 'var(--font-mono)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
                     >
                       {label}
                     </text>
@@ -385,44 +427,6 @@ export function BipartiteCanvas({
           />
         )}
       </svg>
-
-      {/* 左列节点 */}
-      {leftBoxes.map((b) => (
-        <div
-          key={`L-${b.id}`}
-          tabIndex={0}
-          role="group"
-          aria-label={`model ${b.id}, ${b.badge}`}
-          className="absolute z-10 border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
-          style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex h-full items-center justify-between gap-2">
-            <span className="min-w-0 truncate font-mono text-xs font-medium text-ink" title={b.id}>
-              {b.id}
-            </span>
-            <span
-              className={
-                'shrink-0 border px-1 py-0.5 font-mono text-[9px] uppercase tracking-widest ' +
-                (b.badge === 'PREFIX' || b.badge === 'ALIAS'
-                  ? 'border-border text-inkMuted'
-                  : 'border-ink text-ink')
-              }
-            >
-              {b.badge}
-            </span>
-          </div>
-          {/* 拖线锚点 */}
-          <button
-            type="button"
-            aria-label={`从 ${b.id} 拖出连线到提供商`}
-            title="拖到右侧提供商建边"
-            onPointerDown={(e) => startDrag(b.id, e)}
-            className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 cursor-crosshair border border-ink bg-panel hover:bg-ink"
-            style={{ touchAction: 'none' }}
-          />
-        </div>
-      ))}
 
       {/* 右列节点 */}
       {rightBoxes.map((b) => (
@@ -447,13 +451,13 @@ export function BipartiteCanvas({
                   aria-hidden
                 />
               )}
-              <span className="min-w-0 truncate font-mono text-xs font-medium text-ink" title={b.id}>
+              <span className="min-w-0 truncate font-mono text-xs font-medium text-ink tabular" title={b.id}>
                 {b.id}
               </span>
             </span>
             <span
               className={
-                'shrink-0 border px-1 py-0.5 font-mono text-[9px] uppercase tracking-widest ' +
+                'shrink-0 border px-1 py-0.5 font-mono text-[10px] uppercase tracking-widest ' +
                 (b.isProvider ? 'border-border text-inkSubtle' : 'border-border text-inkMuted')
               }
             >

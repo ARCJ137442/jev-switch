@@ -33,7 +33,7 @@ export function ModelSelect({ options, value, onChange, serverReachable }: Props
           <select
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="flex-1 appearance-none border border-border bg-bg px-3 py-1.5 font-mono text-sm text-ink"
+            className="h-8 flex-1 appearance-none border border-border bg-bg px-3 font-mono text-[13px] text-ink tabular"
             aria-label="select model"
           >
             {options.map((opt) => (

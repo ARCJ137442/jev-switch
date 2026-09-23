@@ -24,7 +24,7 @@ export function ExampleChips({ examples, onPick, activeId }: Props) {
             type="button"
             onClick={() => onPick(ex)}
             className={
-              'inline-flex items-center gap-1.5 border px-2.5 py-1 font-mono text-xs transition-colors ' +
+              'inline-flex h-8 items-center gap-1.5 border px-2.5 font-mono text-xs transition-colors ' +
               (active
                 ? 'border-ink bg-ink text-bg'
                 : 'border-border bg-panel text-ink hover:border-ink hover:bg-ink hover:text-bg')

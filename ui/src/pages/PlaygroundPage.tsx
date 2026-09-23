@@ -92,7 +92,7 @@ export function PlaygroundPage() {
               One protocol.{' '}
               <span className="text-inkMuted">Every upstream.</span>
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-relaxed text-inkMuted">
+            <p className="mt-4 max-w-2xl text-sm leading-relaxed text-inkMuted">
               Route a single Jev SystemOne call across heterogeneous upstream models — Vercel AI
               Gateway, local Laya daemon, or any future provider. Switch the{' '}
               <code className="border border-border bg-panel px-1.5 py-0.5 font-mono text-xs text-ink">
@@ -123,7 +123,7 @@ export function PlaygroundPage() {
                   Endpoint
                 </h2>
               </header>
-              <div className="space-y-2 p-4 font-mono text-xs">
+              <div className="space-y-2 px-4 py-3 font-mono text-xs">
                 <Row label="POST" value="/v1/systemone" />
                 <Row label="GET" value="/v1/models" />
                 <Row label="GET" value="/health" />
@@ -147,7 +147,7 @@ export function PlaygroundPage() {
             />
 
             {/* Quick start hint */}
-            <section className="border border-border bg-panel p-4">
+            <section className="border border-border bg-panel px-4 py-3">
               <div className="mb-2 flex items-baseline justify-between">
                 <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
                   Quick start
@@ -156,7 +156,7 @@ export function PlaygroundPage() {
                   curl
                 </span>
               </div>
-              <pre className="overflow-x-auto border border-border bg-bg p-3 font-mono text-[11px] leading-relaxed text-ink">
+              <pre className="overflow-x-auto border border-border bg-bg p-3 font-mono text-xs leading-relaxed text-ink">
 {`curl -X POST ${BASE}/v1/systemone \\
   -H "Content-Type: application/json" \\
   -d '{

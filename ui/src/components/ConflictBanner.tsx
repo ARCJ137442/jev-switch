@@ -25,7 +25,7 @@ export function ConflictBanner({ onReload, onOverwrite, busy = false }: Props) {
             type="button"
             onClick={onReload}
             disabled={busy}
-            className="border border-ink bg-ink px-3 py-1 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
+            className="h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
           >
             重载
           </button>
@@ -33,7 +33,7 @@ export function ConflictBanner({ onReload, onOverwrite, busy = false }: Props) {
             type="button"
             onClick={onOverwrite}
             disabled={busy}
-            className="border border-border bg-panel px-3 py-1 font-mono text-xs text-ink hover:border-ink disabled:opacity-50"
+            className="h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink disabled:opacity-50"
           >
             覆盖
           </button>

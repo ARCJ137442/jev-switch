@@ -40,9 +40,10 @@ class RootErrorBoundary extends Component<BoundaryProps, BoundaryState> {
           style={{
             padding: 24,
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            color: '#7f1d1d',
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
+            // design/01 §4 tokens — 崩溃兜底屏也走语义色，不引入屏外色值
+            color: 'var(--danger)',
+            background: 'var(--panel)',
+            border: '1px solid var(--danger)',
             margin: 24,
           }}
         >

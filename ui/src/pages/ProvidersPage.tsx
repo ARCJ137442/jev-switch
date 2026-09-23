@@ -163,22 +163,22 @@ export function ProvidersPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         {/* 左窄工具栏 */}
         <aside className="w-full shrink-0 lg:w-52">
-          <div className="space-y-3 border border-border bg-panel p-4">
+          <div className="space-y-3 border border-border bg-panel px-4 py-3">
             <button
               type="button"
               onClick={() => openAdd('form')}
-              className="w-full border border-ink bg-ink px-3 py-1.5 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
+              className="h-8 w-full border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
             >
               + Add provider
             </button>
             <button
               type="button"
               onClick={() => openAdd('toml')}
-              className="w-full border border-border bg-panel px-3 py-1.5 font-mono text-xs text-ink hover:border-ink"
+              className="h-8 w-full border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
             >
               贴 toml 片段
             </button>
-            <div className="border-t border-border pt-3 font-mono text-[11px] text-inkSubtle tabular">
+            <div className="border-t border-border pt-3 font-mono text-xs text-inkSubtle tabular">
               <div>
                 <span className="text-ink">{enabledCount}</span> / {providers.length} enabled
               </div>
@@ -210,7 +210,7 @@ export function ProvidersPage() {
               <button
                 type="button"
                 onClick={load}
-                className="mt-3 border border-border bg-panel px-3 py-1 font-mono text-xs text-ink hover:border-ink"
+                className="mt-3 h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
               >
                 重试
               </button>
@@ -218,21 +218,21 @@ export function ProvidersPage() {
           ) : providers.length === 0 ? (
             <section className="border border-border bg-panel p-8 text-center">
               <p className="text-sm text-inkMuted">还没有提供商。</p>
-              <p className="mt-2 text-xs text-inkSubtle">
+              <p className="mt-2 text-sm text-inkMuted">
                 粘贴 [providers.*] toml 片段，或参考 rs/providers.example.toml 添加第一个上游。
               </p>
               <div className="mt-4 flex justify-center gap-2">
                 <button
                   type="button"
                   onClick={() => openAdd('form')}
-                  className="border border-ink bg-ink px-3 py-1.5 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
+                  className="h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
                 >
                   + Add provider
                 </button>
                 <button
                   type="button"
                   onClick={() => openAdd('toml')}
-                  className="border border-border bg-panel px-3 py-1.5 font-mono text-xs text-ink hover:border-ink"
+                  className="h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
                 >
                   贴 toml 片段
                 </button>

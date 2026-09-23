@@ -50,7 +50,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <span className="flex min-w-0 items-center gap-2.5" aria-live="polite">
           <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} aria-hidden />
-          <span className="truncate text-sm font-semibold text-ink">{provider.id}</span>
+          <span className="truncate text-[13px] font-semibold text-ink tabular">{provider.id}</span>
           <span className="sr-only">{dotLabel}</span>
         </span>
         <span className="flex shrink-0 items-center gap-3">
@@ -91,7 +91,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
       {/* kind + base */}
       <div className="flex-1 space-y-1 px-4 py-3">
         <div className="font-mono text-xs text-inkMuted">{provider.kind}</div>
-        <div className="truncate font-mono text-[11px] text-inkSubtle" title={provider.base}>
+        <div className="truncate font-mono text-xs text-inkSubtle" title={provider.base}>
           {provider.base}
         </div>
 
@@ -110,7 +110,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
               setConfirmDelete(false);
             }}
             disabled={busy}
-            className="shrink-0 border border-border bg-panel px-2 py-0.5 font-mono text-[11px] text-ink hover:border-ink disabled:opacity-50"
+            className="h-8 shrink-0 border border-border bg-panel px-2 font-mono text-xs text-ink hover:border-ink disabled:opacity-50"
           >
             {showKeyForm ? 'Close' : 'Replace key'}
           </button>
@@ -119,7 +119,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
 
       {/* probe footer — aria-live 结果（design/01 §8） */}
       <div
-        className="border-t border-border px-4 py-2 font-mono text-[11px] tabular"
+        className="border-t border-border px-4 py-2 font-mono text-xs tabular"
         aria-live="polite"
       >
         {probe === null ? (
@@ -154,7 +154,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
               setDeleteText('');
             }}
             disabled={busy}
-            className="font-mono text-[11px] text-inkSubtle hover:text-danger disabled:opacity-50"
+            className="h-8 font-mono text-xs text-inkSubtle hover:text-danger disabled:opacity-50"
           >
             Delete
           </button>
@@ -169,7 +169,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
               placeholder={provider.id}
               spellCheck={false}
               autoFocus
-              className="w-36 border border-border bg-bg px-2 py-0.5 font-mono text-xs text-ink placeholder:text-inkSubtle"
+              className="h-8 w-36 border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
               aria-label={`type ${provider.id} to confirm delete`}
             />
             <button
@@ -180,14 +180,14 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
                 setConfirmDelete(false);
                 setDeleteText('');
               }}
-              className="border border-danger bg-danger px-2 py-0.5 font-mono text-[11px] text-panel hover:bg-panel hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-8 border border-danger bg-danger px-2 font-mono text-xs text-panel hover:bg-panel hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
             >
               Remove
             </button>
             <button
               type="button"
               onClick={() => setConfirmDelete(false)}
-              className="border border-border bg-panel px-2 py-0.5 font-mono text-[11px] text-inkMuted hover:text-ink"
+              className="h-8 border border-border bg-panel px-2 font-mono text-xs text-inkMuted hover:text-ink"
             >
               Cancel
             </button>

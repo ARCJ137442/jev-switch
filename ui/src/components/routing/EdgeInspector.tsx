@@ -35,14 +35,14 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
       aria-label={`edge ${route.left} to ${route.right}`}
     >
       <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="min-w-0 truncate font-mono text-[11px] text-ink" title={`${route.left} → ${route.right}`}>
+        <span className="min-w-0 truncate font-mono text-xs text-ink tabular" title={`${route.left} → ${route.right}`}>
           {route.left} → {route.right}
         </span>
         <button
           type="button"
           onClick={onClose}
           aria-label="close inspector"
-          className="shrink-0 px-1 font-mono text-xs text-inkSubtle hover:text-ink"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center font-mono text-xs text-inkSubtle hover:text-ink"
         >
           ×
         </button>
@@ -54,7 +54,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             type="number"
             value={prio}
             onChange={(e) => commitPrio(e.target.value)}
-            className="w-full border border-border bg-bg px-2 py-1 font-mono text-xs text-ink tabular"
+            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink tabular"
             aria-label="priority"
           />
         </Field>
@@ -68,7 +68,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             }}
             placeholder="typesafe-ai/jev"
             spellCheck={false}
-            className="w-full border border-border bg-bg px-2 py-1 font-mono text-xs text-ink placeholder:text-inkSubtle"
+            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
             aria-label="upstream model"
           />
         </Field>
@@ -76,7 +76,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
           <select
             value={route.sticky ?? 'none'}
             onChange={(e) => onPatch({ sticky: e.target.value as 'none' | 'session' })}
-            className="w-full border border-border bg-bg px-2 py-1 font-mono text-xs text-ink"
+            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink"
             aria-label="sticky"
           >
             <option value="none">none</option>
@@ -87,7 +87,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
           <select
             value={route.on_error ?? 'next'}
             onChange={(e) => onPatch({ on_error: e.target.value as 'next' | 'fail' })}
-            className="w-full border border-border bg-bg px-2 py-1 font-mono text-xs text-ink"
+            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink"
             aria-label="on error"
           >
             <option value="next">next</option>
@@ -100,12 +100,12 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
         <button
           type="button"
           onClick={onDelete}
-          className="border border-danger bg-danger px-2 py-0.5 font-mono text-[11px] text-panel hover:bg-panel hover:text-danger"
+          className="h-8 border border-danger bg-danger px-2 font-mono text-xs text-panel hover:bg-panel hover:text-danger"
         >
           Delete
         </button>
         <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-          Backspace 亦可删
+          Backspace / Delete 亦可删
         </span>
       </footer>
     </div>

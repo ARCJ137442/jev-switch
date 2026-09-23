@@ -9,7 +9,7 @@ interface Props {
 }
 
 const cell =
-  'w-full border border-transparent bg-transparent px-1.5 py-1 font-mono text-[11px] text-ink focus:border-border focus:bg-bg';
+  'h-8 w-full border border-transparent bg-transparent px-1.5 font-mono text-xs text-ink tabular focus:border-border focus:bg-bg';
 
 /**
  * 路由表编辑（design/01 §8 a11y：连线编辑必须有表单等价路径）。
@@ -32,7 +32,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
         <button
           type="button"
           onClick={onAdd}
-          className="border border-border bg-panel px-2.5 py-1 font-mono text-[11px] text-ink hover:border-ink"
+          className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-ink"
         >
           + Add row
         </button>
@@ -55,7 +55,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
           <tbody>
             {routes.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-4 text-center text-xs text-inkSubtle">
+                <td colSpan={8} className="px-3 py-4 text-center text-sm text-inkMuted">
                   暂无 routes — 点击 Add row 或一键导入 example
                 </td>
               </tr>
@@ -156,7 +156,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       type="button"
                       onClick={() => onDeleteAt(i)}
                       aria-label={`delete row ${i + 1}`}
-                      className="px-1.5 py-0.5 font-mono text-[11px] text-inkSubtle hover:text-danger"
+                      className="h-8 px-1.5 font-mono text-xs text-inkSubtle hover:text-danger"
                     >
                       删
                     </button>

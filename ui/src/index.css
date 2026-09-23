@@ -38,11 +38,12 @@ samp,
   font-variant-numeric: tabular-nums;
 }
 
-/* 输入框聚焦样式 — 单色 border 加粗 */
+/* 输入框聚焦 — 保留 border 加粗提示；可见焦点环由 tokens.css `:focus-visible`
+   统一供给（design/01 §4.3：outline 1px solid ink / offset 2px，无光晕）。
+   此处禁止 `outline: none` —— 会吞掉键盘焦点环（§8 可见 focus ring）。 */
 textarea:focus,
 input:focus,
 select:focus {
-  outline: none;
   border-color: var(--ink);
 }
 

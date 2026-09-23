@@ -33,7 +33,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
   const [errors, setErrors] = useState<string[]>([]);
 
   const tabClass = (active: boolean) =>
-    'px-2.5 py-1 font-mono text-xs transition-colors ' +
+    'h-8 px-2.5 font-mono text-xs transition-colors ' +
     (active
       ? 'border border-ink bg-ink text-bg'
       : 'border border-transparent text-inkMuted hover:text-ink');
@@ -105,7 +105,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
         <button
           type="button"
           onClick={onCancel}
-          className="font-mono text-[11px] text-inkSubtle hover:text-ink"
+          className="h-8 font-mono text-xs text-inkSubtle hover:text-ink"
         >
           Close
         </button>
@@ -114,7 +114,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
       {errors.length > 0 && (
         <div className="border-b border-danger bg-danger/10 px-4 py-2" role="alert">
           {errors.map((err, i) => (
-            <div key={i} className="font-mono text-[11px] text-danger">
+            <div key={i} className="font-mono text-xs text-danger">
               {err}
             </div>
           ))}
@@ -122,7 +122,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
       )}
 
       {tab === 'form' ? (
-        <form onSubmit={(e) => void submitForm(e)} className="space-y-3 p-4">
+        <form onSubmit={(e) => void submitForm(e)} className="space-y-3 px-4 py-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="id" hint="必填">
               <input
@@ -130,7 +130,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
                 placeholder="vercel"
                 spellCheck={false}
-                className="w-full border border-border bg-bg px-2 py-1.5 font-mono text-xs text-ink placeholder:text-inkSubtle"
+                className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
               />
             </Field>
             <Field label="kind" hint="必填">
@@ -139,7 +139,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
                 onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
                 placeholder="vercel-gateway"
                 spellCheck={false}
-                className="w-full border border-border bg-bg px-2 py-1.5 font-mono text-xs text-ink placeholder:text-inkSubtle"
+                className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
               />
             </Field>
           </div>
@@ -149,7 +149,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               onChange={(e) => setForm((f) => ({ ...f, base: e.target.value }))}
               placeholder="https://…"
               spellCheck={false}
-              className="w-full border border-border bg-bg px-2 py-1.5 font-mono text-xs text-ink placeholder:text-inkSubtle"
+              className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
             />
           </Field>
           <Field label="api_key" hint="仅密文输入 · 无 Show">
@@ -160,7 +160,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               placeholder="••••••••"
               autoComplete="new-password"
               spellCheck={false}
-              className="w-full border border-border bg-bg px-2 py-1.5 font-mono text-xs text-ink placeholder:text-inkSubtle"
+              className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
             />
           </Field>
           <label className="flex items-center gap-2 text-xs text-ink">
@@ -176,14 +176,14 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
             <button
               type="submit"
               disabled={busy}
-              className="border border-ink bg-ink px-3 py-1.5 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
+              className="h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
             >
               {busy ? 'Saving…' : 'Add provider'}
             </button>
           </div>
         </form>
       ) : (
-        <form onSubmit={(e) => void submitToml(e)} className="space-y-3 p-4">
+        <form onSubmit={(e) => void submitToml(e)} className="space-y-3 px-4 py-3">
           <div className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
             粘贴 [providers.&lt;id&gt;] 片段
           </div>
@@ -199,7 +199,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
             <button
               type="submit"
               disabled={busy}
-              className="border border-ink bg-ink px-3 py-1.5 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
+              className="h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
             >
               {busy ? 'Saving…' : 'Parse & Add'}
             </button>

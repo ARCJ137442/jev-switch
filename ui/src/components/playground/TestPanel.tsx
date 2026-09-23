@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BASE,
   postSystemOne,
@@ -90,6 +90,23 @@ export function TestPanel({
     }
   };
 
+  /* design/01 §8 快捷键：⌘/Ctrl+Enter = Run Jev（挂载期全局生效，
+     含 textarea 焦点位 — 运行快捷键的标准位置；ref 取最新闭包防 stale） */
+  const onRunRef = useRef(onRun);
+  onRunRef.current = onRun;
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+      if (statusRef.current === 'loading') return;
+      e.preventDefault();
+      void onRunRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <section id="playground" className="border border-border bg-panel">
       {/* Top bar — input mode tabs */}
@@ -105,7 +122,7 @@ export function TestPanel({
         <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
           <span className="tabular">~{totalInputTokens} tokens</span>
           <span className="text-inkSubtle">·</span>
-          <span>{Object.keys(JSON.parse(questionsJson || '{}') || {}).length || 0} question(s)</span>
+          <span className="tabular">{Object.keys(JSON.parse(questionsJson || '{}') || {}).length || 0} question(s)</span>
         </div>
       </header>
 
@@ -121,7 +138,7 @@ export function TestPanel({
             </span>
           </div>
 
-          <div className="flex flex-col gap-4 p-4">
+          <div className="flex flex-col gap-4 px-4 py-3">
             <Field
               label="state"
               hint={`${stateTokens} tokens`}
@@ -180,7 +197,7 @@ export function TestPanel({
             </span>
           </div>
 
-          <div className="flex-1 p-4">
+          <div className="flex-1 px-4 py-3">
             <pre
               className={
                 'min-h-[200px] whitespace-pre-wrap break-words border bg-bg p-3 font-mono text-xs leading-relaxed ' +
@@ -216,7 +233,7 @@ export function TestPanel({
           type="button"
           onClick={onRun}
           disabled={status === 'loading'}
-          className="inline-flex items-center gap-2 border border-ink bg-ink px-5 py-2 font-mono text-sm font-semibold text-bg transition-colors hover:bg-bg hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-2 border border-ink bg-ink px-5 font-mono text-sm font-semibold text-bg transition-colors hover:bg-bg hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
         >
           {status === 'loading' ? 'Running…' : 'Run Jev'}
           {status !== 'loading' && <span aria-hidden>↗</span>}
@@ -241,8 +258,9 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={
-        'px-2.5 py-1 font-mono text-xs transition-colors ' +
+        'h-8 px-2.5 font-mono text-xs transition-colors ' +
         (active
           ? 'border border-ink bg-ink text-bg'
           : 'border border-transparent text-inkMuted hover:text-ink')
@@ -465,7 +483,7 @@ function Metering({
   );
 
   return (
-    <div className={'flex flex-col gap-1 font-mono text-[11px] ' + (className ?? '')}>
+    <div className={'flex flex-col gap-1 font-mono text-xs ' + (className ?? '')}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         {hasUsage ? (
           <>
@@ -556,7 +574,7 @@ function AnswerShell({
   return (
     <li className="flex flex-col gap-1">
       <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-inkSubtle">{qid}</span>
+        <span className="text-inkSubtle tabular">{qid}</span>
         <span className="text-inkSubtle">→</span>
         {typeTag && (
           <span className="border border-border px-1 py-px text-[10px] uppercase tracking-widest text-inkSubtle">
@@ -574,9 +592,9 @@ function AnswerShell({
 function RawAnswerLine({ qid, raw }: { qid: string; raw: unknown }) {
   return (
     <li className="flex flex-wrap items-baseline gap-2">
-      <span className="text-inkSubtle">{qid}</span>
+      <span className="text-inkSubtle tabular">{qid}</span>
       <span className="text-inkSubtle">→</span>
-      <pre className="max-w-full overflow-x-auto border border-border bg-bg px-1.5 py-0.5 text-[11px] text-inkMuted">
+      <pre className="max-w-full overflow-x-auto border border-border bg-bg px-1.5 py-0.5 text-xs text-inkMuted">
         {JSON.stringify(raw, null, 2)}
       </pre>
     </li>

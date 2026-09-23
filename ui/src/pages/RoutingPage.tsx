@@ -278,12 +278,12 @@ export function RoutingPage() {
           <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
             Routing
           </span>
-          <span className="font-mono text-[11px] text-inkMuted tabular">
+          <span className="font-mono text-xs text-inkMuted tabular">
             {routes.length} edges
           </span>
-          {statusBadge}
+          <span aria-live="polite">{statusBadge}</span>
           {lastError && (
-            <span role="status" className="font-mono text-[11px] text-danger">
+            <span role="status" className="font-mono text-xs text-danger">
               {lastError}
             </span>
           )}
@@ -294,7 +294,7 @@ export function RoutingPage() {
             onClick={() => setShowTable((v) => !v)}
             aria-pressed={showTable}
             className={
-              'px-2.5 py-1 font-mono text-[11px] transition-colors ' +
+              'h-8 px-2.5 font-mono text-xs transition-colors ' +
               (showTable
                 ? 'border border-ink bg-ink text-bg'
                 : 'border border-border bg-panel text-ink hover:border-ink')
@@ -305,7 +305,7 @@ export function RoutingPage() {
           <button
             type="button"
             onClick={load}
-            className="border border-border bg-panel px-2.5 py-1 font-mono text-[11px] text-ink hover:border-ink"
+            className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-ink"
           >
             刷新
           </button>
@@ -321,7 +321,7 @@ export function RoutingPage() {
           <button
             type="button"
             onClick={load}
-            className="mt-3 border border-border bg-panel px-3 py-1 font-mono text-xs text-ink hover:border-ink"
+            className="mt-3 h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
           >
             重试
           </button>
@@ -330,13 +330,13 @@ export function RoutingPage() {
         /* 空态（design/01 §6.2） */
         <section className="mt-4 border border-border bg-panel p-8 text-center">
           <p className="text-sm text-inkMuted">还没有路由。</p>
-          <pre className="mx-auto mt-3 max-w-lg overflow-x-auto border border-border bg-bg p-3 text-left font-mono text-[11px] leading-relaxed text-ink">
+          <pre className="mx-auto mt-3 max-w-lg overflow-x-auto border border-border bg-bg p-3 text-left font-mono text-xs leading-relaxed text-ink">
             {ROUTES_EXAMPLE_TOML}
           </pre>
           <button
             type="button"
             onClick={importExample}
-            className="mt-4 border border-ink bg-ink px-3 py-1.5 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
+            className="mt-4 h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
           >
             一键导入 example
           </button>
