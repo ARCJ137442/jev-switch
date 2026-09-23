@@ -142,3 +142,73 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 | cloud 冒烟（本机 daemon，等价 compose 验收） | `JEV_SWITCH_MODE=cloud` 起 daemon → 无 token 401 / 有 token 200 / login→admin 200 | 见提交记录 |
 | compose 实跑 | `docker compose up -d` → curl → down | **本机无 docker/podman，跳过**（报告注明；中间件已由单测全覆盖） |
 | local 回归 | `scripts/smoke.ps1`（免 token 现状） | 见提交记录 |
+
+---
+
+## 九、Tauri 桌面（Windows）· 任务 #44
+
+> **作者**：MiMo（`mimo-v2.6-flash`，本次执行）· 如实披露 · **日期**：2026-09-23
+> **裁决**：docs/12 §二.8「**Windows 优先**先出（GitHub Release 便携分发），mac/Linux 明确后置」+ §四-线3。
+> **范围**：独立 Cargo 工程 `src-tauri/`（**不在** `rs/` workspace 内，互不干扰）。
+
+### 9.1 形态（对标 LM Studio「双击开箱」）
+
+| 项 | 行为 |
+|---|---|
+| 主窗口 | 默认 1440×900，最小 1024×640；先载壳内**等待页**（黑底白 J），轮询 `GET /health` 至 200 后切入 `http://127.0.0.1:11435`（**不指 vite**——UI 由 sidecar daemon 的 ServeDir 同源托管，local 态免 token，`getBase()` 同源分支自动生效） |
+| Sidecar | 启动 spawn 打包进资源的 `jev-switch-daemon.exe`（= `rs` workspace 的 `jev-switch` bin，release 产物）；`JEV_SWITCH_CONFIG` 指向 `%APPDATA%\jev-switch\providers.toml`（**首启播种模板、已有不覆盖**，模板 = `src-tauri/src/default_providers.toml`，仅 `api_key_env` 示例值）；`JEV_UI_DIST` 指向打包的 `ui\dist`；**`JEV_SWITCH_MODE` 不设 = local** |
+| 复用 | 若 11435 已有健康 daemon（手起/残留）→ 不重复 spawn，直接接入 |
+| 单实例 | `tauri-plugin-single-instance`：二次双击聚焦已有窗口 |
+| 托盘 | 左键显窗、右键菜单：显示主窗口 / 打开配置目录（explorer，自身单实例）/ 退出；**关窗 = 隐藏到托盘**，托盘退出才真退 |
+| 退出 | `RunEvent::Exit` 统一收尸：`taskkill /T`（请求级）→ 2s 兜底 `kill`（Windows 控制台无 SIGTERM，此即优雅终止上限） |
+| 图标 | `src-tauri/icons/icon.ico/.png` —— 黑底白 J 单色（System.Drawing 脚本生成 16–256 六档 ICO），无 emoji |
+
+### 9.2 构建（本机已验，Windows / x86_64-msvc）
+
+```powershell
+# 1) sidecar 二进制（release）
+cargo build --release --manifest-path rs/Cargo.toml -p jev-switch-daemon
+Copy-Item rs\target\release\jev-switch.exe `
+  src-tauri\binaries\jev-switch-daemon-x86_64-pc-windows-msvc.exe -Force
+
+# 2) 打包（自动跑 beforeBuildCommand = npm run build --prefix ui 保证 dist 新鲜）
+cd src-tauri
+cargo tauri build          # = nsis + msi；CLI：cargo tauri 2.9.6（或 npx @tauri-apps/cli 2.11.5）
+```
+
+前置：Rust（msvc）、Node、Tauri CLI（`cargo install tauri-cli`）、WebView2（NSIS 安装器自动引导下载）。
+`src-tauri/binaries/*.exe`、`src-tauri/target/`、`src-tauri/gen/` 已 gitignore——**fresh clone 必须先跑上面第 1 步**，否则 `tauri build` 找不到 sidecar。
+
+产物（2026-09-23 实测）：
+
+| 产物 | 路径 | 大小 |
+|---|---|---|
+| NSIS 安装包 | `src-tauri/target/release/bundle/nsis/jev-switch_0.1.0_x64-setup.exe` | 3,424,907 B（≈3.3 MB） |
+| MSI 安装包 | `src-tauri/target/release/bundle/msi/jev-switch_0.1.0_x64_en-US.msi` | 4,927,488 B（≈4.7 MB） |
+| 便携布局 | `src-tauri/target/release/`（`jev-switch.exe` + `jev-switch-daemon.exe` + `ui\dist\` 同目录，直接可跑） | — |
+
+安装布局（NSIS/MSI 一致，实测解包确认）：`$INSTDIR\` 平铺 `jev-switch.exe`、`jev-switch-daemon.exe`、`ui\dist\…`——壳的 sidecar/UI 路径解析器按此多候选探测（打包 + dev 双布局）。
+
+### 9.3 实测证据（双击开箱门禁，2026-09-23）
+
+| 断言 | 证据 |
+|---|---|
+| 窗口起来 | 进程 `jev-switch.exe`（pid 56544）`MainWindowTitle=Jev-Switch`，窗口截图见 `src-tauri` 任务归档（截图在 `target/shot.png`，不进 git） |
+| webview 加载 UI | 子进程 `msedgewebview2.exe`（EBWebView 数据目录 `io.github.arcj137442.jevswitch`）；截图可见控制台 Providers 页 + `DAEMON OK` + 页脚 `ENDPOINT 127.0.0.1:11435` —— 即 webview 已从等待页切入 `http://127.0.0.1:11435` |
+| sidecar 活 | 子进程 `jev-switch-daemon.exe`（pid 71552，`Win32_Process.ParentProcessId=56544`）LISTEN `127.0.0.1:11435` |
+| health | `GET /health` → `{"status":"ok","version":"0.1.0"}`；`GET /` → 200（ServeDir 托管 `ui/dist`，title `Jev-Switch — Multi-model decision router`） |
+| 配置首播 | `%APPDATA%\jev-switch\providers.toml` 落地 5173 B（已有不覆盖——二次启动不重写 mtime 语义在 `seed_config` 判断 `!exists()`） |
+| 单实例 | 第二次双击后壳进程数仍 = 1 |
+
+### 9.4 施工备注（偏差备案，不动 contracts）
+
+1. **`beforeBuildCommand` = `npm run build --prefix ui`**（任务书字面 `../ui` 不可用）：tauri-cli 的 hook cwd 是 **`src-tauri` 的父目录（仓库根）**，`--prefix ../ui` 会解析成 `Jev\ui` 而 ENOENT；`--prefix ui` 语义等价（保证 dist 新鲜），已实测。
+2. **sidecar 命名 `jev-switch-daemon` 而非 `jev-switch`**：externalBin 落地时剥 target-triple，若与壳主二进制同名 `jev-switch.exe` → WiX **ICE30**（两组件装同一文件名）→ MSI light 失败。改名后 nsis+msi 双绿。
+3. 打包时 `Failed to add bundler type … __TAURI_BUNDLE_TYPE` **warn**：无 updater 插件场景的已知无害告警，不影响安装包。
+4. 打开配置目录 = `explorer <dir>`（explorer 自身单实例，不再造轮子）。
+5. 等待页不跑跨源 fetch：daemon CORS 白名单只有 5173/同源（contracts/05 §5），`tauri.localhost` origin 会被挡——就绪轮询放在壳 Rust 侧（纯 std TCP 探 `/health`），200 后 `location.replace` 切入。
+
+### 9.5 后置（❄️ 不做，docs/12 §三冻结清单）
+
+- Tauri **macOS / Linux** 打包与签名（Windows 首发裁决）；GitHub Release 便携分发的 CI 流水线归发布线；
+- 托盘「退出」路径的 UI 自动化回归（本次人工验收级：收尸逻辑在 `RunEvent::Exit` 单点，代码审阅覆盖）。
