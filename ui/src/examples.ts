@@ -10,6 +10,10 @@
  * 题型仅契约入站三变体 choice/score/noul（contracts/01 §1 — 无 boolean）。
  *
  * 注：chip 点击**不再切换**用户的 model 选择（UI-1）——payload.model 仅作初始默认值记录。
+ *
+ * 验收反馈新增（v2）：中文填字 ×2、2022 高考真题 ×2（源：jev-decision-lab 实测 12 题同源
+ * ts/math-dataset.ts，单选→choice）、网页点击目标 ×1。
+ * 含空格/标点的对象键一律加引号（基线 6247e1c TS1005 教训）。
  */
 
 import type { JevRequest } from './api';
@@ -184,13 +188,158 @@ export const EXAMPLES: ExamplePayload[] = [
       model: DEFAULT_MODEL_LAYA,
       state: {
         登录: { 地区: '异国 IP（与常用地跨 8000km）', 设备: '新设备指纹', 时间: '凌晨 03:12' },
-        账户: { 近 24 小时失败登录次数: 6, 是否开启二次验证: false, 余额: '较高' },
+        账户: { '近 24 小时失败登录次数': 6, 是否开启二次验证: false, 余额: '较高' },
       },
       questions: {
         风险等级: {
           type: 'score',
           instructions: '请给这次登录行为评定风险等级（从低到高）。',
           criteria: ['低风险——常规登录', '中风险——轻微异常', '较高风险——多项异常', '高风险——疑似盗号', '极高风险——立即拦截'],
+        },
+      },
+    },
+  },
+
+  {
+    id: 'zh-crossword-idiom',
+    label: '中文·成语填字',
+    description: '中文 choice 填字：成语「面□俱到」缺一字，4 候选单字含 3 干扰项；答案不进 instructions，靠 state 释义推理',
+    payload: {
+      model: DEFAULT_MODEL_LAYA,
+      state: {
+        成语: '面□俱到（□处缺一字）',
+        释义: '各个方面都能照顾到，没有遗漏',
+        语境: '形容做事考虑周全，可用于中性或褒义场合',
+        字数: 4,
+      },
+      questions: {
+        填空字: {
+          type: 'choice',
+          instructions: '成语「面□俱到」中□处应填入哪个字？请根据 state 中的释义与语境，从候选选项中选择唯一正确的一项。',
+          criteria: {
+            mian: '面（miàn）',
+            man: '满（mǎn）',
+            ti: '体（tǐ）',
+            quan: '全（quán）',
+          },
+        },
+      },
+    },
+  },
+  {
+    id: 'zh-crossword-verse',
+    label: '中文·诗句填字',
+    description: '中文 choice 填字：名句「柳暗花明又一□」缺一字，候选含干扰项；靠 state 释义与出处线索推理',
+    payload: {
+      model: DEFAULT_MODEL_LAYA,
+      state: {
+        诗句: '山重水复疑无路，柳暗花明又一□（□处缺一字）',
+        出处: '宋代·陆游《剑南诗稿》（七言名联）',
+        释义: '比喻在困境中忽见转机、豁然开朗',
+        字数: '七言下句，□为末字',
+      },
+      questions: {
+        填空字: {
+          type: 'choice',
+          instructions: '诗句「山重水复疑无路，柳暗花明又一□」中□处应填入哪个字？请根据 state 中的出处与释义，从候选选项中选择唯一正确的一项。',
+          criteria: {
+            cun: '村（cūn）',
+            cheng: '城（chéng）',
+            jia: '家（jiā）',
+            tian: '田（tián）',
+          },
+        },
+      },
+    },
+  },
+
+  /* ---------- 高考真题 · 2022 新高考 I 卷（jev-decision-lab 实测同源） ---------- */
+  {
+    id: 'gaokao-2022-q1',
+    label: '高考2022·集合',
+    description: '来自 jev-decision-lab 实测 12 题 · 2022 新高考 I 卷 Q1 集合，单选题转 choice',
+    payload: {
+      model: DEFAULT_MODEL_LAYA,
+      state: {
+        考试: '2022 年普通高等学校招生全国统一考试（新高考 I 卷）数学',
+        题号: 1,
+        领域: '集合',
+        题干: '若集合 M={x | √x < 4}，N={x | 3x≥1}，则 M∩N=',
+      },
+      questions: {
+        答案: {
+          type: 'choice',
+          instructions: '这是一道 2022 新高考数学单项选择题。请只依据 state 中的题干，从候选选项中选择唯一正确的一项，不要输出解题过程。',
+          criteria: {
+            A: '{x | 0≤x<2}',
+            B: '{x | 1/3≤x<2}',
+            C: '{x | 3≤x<16}',
+            D: '{x | 1/3≤x<16}',
+          },
+        },
+      },
+    },
+  },
+  {
+    id: 'gaokao-2022-q5',
+    label: '高考2022·概率',
+    description: '来自 jev-decision-lab 实测 12 题 · 2022 新高考 I 卷 Q5 概率，单选题转 choice',
+    payload: {
+      model: DEFAULT_MODEL_LAYA,
+      state: {
+        考试: '2022 年普通高等学校招生全国统一考试（新高考 I 卷）数学',
+        题号: 5,
+        领域: '概率',
+        题干: '从 2 至 8 的 7 个整数中随机取 2 个不同的数，则这 2 个数互质的概率为',
+      },
+      questions: {
+        答案: {
+          type: 'choice',
+          instructions: '这是一道 2022 新高考数学单项选择题。请只依据 state 中的题干，从候选选项中选择唯一正确的一项，不要输出解题过程。',
+          criteria: {
+            A: '1/6',
+            B: '1/3',
+            C: '1/2',
+            D: '2/3',
+          },
+        },
+      },
+    },
+  },
+
+  /* ---------- 网页交互 · 点击目标 ---------- */
+  {
+    id: 'web-click-element',
+    label: '网页·点击元素',
+    description: '网页交互 choice：从无障碍元素清单选出应点击的元素（任务：激活搜索框改搜索词）',
+    payload: {
+      model: DEFAULT_MODEL_LAYA,
+      state: {
+        页面: {
+          url: 'https://shop.example.com/search?q=keyboard',
+          标题: '搜索结果 - 机械键盘',
+          任务: '用户想改搜「客制化键盘」，需要先激活搜索框以便输入新关键词',
+        },
+        元素清单: [
+          { id: 'nav-home', role: 'link', 文本: '首页' },
+          { id: 'search-input', role: 'searchbox', 文本: 'placeholder=搜索商品', 当前值: 'keyboard' },
+          { id: 'search-btn', role: 'button', 文本: '搜索' },
+          { id: 'cart-btn', role: 'button', 文本: '购物车（2）' },
+          { id: 'promo-banner', role: 'img', 文本: '双十一满300减50' },
+          { id: 'checkout-btn', role: 'button', 文本: '结算' },
+        ],
+      },
+      questions: {
+        点击目标: {
+          type: 'choice',
+          instructions: '要完成 state.页面.任务 中的目标，应该点击哪个元素？请从候选元素 id 中选择唯一正确的一项。',
+          criteria: {
+            'search-input': '#search-input · searchbox · 当前值 keyboard',
+            'search-btn': '#search-btn · button「搜索」',
+            'cart-btn': '#cart-btn · button「购物车（2）」',
+            'checkout-btn': '#checkout-btn · button「结算」',
+            'promo-banner': '#promo-banner · img 促销横幅',
+          },
         },
       },
     },
