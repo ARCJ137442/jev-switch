@@ -213,7 +213,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
 
   if (items === null) {
     return (
-      <div className="border border-border bg-bg px-3 py-2 font-mono text-xs text-inkMuted">
+      <div className="border border-border bg-soft px-3 py-2 font-mono text-xs text-inkMuted">
         loading form…
       </div>
     );
@@ -224,7 +224,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
       {parseErr && (
         <div
           role="alert"
-          className="border border-danger bg-danger/10 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-danger"
+          className="rounded border border-danger bg-dangerBg px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-danger"
         >
           JSON 无效，下方为最近一次有效表单 — 请切到 JSON 视图修复：{parseErr}
         </div>
@@ -232,7 +232,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
       {pushErr && (
         <div
           role="alert"
-          className="border border-warn bg-warn/10 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-warn"
+          className="rounded border border-warn bg-warnBg px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-warn"
         >
           {pushErr}（暂未写回 JSON）
         </div>
@@ -253,7 +253,7 @@ export function QuestionFormEditor({ questionsJson, onChange }: Props) {
         type="button"
         onClick={addItem}
         aria-label="add question"
-        className="h-8 w-full border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-ink hover:bg-ink hover:text-bg"
+        className="h-8 w-full border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-primaryFill hover:bg-primaryFill hover:text-white"
       >
         + Add question
       </button>
@@ -310,7 +310,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
   return (
     <section
       aria-label={`question ${index + 1}: ${item.qid}`}
-      className="border border-border bg-panel"
+      className="overflow-hidden rounded-card border border-border bg-panel"
     >
       {/* 卡片头：qid + 题型分段 + 删除 */}
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
@@ -322,7 +322,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
           onChange={(e) => onChange({ qid: e.target.value })}
           aria-label={`question ${index + 1} id`}
           spellCheck={false}
-          className="h-8 w-36 border border-border bg-bg px-2 font-mono text-xs text-ink"
+          className="h-8 w-36 border border-border bg-soft px-2 font-mono text-xs text-ink"
           placeholder="qid"
         />
         <div className="flex items-center gap-1" role="group" aria-label={`decision type for ${item.qid}`}>
@@ -336,8 +336,8 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
               className={
                 'h-8 border px-2.5 font-mono text-xs transition-colors ' +
                 (item.type === t.id
-                  ? 'border-ink bg-ink text-bg'
-                  : 'border-border bg-panel text-inkMuted hover:border-ink hover:text-ink')
+                  ? 'border border-primaryFill bg-primaryFill text-white'
+                  : 'border-border bg-panel text-inkMuted hover:border-primaryBright hover:text-ink')
               }
             >
               {t.label}
@@ -376,7 +376,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
             rows={2}
             aria-label={`question ${index + 1} instructions`}
             className={
-              'w-full resize-y border bg-bg p-2.5 font-mono text-xs leading-relaxed text-ink ' +
+              'w-full resize-y border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink ' +
               (item.instructions.trim() === '' ? 'border-danger' : 'border-border')
             }
             placeholder="要 Jev 做的决定是什么？/ The decision you want Jev to make."
@@ -396,7 +396,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   value={item.entries[i]?.value ?? ''}
                   onChange={(e) => setEntry(i, { value: e.target.value })}
                   aria-label={`question ${index + 1} ${k} description`}
-                  className="h-8 flex-1 border border-border bg-bg px-2 font-mono text-xs text-ink"
+                  className="h-8 flex-1 border border-border bg-soft px-2 font-mono text-xs text-ink"
                   placeholder={k === 'true' ? 'true 时的含义' : 'false 时的含义'}
                 />
               </div>
@@ -417,14 +417,14 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   onChange={(ev) => setEntry(i, { key: ev.target.value })}
                   aria-label={`question ${index + 1} choice ${i + 1} key`}
                   spellCheck={false}
-                  className="h-8 w-32 shrink-0 border border-border bg-bg px-2 font-mono text-xs text-ink"
+                  className="h-8 w-32 shrink-0 border border-border bg-soft px-2 font-mono text-xs text-ink"
                   placeholder="key"
                 />
                 <input
                   value={e.value}
                   onChange={(ev) => setEntry(i, { value: ev.target.value })}
                   aria-label={`question ${index + 1} choice ${i + 1} label`}
-                  className="h-8 min-w-0 flex-1 border border-border bg-bg px-2 font-mono text-xs text-ink"
+                  className="h-8 min-w-0 flex-1 border border-border bg-soft px-2 font-mono text-xs text-ink"
                   placeholder="选项描述"
                 />
                 <button
@@ -443,7 +443,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
               onClick={addChoice}
               disabled={item.entries.length >= MAX_CHOICES}
               aria-label={`add choice to question ${index + 1}`}
-              className="h-8 border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-ink hover:bg-ink hover:text-bg disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-8 border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-primaryFill hover:bg-primaryFill hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               + Add choice{item.entries.length >= MAX_CHOICES ? ' (max 10)' : ''}
             </button>
@@ -462,7 +462,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   value={e.value}
                   onChange={(ev) => setEntry(i, { value: ev.target.value })}
                   aria-label={`question ${index + 1} level ${i + 1}`}
-                  className="h-8 min-w-0 flex-1 border border-border bg-bg px-2 font-mono text-xs text-ink"
+                  className="h-8 min-w-0 flex-1 border border-border bg-soft px-2 font-mono text-xs text-ink"
                   placeholder="档位描述"
                 />
                 <button
@@ -470,7 +470,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   onClick={() => moveEntry(i, -1)}
                   disabled={i === 0}
                   aria-label={`move level ${i + 1} up`}
-                  className="h-8 w-8 shrink-0 border border-border font-mono text-xs text-inkMuted transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
+                  className="h-8 w-8 shrink-0 border border-border font-mono text-xs text-inkMuted transition-colors hover:border-primaryBright hover:text-ink disabled:opacity-40"
                 >
                   ↑
                 </button>
@@ -479,7 +479,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
                   onClick={() => moveEntry(i, 1)}
                   disabled={i === item.entries.length - 1}
                   aria-label={`move level ${i + 1} down`}
-                  className="h-8 w-8 shrink-0 border border-border font-mono text-xs text-inkMuted transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
+                  className="h-8 w-8 shrink-0 border border-border font-mono text-xs text-inkMuted transition-colors hover:border-primaryBright hover:text-ink disabled:opacity-40"
                 >
                   ↓
                 </button>
@@ -498,7 +498,7 @@ function QuestionCard({ item, index, total, onChange, onRemove }: CardProps) {
               type="button"
               onClick={addLevel}
               aria-label={`add level to question ${index + 1}`}
-              className="h-8 border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-ink hover:bg-ink hover:text-bg"
+              className="h-8 border border-border bg-panel font-mono text-xs text-inkMuted transition-colors hover:border-primaryFill hover:bg-primaryFill hover:text-white"
             >
               + Add level
             </button>

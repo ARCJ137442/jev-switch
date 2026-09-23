@@ -10,9 +10,9 @@ interface Props {
 }
 
 /**
- * 边检视器浮层（design/01 §6.2 / 契约 03 §6）：
+ * 边检视器浮层（design/01 §6.2 / 契约 03 §6 × TeamSense Dialog 圆角）：
  * priority / upstream_model / sticky / on_error 四字段 + Delete。
- * 仅密文无关 — 纯路由字段。
+ * 选中面板描边 = 主蓝（CC Switch border-active 手法）。
  */
 export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Props) {
   const [prio, setPrio] = useState(String(route.priority));
@@ -28,7 +28,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
 
   return (
     <div
-      className="absolute z-20 w-64 border border-ink bg-panel"
+      className="absolute z-20 w-64 overflow-hidden rounded-card border border-primary bg-panel shadow-md"
       style={style}
       onClick={(e) => e.stopPropagation()}
       role="dialog"
@@ -54,7 +54,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             type="number"
             value={prio}
             onChange={(e) => commitPrio(e.target.value)}
-            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink tabular"
+            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink tabular"
             aria-label="priority"
           />
         </Field>
@@ -68,7 +68,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             }}
             placeholder="typesafe-ai/jev"
             spellCheck={false}
-            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
             aria-label="upstream model"
           />
         </Field>
@@ -76,7 +76,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
           <select
             value={route.sticky ?? 'none'}
             onChange={(e) => onPatch({ sticky: e.target.value as 'none' | 'session' })}
-            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink"
+            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink"
             aria-label="sticky"
           >
             <option value="none">none</option>
@@ -87,7 +87,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
           <select
             value={route.on_error ?? 'next'}
             onChange={(e) => onPatch({ on_error: e.target.value as 'next' | 'fail' })}
-            className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink"
+            className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink"
             aria-label="on error"
           >
             <option value="next">next</option>
@@ -100,11 +100,11 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
         <button
           type="button"
           onClick={onDelete}
-          className="h-8 border border-danger bg-danger px-2 font-mono text-xs text-panel hover:bg-panel hover:text-danger"
+          className="h-8 border border-dangerFill bg-dangerFill px-2 font-mono text-xs text-white hover:bg-dangerBg hover:text-danger"
         >
           Delete
         </button>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
           Backspace / Delete 亦可删
         </span>
       </footer>
@@ -124,11 +124,11 @@ function Field({
   return (
     <label className="flex flex-col gap-1">
       <span className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
           {label}
         </span>
         {hint && (
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
             {hint}
           </span>
         )}

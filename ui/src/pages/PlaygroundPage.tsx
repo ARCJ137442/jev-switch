@@ -13,7 +13,7 @@ import { EXAMPLES, type ExamplePayload } from '../examples';
 
 /**
  * Playground 页 — 保留原单页 DNA（jevplayground 黑白等宽），
- * 双栏 Input/Output + 示例 chips + Run Jev（design/01 §6.3）。
+ * 双栏 Input/Output + 示例 chips + Run Jev（design/01 §6.3 × TeamSense 面板圆角）。
  * 导航 / daemon 灯 / footer 已上移至 Shell。
  */
 export function PlaygroundPage() {
@@ -81,17 +81,17 @@ export function PlaygroundPage() {
 
   return (
     <div className="bg-bg text-ink">
-      {/* Hero — 大标题, 等宽字体, 强黑白对比 */}
+      {/* Hero — 大标题, 等宽字体, 主蓝点缀（B4） */}
       <section className="border-b border-border">
         <div className="mx-auto max-w-7xl px-6 py-12 md:py-16">
           <div className="max-w-3xl">
-            <div className="mb-3 inline-flex items-center gap-2 border border-border bg-panel px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
-              <span className="inline-block h-1.5 w-1.5 bg-ink" />
+            <div className="mb-3 inline-flex items-center gap-2 rounded border border-border bg-panel px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primaryFill" />
               MVP · M0.10
             </div>
             <h1 className="font-mono text-4xl font-semibold leading-[1.05] tracking-tightest text-ink md:text-5xl">
               One protocol.{' '}
-              <span className="text-inkMuted">Every upstream.</span>
+              <span className="text-primary">Every upstream.</span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-inkMuted">
               Route a single Jev SystemOne call across heterogeneous upstream models — Vercel AI
@@ -117,10 +117,10 @@ export function PlaygroundPage() {
               serverReachable={server.status === 'ok'}
             />
 
-            {/* Endpoint box */}
-            <section className="border border-border bg-panel">
+            {/* Endpoint box — TeamSense 面板三段 */}
+            <section className="overflow-hidden rounded-card border border-border bg-panel">
               <header className="border-b border-border px-4 py-2.5">
-                <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+                <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
                   Endpoint
                 </h2>
               </header>
@@ -128,7 +128,7 @@ export function PlaygroundPage() {
                 <Row label="POST" value="/v1/systemone" />
                 <Row label="GET" value="/v1/models" />
                 <Row label="GET" value="/health" />
-                <div className="mt-2 border-t border-border pt-2 text-inkSubtle">
+                <div className="mt-2 border-t border-border pt-2 text-inkMuted">
                   base = <span className="text-ink">{BASE}</span>
                 </div>
               </div>
@@ -148,16 +148,16 @@ export function PlaygroundPage() {
             />
 
             {/* Quick start hint */}
-            <section className="border border-border bg-panel px-4 py-3">
+            <section className="overflow-hidden rounded-card border border-border bg-panel px-4 py-3">
               <div className="mb-2 flex items-baseline justify-between">
-                <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+                <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
                   Quick start
                 </h2>
                 <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
                   curl
                 </span>
               </div>
-              <pre className="overflow-x-auto border border-border bg-bg p-3 font-mono text-xs leading-relaxed text-ink">
+              <pre className="overflow-x-auto border border-border bg-soft p-3 font-mono text-xs leading-relaxed text-ink">
 {`curl -X POST ${BASE}/v1/systemone \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -183,7 +183,7 @@ export function PlaygroundPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="w-10 text-inkSubtle">{label}</span>
+      <span className="w-10 text-inkMuted">{label}</span>
       <span className="text-ink">{value}</span>
     </div>
   );

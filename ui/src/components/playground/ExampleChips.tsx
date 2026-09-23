@@ -7,13 +7,13 @@ interface Props {
 }
 
 /**
- * 4 个示例 chips — 点击加载到 input
- * 极简风 — 等宽字体 + 细 border + hover 反色
+ * 示例 chips — 点击加载到 input。
+ * 激活/悬停 = 主蓝实底（CC Switch 手法），替代原黑白反色。
  */
 export function ExampleChips({ examples, onPick, activeId }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="mr-1 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+      <span className="mr-1 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
         Examples
       </span>
       {examples.map((ex) => {
@@ -27,8 +27,8 @@ export function ExampleChips({ examples, onPick, activeId }: Props) {
             className={
               'inline-flex h-8 items-center gap-1.5 border px-2.5 font-mono text-xs transition-colors ' +
               (active
-                ? 'border-ink bg-ink text-bg'
-                : 'border-border bg-panel text-ink hover:border-ink hover:bg-ink hover:text-bg')
+                ? 'border-primaryFill bg-primaryFill text-white'
+                : 'border-border bg-panel text-ink hover:border-primaryBright hover:bg-soft hover:text-primary')
             }
           >
             <span className="opacity-60">/</span>

@@ -258,32 +258,33 @@ export function RoutingPage() {
     return out;
   }, [routes]);
 
+  /* 状态胶囊（B1）：Saving=主蓝脉动 · UNSAVED=琥珀 · synced=中性 */
   const statusBadge = saving ? (
-    <span className="border border-ink bg-ink px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-bg animate-pulse">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-primaryFill px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-white animate-pulse">
       Saving…
     </span>
   ) : dirty ? (
-    <span className="border border-warn px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-warn">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warnBg px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-warn">
       UNSAVED
     </span>
   ) : (
-    <span className="border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
       synced
     </span>
   );
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
-      {/* 工具条 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-panel px-4 py-2.5">
+      {/* 工具条 — TeamSense 面板头 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-panel px-4 py-2.5">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
             Routing
           </span>
           <span className="font-mono text-xs text-inkMuted tabular">
             {routes.length} edges
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
             model endpoint → model endpoint
           </span>
           <span aria-live="polite">{statusBadge}</span>
@@ -301,8 +302,8 @@ export function RoutingPage() {
             className={
               'h-8 px-2.5 font-mono text-xs transition-colors ' +
               (showTable
-                ? 'border border-ink bg-ink text-bg'
-                : 'border border-border bg-panel text-ink hover:border-ink')
+                ? 'border border-primaryFill bg-primaryFill text-white'
+                : 'border border-border bg-panel text-ink hover:border-primaryBright hover:bg-soft')
             }
           >
             TABLE
@@ -310,7 +311,7 @@ export function RoutingPage() {
           <button
             type="button"
             onClick={load}
-            className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-ink"
+            className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
           >
             刷新
           </button>
@@ -319,29 +320,29 @@ export function RoutingPage() {
 
       {/* 主体 */}
       {loading ? (
-        <div className="mt-4 h-96 animate-pulse border border-border bg-panel" aria-busy="true" />
+        <div className="mt-4 h-96 animate-pulse rounded-card border border-border bg-panel" aria-busy="true" />
       ) : loadError ? (
-        <section className="mt-4 border border-danger bg-panel p-6" role="alert">
+        <section className="mt-4 rounded-card border border-danger bg-dangerBg p-6" role="alert">
           <p className="text-sm text-danger">加载失败：{loadError}</p>
           <button
             type="button"
             onClick={load}
-            className="mt-3 h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
+            className="mt-3 h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
           >
             重试
           </button>
         </section>
       ) : routes.length === 0 ? (
         /* 空态（design/01 §6.2） */
-        <section className="mt-4 border border-border bg-panel p-8 text-center">
+        <section className="mt-4 rounded-card border border-border bg-panel p-8 text-center">
           <p className="text-sm text-inkMuted">还没有路由。</p>
-          <pre className="mx-auto mt-3 max-w-lg overflow-x-auto border border-border bg-bg p-3 text-left font-mono text-xs leading-relaxed text-ink">
+          <pre className="mx-auto mt-3 max-w-lg overflow-x-auto border border-border bg-soft p-3 text-left font-mono text-xs leading-relaxed text-ink">
             {ROUTES_EXAMPLE_TOML}
           </pre>
           <button
             type="button"
             onClick={importExample}
-            className="mt-4 h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
+            className="mt-4 h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover"
           >
             一键导入 example
           </button>
@@ -349,7 +350,7 @@ export function RoutingPage() {
       ) : (
         <>
           {/* 二部图画布 + 边浮层 */}
-          <div className="mt-4 border border-border">
+          <div className="mt-4 overflow-hidden rounded-card border border-border">
             <BipartiteCanvas
               routes={routes}
               leftIds={leftIds}

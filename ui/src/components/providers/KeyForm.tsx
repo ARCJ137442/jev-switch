@@ -32,10 +32,10 @@ export function KeyForm({ onSave, onCancel }: Props) {
   return (
     <form
       onSubmit={(e) => void submit(e)}
-      className="flex flex-wrap items-center gap-2 border-t border-border bg-bg px-4 py-2.5"
+      className="flex flex-wrap items-center gap-2 border-t border-border bg-soft px-4 py-2.5"
     >
       <label className="flex items-center gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
           new key
         </span>
         <input
@@ -53,7 +53,7 @@ export function KeyForm({ onSave, onCancel }: Props) {
       <button
         type="submit"
         disabled={saving || value.length === 0}
-        className="h-8 border border-ink bg-ink px-2.5 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 border border-primaryFill bg-primaryFill px-2.5 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {saving ? 'Saving…' : 'Save'}
       </button>
@@ -61,11 +61,11 @@ export function KeyForm({ onSave, onCancel }: Props) {
         type="button"
         onClick={onCancel}
         disabled={saving}
-        className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-inkMuted hover:text-ink disabled:opacity-50"
+        className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-inkMuted hover:border-primaryBright hover:text-ink disabled:opacity-50"
       >
         Cancel
       </button>
-      <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
         masked input · 无明文回显
       </span>
     </form>

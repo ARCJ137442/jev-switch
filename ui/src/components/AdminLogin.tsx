@@ -42,18 +42,18 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-bg/80"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="admin-login-title"
     >
       <form
         onSubmit={(e) => void submit(e)}
-        className="w-full max-w-sm border border-border bg-panel p-6"
+        className="w-full max-w-sm rounded-card border border-border bg-panel p-6"
       >
         <h2
           id="admin-login-title"
-          className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle"
+          className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted"
         >
           Admin login
         </h2>
@@ -67,7 +67,7 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="admin password"
           autoComplete="current-password"
-          className="mt-4 h-9 w-full border border-border bg-bg px-3 font-mono text-xs text-ink placeholder:text-inkSubtle focus:border-ink focus:outline-none"
+          className="mt-4 h-9 w-full border border-border bg-soft px-3 font-mono text-xs text-ink placeholder:text-inkSubtle focus:border-primaryBright focus:outline-none"
         />
         {error !== null && (
           <p className="mt-2 font-mono text-xs text-danger" role="alert">
@@ -78,7 +78,7 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
           <button
             type="submit"
             disabled={busy || password.length === 0}
-            className="h-8 border border-ink bg-ink px-4 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-8 border border-primaryFill bg-primaryFill px-4 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? '…' : '登录'}
           </button>

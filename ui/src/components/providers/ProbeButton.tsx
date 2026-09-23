@@ -30,7 +30,7 @@ export function ProbeButton({ providerId, onResult }: Props) {
       type="button"
       onClick={() => void onClick()}
       disabled={loading}
-      className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-ink disabled:cursor-not-allowed disabled:opacity-60"
+      className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft disabled:cursor-not-allowed disabled:opacity-60"
     >
       {loading ? 'Probing…' : 'Probe'}
     </button>

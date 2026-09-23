@@ -3,6 +3,7 @@ import { BASE, fetchHealth } from '../api';
 import { setAuthErrorHandler } from '../api/admin';
 import { ConflictBanner } from '../components/ConflictBanner';
 import { AdminLogin } from '../components/AdminLogin';
+import { StatusBadge, type BadgeTone } from '../components/ui/StatusBadge';
 import { FeedbackProvider, useConflictControl, useToast } from './feedback';
 import pkg from '../../package.json';
 
@@ -79,7 +80,7 @@ const NAV: ReadonlyArray<{ route: Route; label: string; href: string }> = [
   { route: 'playground', label: 'Playground', href: '#/playground' },
 ];
 
-/** design/01 §5 版式：顶栏两行 + 冲突横幅槽 + 页面 + endpoint footer 行 */
+/** design/01 §5 版式 × TeamSense 导航激活态（A6）× 方案 B 色 */
 export function Shell({ route, children }: ShellProps) {
   return (
     <FeedbackProvider>
@@ -102,6 +103,15 @@ function ShellFrame({ route, children }: ShellProps) {
     return () => setAuthErrorHandler(null);
   }, []);
 
+  const daemonTone: BadgeTone =
+    server.status === 'ok' ? 'ok' : server.status === 'error' ? 'danger' : 'muted';
+  const daemonLabel =
+    server.status === 'ok'
+      ? 'daemon ok'
+      : server.status === 'error'
+        ? 'daemon unreachable'
+        : 'connecting…';
+
   return (
     <div className="flex min-h-full flex-col bg-bg text-ink">
       {needLogin && (
@@ -112,19 +122,19 @@ function ShellFrame({ route, children }: ShellProps) {
           }}
         />
       )}
-      {/* 顶栏第一行：logo + 三页导航 */}
+      {/* 顶栏第一行：logo + 三页导航（激活 = panel 底 + 边 + 微影，TeamSense aria-current 手法） */}
       <header className="border-b border-border bg-bg">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-3.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-3">
           <a
             href="#/playground"
             className="flex items-center gap-2 font-mono text-base font-semibold tracking-tight text-ink"
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center bg-ink text-sm font-bold text-bg">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-primaryFill text-sm font-bold text-white">
               J
             </span>
             <span>Jev-Switch</span>
           </a>
-          <nav aria-label="primary" className="flex items-center gap-4">
+          <nav aria-label="primary" className="flex items-center gap-1">
             {NAV.map((item) => {
               const active = item.route === route;
               return (
@@ -133,8 +143,10 @@ function ShellFrame({ route, children }: ShellProps) {
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
                   className={
-                    'text-sm transition-colors ' +
-                    (active ? 'font-medium text-ink' : 'text-inkMuted hover:text-ink')
+                    'rounded-ctl border px-3 py-1.5 text-sm transition-colors ' +
+                    (active
+                      ? 'border-border bg-panel font-medium text-ink shadow-sm'
+                      : 'border-transparent text-inkMuted hover:bg-soft hover:text-ink')
                   }
                 >
                   {item.label}
@@ -143,31 +155,14 @@ function ShellFrame({ route, children }: ShellProps) {
             })}
           </nav>
         </div>
-        {/* 顶栏第二行：daemon 灯 · masked-key hint · 版本 */}
+        {/* 顶栏第二行：daemon 状态胶囊 · masked-key hint · 版本 */}
         <div className="border-t border-border">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-1.5 font-mono text-[10px] uppercase tracking-widest">
-            <span className="flex items-center gap-1.5" aria-live="polite">
-              <span
-                className={
-                  'inline-block h-1.5 w-1.5 rounded-full ' +
-                  (server.status === 'ok'
-                    ? 'bg-ok'
-                    : server.status === 'error'
-                      ? 'bg-danger'
-                      : 'bg-inkSubtle')
-                }
-                aria-hidden
-              />
-              <span className="text-inkMuted">
-                {server.status === 'ok'
-                  ? 'daemon ok'
-                  : server.status === 'error'
-                    ? 'daemon unreachable'
-                    : 'connecting…'}
-              </span>
-            </span>
-            <span className="text-inkSubtle">masked-key</span>
-            <span className="text-inkSubtle tabular">v{pkg.version}</span>
+            <StatusBadge tone={daemonTone} aria-live="polite">
+              {daemonLabel}
+            </StatusBadge>
+            <span className="text-inkMuted">masked-key</span>
+            <span className="text-inkMuted tabular">v{pkg.version}</span>
           </div>
         </div>
       </header>
@@ -180,26 +175,26 @@ function ShellFrame({ route, children }: ShellProps) {
       {/* 页面 */}
       <main className="flex-1">{children}</main>
 
-      {/* footer endpoint 行（design/01 §5） */}
+      {/* footer endpoint 行（design/01 §5）— bg 底上用 muted 保 ≥4.5 */}
       <footer className="border-t border-border bg-bg">
-        <div className="mx-auto max-w-7xl px-6 py-3 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+        <div className="mx-auto max-w-7xl px-6 py-3 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
           endpoint {endpointLabel} · /v1/systemone · file=truth
         </div>
       </footer>
 
-      {/* toast 槽位 */}
+      {/* toast 槽位 — B1 tint 胶囊 */}
       {toasts.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2" aria-live="polite">
           {toasts.map((t) => (
             <div
               key={t.id}
               className={
-                'border bg-panel px-3 py-2 font-mono text-xs ' +
+                'rounded-ctl border px-3 py-2 font-mono text-xs ' +
                 (t.kind === 'ok'
-                  ? 'border-ok text-ok'
+                  ? 'border-transparent bg-okBg text-ok'
                   : t.kind === 'warn'
-                    ? 'border-warn text-warn'
-                    : 'border-danger text-danger')
+                    ? 'border-transparent bg-warnBg text-warn'
+                    : 'border-transparent bg-dangerBg text-danger')
               }
             >
               {t.message}

@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* tokens 见 styles/tokens.css（design/01 §4）；tailwind 色值在 tailwind.config.js 同步 */
+/* tokens 见 styles/tokens.css（方案 B 色值 × TeamSense 圆角）；tailwind 色值在 tailwind.config.js 同步 */
 
 html,
 body,
@@ -19,9 +19,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 极简风 — 极细 border 分隔，无阴影无渐变 */
+/* 细线分隔（border token 随主题），无阴影堆叠 */
 * {
   border-color: var(--border);
+}
+
+/* TeamSense 控件圆角 6px —— 按元素类型统一（面板级 rounded-card 在组件上显式标注） */
+button,
+input,
+select,
+textarea {
+  border-radius: var(--radius-ctl);
 }
 
 /* 代码字体优先 */
@@ -38,16 +46,31 @@ samp,
   font-variant-numeric: tabular-nums;
 }
 
-/* 输入框聚焦 — 保留 border 加粗提示；可见焦点环由 tokens.css `:focus-visible`
-   统一供给（design/01 §4.3：outline 1px solid ink / offset 2px，无光晕）。
-   此处禁止 `outline: none` —— 会吞掉键盘焦点环（§8 可见 focus ring）。 */
+/* 输入框聚焦：边框转蓝（B3 hover/focus 手法）；可见焦点环由 tokens.css 统一供给 */
 textarea:focus,
 input:focus,
 select:focus {
-  border-color: var(--ink);
+  border-color: var(--primary-bright);
 }
 
-/* 滚动条极简化 */
+/* ── 方案 B2 卡片状态高亮（TeamSense 面板上叠 CC Switch 洗底/描边）──
+   outline 负偏移代替 2px border，避免 1px 布局跳动 */
+.card-active {
+  outline: 2px solid var(--primary-bright);
+  outline-offset: -2px;
+  box-shadow: 0 4px 14px var(--primary-wash);
+  background-image: linear-gradient(to right, var(--primary-wash), transparent);
+}
+.card-warn {
+  outline: 2px solid var(--warn-dot);
+  outline-offset: -2px;
+}
+.card-danger {
+  outline: 2px solid var(--danger-fill);
+  outline-offset: -2px;
+}
+
+/* 滚动条 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -57,7 +80,7 @@ select:focus {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--edge-idle);
-  border-radius: 0;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-subtle);

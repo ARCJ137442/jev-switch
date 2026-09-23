@@ -22,7 +22,7 @@ interface FormState {
 const EMPTY_FORM: FormState = { id: '', kind: '', base: '', enabled: true, apiKey: '' };
 
 /**
- * + Add provider 面板（design/01 §6.1）：表单 / 粘贴 toml 片段 双 Tab。
+ * + Add provider 面板（design/01 §6.1 × TeamSense 三段式）：表单 / 粘贴 toml 片段 双 Tab。
  * api_key 走 password 输入（无 Show）；解析错误全部回显，不静默半导入。
  */
 export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props) {
@@ -33,10 +33,10 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
   const [errors, setErrors] = useState<string[]>([]);
 
   const tabClass = (active: boolean) =>
-    'h-8 px-2.5 font-mono text-xs transition-colors ' +
+    'h-8 px-2.5 font-mono text-xs transition-colors rounded ' +
     (active
-      ? 'border border-ink bg-ink text-bg'
-      : 'border border-transparent text-inkMuted hover:text-ink');
+      ? 'border border-primaryFill bg-primaryFill text-white'
+      : 'border border-transparent text-inkMuted hover:text-ink hover:bg-soft');
 
   const submitForm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +92,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
   };
 
   return (
-    <section className="border border-border bg-panel">
+    <section className="overflow-hidden rounded-card border border-border bg-panel">
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-1">
           <button type="button" className={tabClass(tab === 'form')} onClick={() => setTab('form')}>
@@ -112,7 +112,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
       </header>
 
       {errors.length > 0 && (
-        <div className="border-b border-danger bg-danger/10 px-4 py-2" role="alert">
+        <div className="border-b border-danger bg-dangerBg px-4 py-2" role="alert">
           {errors.map((err, i) => (
             <div key={i} className="font-mono text-xs text-danger">
               {err}
@@ -130,7 +130,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
                 placeholder="vercel"
                 spellCheck={false}
-                className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+                className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
               />
             </Field>
             <Field label="kind" hint="必填">
@@ -139,7 +139,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
                 onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
                 placeholder="vercel-gateway"
                 spellCheck={false}
-                className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+                className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
               />
             </Field>
           </div>
@@ -149,7 +149,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               onChange={(e) => setForm((f) => ({ ...f, base: e.target.value }))}
               placeholder="https://…"
               spellCheck={false}
-              className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+              className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
             />
           </Field>
           <Field label="api_key" hint="仅密文输入 · 无 Show">
@@ -160,7 +160,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               placeholder="••••••••"
               autoComplete="new-password"
               spellCheck={false}
-              className="h-8 w-full border border-border bg-bg px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
+              className="h-8 w-full border border-border bg-soft px-2 font-mono text-xs text-ink placeholder:text-inkSubtle"
             />
           </Field>
           <label className="flex items-center gap-2 text-xs text-ink">
@@ -168,7 +168,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               type="checkbox"
               checked={form.enabled}
               onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))}
-              className="accent-ink"
+              className="accent-primary"
             />
             enabled
           </label>
@@ -176,7 +176,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
             <button
               type="submit"
               disabled={busy}
-              className="h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
+              className="h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:opacity-50"
             >
               {busy ? 'Saving…' : 'Add provider'}
             </button>
@@ -184,7 +184,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
         </form>
       ) : (
         <form onSubmit={(e) => void submitToml(e)} className="space-y-3 px-4 py-3">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
             粘贴 [providers.&lt;id&gt;] 片段
           </div>
           <textarea
@@ -193,17 +193,17 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
             rows={8}
             spellCheck={false}
             placeholder={'[providers.vercel]\nkind = "vercel-gateway"\nbase = "https://…"\napi_key = "…"\nenabled = true'}
-            className="w-full resize-y border border-border bg-bg p-2.5 font-mono text-xs leading-relaxed text-ink placeholder:text-inkSubtle"
+            className="w-full resize-y border border-border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink placeholder:text-inkSubtle"
           />
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={busy}
-              className="h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink disabled:opacity-50"
+              className="h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover disabled:opacity-50"
             >
               {busy ? 'Saving…' : 'Parse & Add'}
             </button>
-            <span className="self-center font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+            <span className="self-center font-mono text-[10px] uppercase tracking-widest text-inkMuted">
               解析失败会全量回显 · 不半导入
             </span>
           </div>
@@ -225,11 +225,11 @@ function Field({
   return (
     <label className="flex flex-col gap-1">
       <span className="flex items-baseline justify-between">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
           {label}
         </span>
         {hint && (
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
             {hint}
           </span>
         )}

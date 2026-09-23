@@ -441,7 +441,7 @@ export function BipartiteCanvas({
           tabIndex={0}
           role="group"
           aria-label={`model ${b.id}, ${b.badge}`}
-          className="absolute z-10 border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
+          className="absolute z-10 rounded border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
           style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -453,8 +453,8 @@ export function BipartiteCanvas({
               className={
                 'shrink-0 border px-1 py-0.5 font-mono text-[10px] uppercase tracking-widest ' +
                 (b.badge === 'PREFIX' || b.badge === 'ALIAS'
-                  ? 'border-border text-inkMuted'
-                  : 'border-ink text-ink')
+                  ? 'rounded-full border-0 bg-soft px-1.5 text-inkMuted'
+                  : 'rounded-full border-0 bg-infoBg text-info')
               }
             >
               {b.badge}
@@ -466,7 +466,7 @@ export function BipartiteCanvas({
             aria-label={`从 ${b.id} 拖出连线到提供商`}
             title="拖到右侧卡片内的模型端口建端点边；落卡片空白 = 同名钉死"
             onPointerDown={(e) => startDrag(b.id, e)}
-            className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 cursor-crosshair border border-ink bg-panel hover:bg-ink"
+            className="absolute -right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 cursor-crosshair rounded-sm border border-primaryBright bg-panel hover:bg-primaryFill"
             style={{ touchAction: 'none' }}
           />
         </div>
@@ -595,17 +595,17 @@ export function BipartiteCanvas({
             tabIndex={0}
             role="group"
             aria-label={`provider ${b.id}, ${b.ports.length} endpoints`}
-            className="absolute z-10 border border-border bg-panel focus-visible:outline focus-visible:outline-1"
+            className="absolute z-10 rounded-card border border-border bg-panel focus-visible:outline focus-visible:outline-1"
             style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* 卡头 = 提供商锚定：地址 + key 归属（API token 在 provider 层，掩码展示归 Providers 页） */}
-            <div className="flex h-10 items-center justify-between gap-2 border-b border-border px-2.5">
+            <div className="flex h-10 items-center justify-between gap-2 border-b border-border bg-soft px-2.5">
               <span className="flex min-w-0 items-center gap-2">
                 <span
                   className={
                     'inline-block h-1.5 w-1.5 shrink-0 rounded-full ' +
-                    (b.enabled ? 'bg-ok' : 'bg-inkSubtle')
+                    (b.enabled ? 'bg-okDot' : 'bg-inkSubtle')
                   }
                   aria-hidden
                 />
@@ -614,10 +614,10 @@ export function BipartiteCanvas({
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-1">
-                <span className="border border-border px-1 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkSubtle tabular">
+                <span className="rounded-full bg-soft px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted tabular">
                   {b.ports.length} ep
                 </span>
-                <span className="border border-border px-1 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+                <span className="rounded-full bg-soft px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
                   PROVIDER
                 </span>
               </span>
@@ -625,7 +625,7 @@ export function BipartiteCanvas({
             {/* 端口区 = 卡片内的模型端点（三元组再锚定模型 id） */}
             <div className="flex flex-col gap-1 px-1.5 pt-1.5">
               {b.ports.length === 0 ? (
-                <div className="flex h-6 items-center border border-dashed border-border px-1.5 font-mono text-[10px] text-inkSubtle">
+                <div className="flex h-6 items-center rounded border border-dashed border-border px-1.5 font-mono text-[10px] text-inkMuted">
                   no endpoint — 拖线到此卡片建同名端点
                 </div>
               ) : (
@@ -636,7 +636,7 @@ export function BipartiteCanvas({
                     data-right-node={b.id}
                     role="group"
                     aria-label={`endpoint ${b.id}/${p.model ?? 'passthrough'}`}
-                    className="flex h-6 items-center gap-1.5 border border-border bg-bg px-1.5 font-mono text-[10px] text-ink"
+                    className="flex h-6 items-center gap-1.5 rounded border border-border bg-bg px-1.5 font-mono text-[10px] text-ink"
                     title={
                       p.pinned
                         ? `钉死端点：(${b.id}) ${p.model} — 地址×模型×token 三固定`
@@ -656,8 +656,8 @@ export function BipartiteCanvas({
                       className={
                         'ml-auto shrink-0 border px-1 uppercase tracking-widest ' +
                         (p.pinned
-                          ? 'border-ink text-ink'
-                          : 'border-border text-inkMuted')
+                          ? 'rounded-full border-0 bg-infoBg text-info'
+                          : 'rounded-full border-0 bg-soft px-1.5 text-inkMuted')
                       }
                     >
                       {p.pinned ? 'pin' : 'pass'}
@@ -674,7 +674,7 @@ export function BipartiteCanvas({
             tabIndex={0}
             role="group"
             aria-label={`alias ${b.id}`}
-            className="absolute z-10 border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
+            className="absolute z-10 rounded border border-border bg-panel px-2.5 py-2 focus-visible:outline focus-visible:outline-1"
             style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -682,7 +682,7 @@ export function BipartiteCanvas({
               <span className="min-w-0 truncate font-mono text-xs font-medium text-ink tabular" title={b.id}>
                 {b.id}
               </span>
-              <span className="shrink-0 border border-border px-1 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+              <span className="shrink-0 rounded-full bg-soft px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
                 ALIAS
               </span>
             </div>

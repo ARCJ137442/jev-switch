@@ -9,12 +9,12 @@ interface Props {
 }
 
 const cell =
-  'h-8 w-full border border-transparent bg-transparent px-1.5 font-mono text-xs text-ink tabular focus:border-border focus:bg-bg';
+  'h-8 w-full border border-transparent bg-transparent px-1.5 font-mono text-xs text-ink tabular focus:border-primaryBright focus:bg-soft';
 
 /**
  * 路由表编辑（design/01 §8 a11y：连线编辑必须有表单等价路径）。
  * 全字段键盘可编辑：left / match / right / upstream_model / priority / sticky / on_error。
- * 环标红行 + 重复 left→right 提示；增删行走同一 debounce PUT 管线。
+ * 环标红行（dangerBg tint）+ 重复 left→right 提示；增删行走同一 debounce PUT 管线。
  */
 export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAdd }: Props) {
   const pairCount = new Map<string, number>();
@@ -24,15 +24,15 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
   }
 
   return (
-    <section className="border border-border bg-panel" aria-label="routes table editor">
+    <section className="overflow-hidden rounded-card border border-border bg-panel" aria-label="routes table editor">
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
           Route table · 全量 routes（键盘等价路径）
         </span>
         <button
           type="button"
           onClick={onAdd}
-          className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-ink"
+          className="h-8 border border-border bg-panel px-2.5 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft"
         >
           + Add row
         </button>
@@ -41,7 +41,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left">
           <thead>
-            <tr className="border-b border-border font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+            <tr className="border-b border-border font-mono text-[10px] uppercase tracking-widest text-inkMuted">
               <th className="px-3 py-2 font-semibold">left</th>
               <th className="px-2 py-2 font-semibold">match</th>
               <th className="px-3 py-2 font-semibold">right</th>
@@ -68,7 +68,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                 <tr
                   key={`${key}#${i}`}
                   className={
-                    'border-b border-border ' + (isErr ? 'bg-danger/10' : 'hover:bg-bg')
+                    'border-b border-border ' + (isErr ? 'bg-dangerBg' : 'hover:bg-soft')
                   }
                 >
                   <td className="px-2 py-1">
@@ -156,7 +156,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       type="button"
                       onClick={() => onDeleteAt(i)}
                       aria-label={`delete row ${i + 1}`}
-                      className="h-8 px-1.5 font-mono text-xs text-inkSubtle hover:text-danger"
+                      className="h-8 px-1.5 font-mono text-xs text-inkMuted hover:text-danger"
                     >
                       删
                     </button>
@@ -167,7 +167,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
           </tbody>
         </table>
       </div>
-      <footer className="border-t border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+      <footer className="border-t border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
         变更 400ms debounce 后 PUT /v1/admin/routes · 环 → 标红拒绝
       </footer>
     </section>

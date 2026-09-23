@@ -21,7 +21,7 @@ const toWrite = (p: AdminProvider): AdminProviderWrite => ({
 });
 
 /**
- * Providers 页（design/01 §6.1，契约 06 §3）：
+ * Providers 页（design/01 §6.1，契约 06 §3 × TeamSense 面板结构）：
  * 卡片流 + ENABLED 乐观更新/回滚 + 密文密钥 + Probe + 打字 id 删除 +
  * 表单/贴 toml 双入口 + 冲突横幅（GET 深比较驱动，hook 集中供 H3 复用）。
  */
@@ -149,40 +149,37 @@ export function ProvidersPage() {
   const enabledCount = providers.filter((p) => p.enabled).length;
   const mode = getAdminMode();
 
+  const btnPrimary =
+    'h-8 border border-primaryFill bg-primaryFill px-3 font-mono text-xs text-white hover:bg-primaryFillHover hover:border-primaryFillHover';
+  const btnSecondary =
+    'h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-primaryBright hover:bg-soft';
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
       <div className="mb-4 flex items-baseline justify-between">
-        <h1 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
+        <h1 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
           Providers
         </h1>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
           api {mode}
         </span>
       </div>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        {/* 左窄工具栏 */}
+        {/* 左窄工具栏 — TeamSense 面板 */}
         <aside className="w-full shrink-0 lg:w-52">
-          <div className="space-y-3 border border-border bg-panel px-4 py-3">
-            <button
-              type="button"
-              onClick={() => openAdd('form')}
-              className="h-8 w-full border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
-            >
+          <div className="space-y-3 overflow-hidden rounded-card border border-border bg-panel px-4 py-3">
+            <button type="button" onClick={() => openAdd('form')} className={`${btnPrimary} w-full`}>
               + Add provider
             </button>
-            <button
-              type="button"
-              onClick={() => openAdd('toml')}
-              className="h-8 w-full border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
-            >
+            <button type="button" onClick={() => openAdd('toml')} className={`${btnSecondary} w-full`}>
               贴 toml 片段
             </button>
-            <div className="border-t border-border pt-3 font-mono text-xs text-inkSubtle tabular">
+            <div className="border-t border-border pt-3 font-mono text-xs text-inkMuted tabular">
               <div>
                 <span className="text-ink">{enabledCount}</span> / {providers.length} enabled
               </div>
-              <div className="mt-1 text-[10px] uppercase tracking-widest">
+              <div className="mt-1 text-[10px] uppercase tracking-widest text-inkSubtle">
                 {mode === 'mock' ? 'mock-first · dev' : 'live daemon'}
               </div>
             </div>
@@ -201,39 +198,27 @@ export function ProvidersPage() {
 
           {loading ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" aria-busy="true">
-              <div className="h-44 animate-pulse border border-border bg-panel" />
-              <div className="h-44 animate-pulse border border-border bg-panel" />
+              <div className="h-44 animate-pulse rounded-card border border-border bg-panel" />
+              <div className="h-44 animate-pulse rounded-card border border-border bg-panel" />
             </div>
           ) : error ? (
-            <section className="border border-danger bg-panel p-6" role="alert">
+            <section className="rounded-card border border-danger bg-dangerBg p-6" role="alert">
               <p className="text-sm text-danger">加载失败：{error}</p>
-              <button
-                type="button"
-                onClick={load}
-                className="mt-3 h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
-              >
+              <button type="button" onClick={load} className={`${btnSecondary} mt-3`}>
                 重试
               </button>
             </section>
           ) : providers.length === 0 ? (
-            <section className="border border-border bg-panel p-8 text-center">
+            <section className="rounded-card border border-border bg-panel p-8 text-center">
               <p className="text-sm text-inkMuted">还没有提供商。</p>
               <p className="mt-2 text-sm text-inkMuted">
                 粘贴 [providers.*] toml 片段，或参考 rs/providers.example.toml 添加第一个上游。
               </p>
               <div className="mt-4 flex justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => openAdd('form')}
-                  className="h-8 border border-ink bg-ink px-3 font-mono text-xs text-bg hover:bg-bg hover:text-ink"
-                >
+                <button type="button" onClick={() => openAdd('form')} className={btnPrimary}>
                   + Add provider
                 </button>
-                <button
-                  type="button"
-                  onClick={() => openAdd('toml')}
-                  className="h-8 border border-border bg-panel px-3 font-mono text-xs text-ink hover:border-ink"
-                >
+                <button type="button" onClick={() => openAdd('toml')} className={btnSecondary}>
                   贴 toml 片段
                 </button>
               </div>

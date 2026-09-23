@@ -123,7 +123,7 @@ export function TestPanel({
   }, []);
 
   return (
-    <section id="playground" className="border border-border bg-panel">
+    <section id="playground" className="overflow-hidden rounded-card border border-border bg-panel">
       {/* Top bar — input mode tabs */}
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-1">
@@ -134,7 +134,7 @@ export function TestPanel({
             JSON
           </TabButton>
         </div>
-        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
           <span className="tabular">~{totalInputTokens} tokens</span>
           <span className="text-inkSubtle">·</span>
           <span className="tabular">{questionCountLabel}</span>
@@ -164,7 +164,7 @@ export function TestPanel({
                   onChange={(e) => onStateChange(e.target.value)}
                   spellCheck={false}
                   rows={6}
-                  className="w-full resize-y border border-border bg-bg p-2.5 font-mono text-xs leading-relaxed text-ink"
+                  className="w-full resize-y border border-border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink"
                 />
               }
             />
@@ -184,7 +184,7 @@ export function TestPanel({
                       spellCheck={false}
                       rows={12}
                       aria-label="questions JSON"
-                      className="w-full resize-y border border-border bg-bg p-2.5 font-mono text-xs leading-relaxed text-ink"
+                      className="w-full resize-y border border-border bg-soft p-2.5 font-mono text-xs leading-relaxed text-ink"
                     />
                   }
                 />
@@ -202,17 +202,17 @@ export function TestPanel({
             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
               Output
             </span>
-            <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+            <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
               <span
                 className={
-                  'inline-block h-1.5 w-1.5 ' +
+                  'inline-block h-1.5 w-1.5 rounded-full ' +
                   (status === 'idle'
                     ? 'bg-inkSubtle'
                     : status === 'loading'
-                      ? 'animate-pulse bg-ink'
+                      ? 'animate-pulse bg-primaryFill'
                       : status === 'ok'
-                        ? 'bg-ok'
-                        : 'bg-danger')
+                        ? 'bg-okDot'
+                        : 'bg-dangerDot')
                 }
               />
               {status}
@@ -223,9 +223,9 @@ export function TestPanel({
           <div className="flex-1 px-4 py-3">
             <pre
               className={
-                'min-h-[200px] whitespace-pre-wrap break-words border bg-bg p-3 font-mono text-xs leading-relaxed ' +
-                // design/01 §7：错误态输出面板 danger
-                (error ? 'border-danger text-danger' : 'border-border text-ink')
+                'min-h-[200px] whitespace-pre-wrap break-words border bg-soft p-3 font-mono text-xs leading-relaxed ' +
+                // design/01 §7：错误态输出面板 dangerBg tint（B1）
+                (error ? 'border-danger bg-dangerBg text-danger' : 'border-border text-ink')
               }
             >
               {error
@@ -247,16 +247,16 @@ export function TestPanel({
         </div>
       </div>
 
-      {/* Big black CTA */}
-      <div className="flex items-center justify-between border-t border-border bg-bg px-4 py-3">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+      {/* Big blue CTA（B4 — 主蓝独占 CTA） */}
+      <div className="flex items-center justify-between border-t border-border bg-soft px-4 py-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
           POST {BASE}/v1/systemone
         </span>
         <button
           type="button"
           onClick={onRun}
           disabled={status === 'loading'}
-          className="inline-flex h-8 items-center gap-2 border border-ink bg-ink px-5 font-mono text-sm font-semibold text-bg transition-colors hover:bg-bg hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-2 border border-primaryFill bg-primaryFill px-5 font-mono text-sm font-semibold text-white transition-colors hover:bg-primaryFillHover hover:border-primaryFillHover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {status === 'loading' ? 'Running…' : 'Run Jev'}
           {status !== 'loading' && <span aria-hidden>↗</span>}
@@ -285,8 +285,8 @@ function TabButton({
       className={
         'h-8 px-2.5 font-mono text-xs transition-colors ' +
         (active
-          ? 'border border-ink bg-ink text-bg'
-          : 'border border-transparent text-inkMuted hover:text-ink')
+          ? 'border border-primaryFill bg-primaryFill text-white'
+          : 'border border-transparent text-inkMuted hover:text-primary hover:bg-soft')
       }
     >
       {children}
@@ -315,7 +315,7 @@ function Field({
           <span
             className={
               'font-mono text-[10px] uppercase tracking-widest ' +
-              (hintBg ? 'border border-border bg-bg px-1.5 py-0.5 text-inkMuted' : 'text-inkSubtle')
+              (hintBg ? 'border border-border bg-soft px-1.5 py-0.5 text-inkMuted' : 'text-inkSubtle')
             }
           >
             {hint}
@@ -333,7 +333,7 @@ function DecisionTypeHint({ questionsJson }: { questionsJson: string }) {
     parsed = JSON.parse(questionsJson || '{}');
   } catch {
     return (
-      <div className="border border-danger bg-danger/10 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-danger">
+      <div className="rounded border border-danger bg-dangerBg px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-danger">
         invalid JSON
       </div>
     );
@@ -342,14 +342,14 @@ function DecisionTypeHint({ questionsJson }: { questionsJson: string }) {
   const entries = Object.values(parsed as Record<string, { type?: string }>);
   if (entries.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 border border-border bg-bg px-3 py-2">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+    <div className="flex flex-wrap items-center gap-2 rounded border border-border bg-soft px-3 py-2">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
         decision type
       </span>
       {entries.map((q, i) => (
         <span
           key={i}
-          className="border border-ink bg-ink px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-bg"
+          className="rounded-full bg-infoBg px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest text-info"
         >
           {q.type ?? 'unknown'}
         </span>
@@ -428,7 +428,7 @@ function AnswerSummary({
         <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-widest text-inkSubtle">
           Summary
         </div>
-        <pre className="whitespace-pre-wrap break-words border border-border bg-bg p-3 font-mono text-xs text-inkMuted">
+        <pre className="whitespace-pre-wrap break-words border border-border bg-soft p-3 font-mono text-xs text-inkMuted">
           {JSON.stringify(response, null, 2)}
         </pre>
       </div>
@@ -520,7 +520,7 @@ function Metering({
             <span className="text-inkSubtle">tokens</span>
             {cell('in', `~${inputTokens}`)}
             {cell('out', `~${estOut}`)}
-            <span className="border border-border bg-bg px-1 py-px text-[10px] uppercase tracking-widest text-inkMuted">
+            <span className="border border-border bg-soft px-1 py-px text-[10px] uppercase tracking-widest text-inkMuted">
               估算
             </span>
           </>
@@ -550,7 +550,7 @@ function ProbBar({
   const denom = total > 0 ? total : 1;
   return (
     <div className="w-full">
-      <div className="flex h-1.5 w-full overflow-hidden border border-border bg-bg" aria-hidden>
+      <div className="flex h-1.5 w-full overflow-hidden border border-border bg-soft" aria-hidden>
         {entries.map(([k, v], i) => (
           <div
             key={k}
@@ -617,7 +617,7 @@ function RawAnswerLine({ qid, raw }: { qid: string; raw: unknown }) {
     <li className="flex flex-wrap items-baseline gap-2">
       <span className="text-inkSubtle tabular">{qid}</span>
       <span className="text-inkSubtle">→</span>
-      <pre className="max-w-full overflow-x-auto border border-border bg-bg px-1.5 py-0.5 text-xs text-inkMuted">
+      <pre className="max-w-full overflow-x-auto border border-border bg-soft px-1.5 py-0.5 text-xs text-inkMuted">
         {JSON.stringify(raw, null, 2)}
       </pre>
     </li>
@@ -679,7 +679,25 @@ function AnswerRow({ qid, raw }: { qid: string; raw: unknown }) {
             : '—';
     const note =
       prob !== null && noul !== null && prob !== noul ? `noul_p ${fmtNum(prob)}` : null;
-    return <AnswerShell qid={qid} typeTag={type} value={value} note={note} />;
+    // noul 概率计量条（图表）：0–1 水平条，主蓝实底 — 双缺（未验到）不画条
+    const eff = prob !== null ? prob : noul;
+    return (
+      <AnswerShell qid={qid} typeTag={type} value={value} note={note}>
+        {eff !== null && (
+          <div className="mt-0.5 flex items-center gap-2" aria-hidden>
+            <div className="h-1.5 w-32 overflow-hidden rounded-full border border-border bg-soft">
+              <div
+                className="h-full rounded-full bg-primaryFill"
+                style={{ width: `${Math.round(Math.min(Math.max(eff, 0), 1) * 100)}%` }}
+              />
+            </div>
+            <span className="font-mono text-[10px] tabular text-inkMuted">
+              {Math.round(Math.min(Math.max(eff, 0), 1) * 100)}%
+            </span>
+          </div>
+        )}
+      </AnswerShell>
+    );
   }
 
   if (type !== undefined) {
