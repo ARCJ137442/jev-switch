@@ -1,0 +1,82 @@
+{
+  "passed": 12,
+  "total": 12,
+  "results": [
+    {
+      "name": "①三服务就绪",
+      "ok": true,
+      "detail": "daemon=200 models=200 laya=200 vite=200"
+    },
+    {
+      "name": "①页面载入 + daemon 灯 ok",
+      "ok": true,
+      "detail": "截图 01"
+    },
+    {
+      "name": "②三页可切 + 截图",
+      "ok": true,
+      "detail": "#/providers ok; #/routing ok; #/playground ok"
+    },
+    {
+      "name": "③卡片启停（UI↔PUT↔GET 往返 + 密钥经整表 PUT 保留）",
+      "ok": true,
+      "detail": "aria true->false->true; remote False/True, key_set=True"
+    },
+    {
+      "name": "④密钥零明文（API 响应 + DOM 均无 fake key、无裸 api_key 字段）",
+      "ok": true,
+      "detail": "{\"api\": false, \"dom\": false, \"bare\": false}"
+    },
+    {
+      "name": "⑤Probe 灯号/脚注实变（dead vercel + live laya）",
+      "ok": true,
+      "detail": "vercel: changed -> vercel | 未探测 | Probing… | ENABLED | vercel | http://127.0.0.1:59999/v1/ai/evaluation-model | key | sk-****cafe | Replace key | last — · 未探测 | Delete ‖ laya: changed -> laya | 健康 | Probe | ENABLED | laya | http://127.0.0.1:18765/v1/systemone | key | (unset) | Replace key | last 1ms · 405 ok | Delete"
+    },
+    {
+      "name": "⑥拖线建边→debounce PUT→文件真值→删线回真值",
+      "ok": true,
+      "detail": "edge=True file=True unsaved_cleared=True deleted=True file_del=True"
+    },
+    {
+      "name": "⑦外部改 toml → 冲突横幅 → 重载生效",
+      "ok": true,
+      "detail": "banner_gone=True ids=['honeypot', 'laya', 'vercel']"
+    },
+    {
+      "name": "⑧a Run Jev(laya 直路)",
+      "ok": true,
+      "detail": "default_chip_type=choice; noul_run=SET; noul=0.0001"
+    },
+    {
+      "name": "⑧b Run Jev(jev failover ≥2 候选实发)",
+      "ok": true,
+      "detail": "upstream_calls=4（dead vercel×3 重试 + laya×1，A6 模型）"
+    },
+    {
+      "name": "⑧c 负例 404/400（422 由集成测试护栏覆盖：双上游能力集无缺口，线上不可复现）",
+      "ok": true,
+      "detail": "404=404 400=400"
+    },
+    {
+      "name": "⑨全程 Runtime.exceptionThrown=0 且 console.error=0",
+      "ok": true,
+      "detail": "js_exc=[] console=[] net_ignored_favicon=[]"
+    }
+  ],
+  "js_errors": [],
+  "console_errors": [],
+  "net_errors_ignored_fav": [],
+  "shots": [
+    "01-playground-load.png",
+    "02-playground.png",
+    "02-providers.png",
+    "02-routing.png",
+    "03-providers-after-toggle.png",
+    "04-providers-after-probe.png",
+    "05-routing-after-drag.png",
+    "06-routing-after-delete.png",
+    "07-conflict-banner.png",
+    "08-run-laya.png",
+    "09-run-failover.png"
+  ]
+}
