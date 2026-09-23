@@ -13,7 +13,6 @@ mod config;
 
 use anyhow::Context;
 use axum::{
-    body::Bytes,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -26,7 +25,7 @@ use jev_core::{
     router::Router as JevRouter,
     upstream::{JevError, Upstream},
 };
-use jev_protocol::{JevRequest, JevResponse};
+use jev_protocol::{SystemOneRequest, SystemOneResponse};
 use serde::Serialize;
 use serde_json::json;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
@@ -199,20 +198,8 @@ fn jev_error_to_response(e: JevError) -> Response {
 
 async fn systemone_handler(
     State(state): State<AppState>,
-    body: Bytes,
-) -> Result<Json<JevResponse>, Response> {
-    // 0. 协议解析：本地 400（criteria 缺失/错形态、未知 type、必填缺失、
-    //    questions 非 record…）—— 按 contracts/01 §6 不发上游。
-    //    手工 Bytes 提取：axum Json 提取器对 data 类错误回 422，契约要求 400。
-    let req: JevRequest = serde_json::from_slice(&body).map_err(|e| {
-        let err = ErrorBody {
-            error: e.to_string(),
-            upstream: None,
-            retryable: false,
-        };
-        (StatusCode::BAD_REQUEST, Json(err)).into_response()
-    })?;
-
+    Json(req): Json<SystemOneRequest>,
+) -> Result<Json<SystemOneResponse>, Response> {
     // 1. router lookup
     let upstream = match state.router.route(&req.model) {
         Ok(u) => u,
@@ -244,8 +231,8 @@ async fn systemone_handler(
         }
     };
 
-    // 3. raw Value → typed JevResponse（判别联合；上游形态非法 → 502）
-    let resp: JevResponse = match serde_json::from_value(raw) {
+    // 3. raw Value → typed SystemOneResponse
+    let resp: SystemOneResponse = match serde_json::from_value(raw) {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(upstream = %upstream_id, error = %e, "deserialize upstream response failed");

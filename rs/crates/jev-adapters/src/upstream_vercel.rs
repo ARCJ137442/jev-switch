@@ -12,7 +12,7 @@
 
 use jev_core::translate::{build_jev_response_from_vercel, normalize_request_for_vercel};
 use jev_core::upstream::{Capabilities, JevError, Upstream};
-use jev_protocol::{JevRequest, VercelResponse};
+use jev_protocol::{SystemOneRequest, VercelResponse};
 use reqwest::Client;
 use serde_json::Value;
 use std::time::Duration;
@@ -72,9 +72,11 @@ impl Upstream for VercelUpstream {
             .expect("vercel capability is hardcoded; this is a bug if missing")
     }
 
-    async fn evaluate(&self, req: JevRequest) -> Result<Value, JevError> {
-        // 1. 翻译请求：noul → boolean（出站方言化；req 原样保留，语义层出口统一 noul）
-        let normalized = normalize_request_for_vercel(&req).map_err(|e| JevError::BadResponse {
+    async fn evaluate(&self, req: SystemOneRequest) -> Result<Value, JevError> {
+        // 1. 翻译请求：noul → boolean
+        let normalized = normalize_request_for_vercel(req);
+        let original_request_for_denormalize = normalized.clone();
+        let body = serde_json::to_value(&normalized).map_err(|e| JevError::BadResponse {
             upstream_id: self.id.clone(),
             message: format!("serialize normalized request: {e}"),
         })?;
@@ -82,8 +84,8 @@ impl Upstream for VercelUpstream {
         // 2. 构造请求。Vercel gateway 路径是 `/v4/ai/evaluation-model`，
         //    body 顶层只需要 `state` + `questions`（model 走 header）。
         let vercel_body = serde_json::json!({
-            "state": normalized.get("state").cloned().unwrap_or(serde_json::Value::Null),
-            "questions": normalized.get("questions").cloned().unwrap_or(serde_json::json!({})),
+            "state": body.get("state").cloned().unwrap_or(serde_json::Value::Null),
+            "questions": body.get("questions").cloned().unwrap_or(serde_json::json!({})),
         });
 
         let mut req_builder = self
@@ -91,7 +93,7 @@ impl Upstream for VercelUpstream {
             .post(&self.base)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
-            .header("ai-model-id", &req.model);
+            .header("ai-model-id", &normalized.model);
         for (k, v) in VERCEL_HEADERS {
             req_builder = req_builder.header(*k, *v);
         }
@@ -139,12 +141,8 @@ impl Upstream for VercelUpstream {
             }
         })?;
 
-        // 5. 翻译回 Jev 标准：boolean → noul（唯一出口路径；缺字段/未知 type → 502）
-        let jev_resp = build_jev_response_from_vercel(&vercel_resp)
-            .map_err(|message| JevError::BadResponse {
-                upstream_id: self.id.clone(),
-                message,
-            })?;
+        // 5. 翻译回 Jev 标准：boolean → noul
+        let jev_resp = build_jev_response_from_vercel(&vercel_resp, &original_request_for_denormalize);
 
         // 6. 返回 serde_json::Value（router / handler 进一步用）
         serde_json::to_value(&jev_resp).map_err(|e| JevError::BadResponse {
@@ -157,32 +155,31 @@ impl Upstream for VercelUpstream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jev_protocol::{Criteria, Question};
+    use jev_protocol::DecisionQuestion;
     use std::collections::BTreeMap;
 
     #[tokio::test]
     async fn vercel_request_translation_in_normalize() {
-        // 验证 `normalize_request_for_vercel` 把 noul 改 boolean（wire 级）
+        // 验证 `normalize_request_for_vercel` 把 noul 改 boolean
+        // （在 evaluate 内部调，这里我们单独 verify 翻译函数）
         let mut questions = BTreeMap::new();
         questions.insert(
             "q".to_string(),
-            Question::Noul {
+            DecisionQuestion::Noul {
                 instructions: "test".into(),
-                criteria: Criteria::Bool {
-                    r#true: "y".into(),
-                    r#false: "n".into(),
-                },
+                criteria: Some(serde_json::json!({"true": "y", "false": "n"})),
             },
         );
-        let req = JevRequest {
+        let req = SystemOneRequest {
             model: "typesafe-ai/jev".into(),
             state: serde_json::json!("s"),
             questions,
         };
-        let normalized = normalize_request_for_vercel(&req).unwrap();
-        assert_eq!(normalized["questions"]["q"]["type"], "boolean");
-        // criteria 原样
-        assert_eq!(normalized["questions"]["q"]["criteria"]["true"], "y");
+        let normalized = normalize_request_for_vercel(req);
+        assert_eq!(
+            normalized.questions.get("q").unwrap().question_type_str(),
+            "boolean"
+        );
     }
 
     #[tokio::test]
