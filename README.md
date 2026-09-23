@@ -6,6 +6,7 @@
 
 ## 特性
 
+- **双态模式（local ⇄ cloud）**：本地态免 token 即装即用（CC Switch / LM Studio 式）；云端态以 Bearer 调用 token + 独立管理密码变身中转站（sub2api / newapi 式）——**一套内核，本地可路由、云端可中转**，聚合官方 / Vercel 等为一个 Jev API。上游拓扑不区分：以内核所在位置解析地址（LAN 内 Laya 自然直连）。详见 [docs/12](docs/12-路线收缩与三线作战计划.md) 与 [docs/deployment.md](docs/deployment.md)
 - **8 个 HTTP 端点**（health / models / systemone + 5 个 admin），全 JSON、统一错误体 `{error, upstream, retryable}`
 - **Jev 原生**：`POST /v1/systemone` 即 TypeSafe/jev-life 形状；`criteria` 必填、布尔族无 `confidence`、`noul`/`probability` 双键保留（`docs/contracts/01`）
 - **多上游模型路由 DAG**：`[[routes]]` exact/prefix、同模型多候选 failover、priority/sticky/on_error、加载与 PUT 双重检环（`docs/contracts/03`）
@@ -115,6 +116,12 @@ npm run dev --prefix ui    # http://127.0.0.1:5173
 
 # 3. 可选：本地上游 Laya（18765）
 E:\venvs\laya\Scripts\python.exe E:\tmp\jev_laya_server.py --port 18765
+```
+
+或 **Docker 单命令部署**（含前端同源托管与 cloud 态鉴权，细节见 [docs/deployment.md](docs/deployment.md)）：
+
+```bash
+docker compose up -d        # JEV_SWITCH_MODE=cloud + token/密码经 compose env 注入
 ```
 
 端到端冒烟（会自起停 daemon，**勿与第 1 步并跑**）：
