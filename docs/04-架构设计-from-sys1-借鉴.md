@@ -430,7 +430,7 @@ pub static CAPABILITY_MISSES: Lazy<CounterVec> = Lazy::new(|| {
 schema_version = "1"
 
 [server]
-listen = "127.0.0.1:8765"
+listen = "127.0.0.1:11435"
 ui_listen = "127.0.0.1:8766"
 admin_listen = "127.0.0.1:8767"   # /admin/* + /metrics 单独绑定
 cors_origins = ["http://127.0.0.1:8766"]
@@ -558,7 +558,7 @@ tauri-app/
 
 | 维度 | daemon（`jev-switch up`） | Tauri 桌面 |
 |---|---|---|
-| 用户入口 | `curl 127.0.0.1:8765/v1/systemone` | 系统托盘 + Webview UI |
+| 用户入口 | `curl 127.0.0.1:11435/v1/systemone` | 系统托盘 + Webview UI |
 | 启动方式 | `systemd` / `launchd` / Windows Service | `.app` / `.exe` |
 | 进程模型 | 单进程 | Tauri 父 + daemon 子进程（sidecar） |
 | UI 端口 | 8766 独立 | Tauri webview 内（无端口） |

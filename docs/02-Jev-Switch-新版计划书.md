@@ -85,7 +85,7 @@ Upstream::new_systemone("http://127.0.0.1:8000", "llm2jev");
 Jev-Switch 不只调用 C4，还可以**自身代理** C1/C2 的响应给 C4 调用方——这是 v1 DeepSeek 计划书没明确但关键的"桥接"能力：
 
 ```
-                       Jev-Switch (127.0.0.1:8765)
+                       Jev-Switch (127.0.0.1:11435)
                               │
    ┌──────────────────────────┼──────────────────────────┐
    │                          │                          │
@@ -250,7 +250,7 @@ fn vercel_to_jev(vercel_response: VercelResponse, questions: &Questions) -> JevR
 
 | 阶段 | 形态 | 用户场景 |
 |---|---|---|
-| M1 | **本地 daemon + 命令行** | `jev-switch` 起服务监听 8765；用户用 curl / 应用调 |
+| M1 | **本地 daemon + 命令行** | `jev-switch` 起服务监听 11435；用户用 curl / 应用调 |
 | M2 | + Web 控制面板（React + Vite） | `http://127.0.0.1:8766` 控制面板，可视化切换、查 trace |
 | M3 | + **Tauri 桌面应用**（参考 cc-switch） | 跨平台：Windows / macOS / Linux；系统托盘一键切换 |
 

@@ -412,7 +412,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_otel())      // OTel 自动注入
         .with_state(AppState { router });
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8765").await?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:11435").await?;
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -535,7 +535,7 @@ Metrics 三页）。配置文件位置约定（与 LM Studio / CC Switch 一致�
 ### 5. CLI 与 daemon 的 IPC
 
 - **没做原因**：jev-life 是浏览器直连。
-- **Jev-Switch**：daemon 监听 `127.0.0.1:8765`，CLI 是 HTTP 客户端；Tauri 进程内复用 axum Router。
+- **Jev-Switch**：daemon 监听 `127.0.0.1:11435`，CLI 是 HTTP 客户端；Tauri 进程内复用 axum Router。
 - **open**：要不要 Unix Domain Socket？M1 用 TCP loopback 简单，M7 Tauri 进程内复用绕开。
 
 ### 6. broker 内的"工具循环 vs JSON 路径"选择

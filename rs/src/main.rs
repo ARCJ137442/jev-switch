@@ -124,7 +124,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(CorsLayer::very_permissive())
         .with_state(state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8765));
+    // 默认 11435 — 对齐用户叙事基址期望（docs/「Jev-Switch」用户叙事探索）
+    let addr = SocketAddr::from(([127, 0, 0, 1], 11435));
     let listener = TcpListener::bind(addr)
         .await
         .with_context(|| format!("bind {addr}"))?;

@@ -190,7 +190,7 @@ export function TestPanel({
       {/* Big black CTA */}
       <div className="flex items-center justify-between border-t border-border bg-bg px-4 py-3">
         <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-          POST http://127.0.0.1:8765/v1/systemone
+          POST http://127.0.0.1:11435/v1/systemone
         </span>
         <button
           type="button"

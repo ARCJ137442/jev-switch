@@ -54,9 +54,9 @@ export function Header({ serverStatus, modelsCount, providersEnabled, providersT
             />
             <span className="text-inkMuted">
               {serverStatus === 'ok'
-                ? '8765 ok'
+                ? '11435 ok'
                 : serverStatus === 'error'
-                  ? '8765 down'
+                  ? '11435 down'
                   : 'connecting…'}
             </span>
           </span>
