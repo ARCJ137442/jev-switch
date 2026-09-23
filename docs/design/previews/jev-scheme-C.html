@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jev-Switch 方案 C · 混合（TeamSense 布局 × CC Switch 点缀色）— 静态预览</title>
+<style>
+/* ============ 方案 C 色板：TeamSense v3.7 paper 底 × CC Switch 蓝主色+胶囊 ============ */
+:root {
+  --bg: #f4f5f2;        /* v3.7 THEMES.paper.bg */
+  --panel: #ffffff;     /* paper.panel */
+  --soft: #ecefe9;      /* paper.soft */
+  --ink: #202c28;       /* paper.text */
+  --muted: #62726a;     /* paper.muted（只放 panel/白底；soft 底用 ink 或 #55635c） */
+  --line: #dce2db;      /* paper.line */
+  --primary: #0060df;   /* CC blue-600 文字/实底 */
+  --primary-bright: #0a84ff; /* CC blue-500 描边/洗底（非文本 ≥3:1） */
+  --ok-ink: #047857; --ok-bg: #d1fae5; --ok-dot: #059669;
+  --warn-ink: #b45309; --warn-bg: #fef3c7; --warn-dot: #d97706;
+  --danger-ink: #b91c1c; --danger-bg: #fee2e2; --danger-dot: #dc2626;
+  --edge-idle: #b8c2b6; /* line 加深，选中/错误承载信息 */
+  --r-card: 7px;        /* TeamSense --radius-card */
+  --r-ctl: 6px;         /* --radius-control */
+  --font-ui: 'Segoe UI', system-ui, -apple-system, 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'JetBrains Mono', Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font-ui); }
+button, select, input { font: inherit; color: inherit; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* 方案横幅 */
+.scheme-banner { background: var(--ink); color: #fff; padding: 10px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; font-size: 12px; }
+.scheme-banner strong { font-size: 13px; letter-spacing: .04em; }
+.scheme-banner .note { opacity: .78; }
+.chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid rgba(255,255,255,.25); border-radius: 4px; font-family: var(--font-mono); font-size: 10px; }
+.chip i { width: 10px; height: 10px; display: inline-block; border: 1px solid rgba(255,255,255,.4); border-radius: 2px; }
+
+/* ===== Shell（TeamSense 结构：panel 头 + 蓝激活导航） ===== */
+.topbar-1 { background: var(--panel); border-bottom: 1px solid var(--line); }
+.topbar-1 .inner { max-width: 1120px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 12px 24px; }
+.logo { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-weight: 700; font-size: 16px; color: var(--ink); letter-spacing: -.02em; }
+.logo .mark { width: 26px; height: 26px; display: grid; place-items: center; background: var(--primary); color: #fff; font-size: 14px; font-weight: 800; border-radius: var(--r-ctl); }
+/* TeamSense aria-current 胶囊 × CC 蓝字 */
+.nav { display: flex; gap: 6px; }
+.nav a { padding: 7px 14px; font-size: 13px; color: var(--muted); border: 1px solid transparent; border-radius: var(--r-ctl); }
+.nav a:hover { background: var(--soft); color: var(--ink); }
+.nav a.active { background: var(--panel); border-color: var(--line); color: var(--primary); font-weight: 650; box-shadow: 0 1px 2px rgba(32,44,40,.08); }
+.topbar-2 { background: var(--panel); border-bottom: 1px solid var(--line); }
+.topbar-2 .inner { max-width: 1120px; margin: 0 auto; display: flex; justify-content: space-between; gap: 16px; padding: 6px 24px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.d-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok-dot); display: inline-block; margin-right: 6px; }
+
+main { max-width: 1120px; margin: 0 auto; padding: 28px 24px 48px; }
+.section { margin-bottom: 36px; }
+.eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.toolbar .left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* TeamSense action-button 形 × CC 蓝 */
+.btn { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 12px; font-size: 12px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-ctl); cursor: pointer; }
+.btn:hover { background: var(--soft); border-color: var(--primary-bright); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: #0050c0; border-color: #0050c0; }
+.btn.sm { min-height: 28px; padding: 4px 10px; font-size: 11px; }
+
+/* TeamSense 三段式面板（7px 圆角） */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; position: relative; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.panel-head h3 { margin: 0; font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.panel-head .cap { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.panel-body { padding: 14px 16px; }
+.panel-foot { border-top: 1px solid var(--line); padding: 10px 16px; }
+.ico { width: 16px; height: 16px; stroke: var(--primary); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+/* 融合徽章：TeamSense 图标+label 结构 × CC 100/700 胶囊配色 */
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+.badge svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+.badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.badge.danger { background: var(--danger-bg); color: var(--danger-ink); }
+.badge.info { background: #e0f2fe; color: #0369a1; }
+.badge.plain { background: var(--soft); color: var(--muted); }
+
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.p-id { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+.p-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--edge-idle); }
+.p-dot.ok { background: var(--ok-dot); }
+.p-dot.warn { background: var(--warn-dot); }
+
+/* CC B2 激活卡手法落在 TeamSense 三段卡上 */
+.panel.is-active { border: 2px solid var(--primary-bright); box-shadow: 0 4px 14px rgba(10,132,255,.12); }
+.panel.is-active::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to right, rgba(10,132,255,.10), rgba(10,132,255,0)); pointer-events: none; z-index: 0; }
+.panel.is-active > * { position: relative; z-index: 1; }
+.panel.is-warn { border-color: var(--warn-dot); }
+
+.kv { display: grid; grid-template-columns: 52px 1fr; gap: 6px 10px; font-family: var(--font-mono); font-size: 12px; }
+.kv dt { color: var(--muted); margin: 0; }
+.kv dd { margin: 0; overflow-wrap: anywhere; color: var(--ink); font-variant-numeric: tabular-nums; }
+.p-actions { display: flex; align-items: center; gap: 10px; }
+.sw { position: relative; width: 36px; height: 20px; border: 1px solid var(--primary); background: var(--primary); border-radius: 10px; display: inline-block; cursor: pointer; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 18px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); transition: left .15s; }
+.sw.off { background: var(--panel); border-color: var(--muted); }
+.sw.off::after { left: 2px; background: var(--muted); }
+.sw-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; color: var(--muted); }
+/* A4 service-row：结果 ∥ 徽章 ∥ 时间 */
+.srow { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.srow .time { color: var(--muted); font-size: 11px; }
+
+/* ===== Routing ===== */
+.canvas-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+.canvas { position: relative; height: 380px; min-width: 880px; }
+.node { position: absolute; width: 196px; height: 52px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-ctl); display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; z-index: 2; }
+.node:hover { border-color: rgba(0,96,223,.4); background: var(--soft); }
+.node.is-sel { border: 2px solid var(--primary-bright); }
+.node .nid { font-family: var(--font-mono); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; border: 1px solid var(--line); color: var(--muted); padding: 1px 5px; border-radius: 3px; font-weight: 600; }
+.tag.info { border: 0; background: #e0f2fe; color: #0369a1; font-weight: 700; }
+.anchor { position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 11px; height: 11px; background: var(--panel); border: 1.5px solid var(--primary); border-radius: 2px; cursor: crosshair; z-index: 3; }
+.anchor:hover { background: var(--primary-bright); }
+.rcard { position: absolute; width: 236px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; z-index: 2; }
+.rcard.is-active { border: 2px solid var(--primary-bright); box-shadow: 0 4px 14px rgba(10,132,255,.12); }
+.rcard-head { height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--soft); }
+.rcard-head .n { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+.ports { padding: 8px 6px 6px; display: flex; flex-direction: column; gap: 4px; }
+.port { height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
+.port .pdot { width: 5px; height: 5px; background: var(--primary-bright); flex-shrink: 0; border-radius: 50%; }
+.port .pdot.pass { background: var(--edge-idle); }
+.port .ptag { margin-left: auto; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; padding: 1px 5px; border-radius: 999px; }
+.port .ptag.pin { background: #e0f2fe; color: #0369a1; }
+.port .ptag.passtag { background: var(--soft); color: var(--muted); }
+.edges { position: absolute; inset: 0; z-index: 1; }
+.e-badge { position: absolute; transform: translate(-50%, -50%); z-index: 4; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.e-badge.sel { border: 2px solid var(--primary-bright); color: var(--primary); font-weight: 700; }
+.canvas-foot { border-top: 1px solid var(--line); padding: 8px 16px; display: flex; gap: 14px; align-items: center; font-family: var(--font-mono); font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+
+/* ===== Playground ===== */
+.hero { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); padding: 22px 24px; margin-bottom: 16px; }
+.hero h1 { margin: 8px 0 0; font-family: var(--font-mono); font-size: 30px; line-height: 1.1; letter-spacing: -.03em; font-weight: 700; }
+.hero h1 span { color: var(--muted); font-weight: 500; }
+.hero p { margin: 10px 0 0; max-width: 640px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.hero .eb { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--soft); padding: 3px 9px; border-radius: 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.hero .eb i { width: 7px; height: 7px; background: var(--primary-bright); display: inline-block; border-radius: 50%; }
+.pg-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; align-items: start; }
+.chips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.chip-ex { padding: 5px 11px; font-size: 11px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-ctl); color: var(--muted); cursor: pointer; }
+.chip-ex:hover { background: var(--soft); border-color: var(--primary-bright); color: var(--ink); }
+.chip-ex.on { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.tp-tabs { display: flex; gap: 4px; }
+.tab { padding: 5px 12px; font-family: var(--font-mono); font-size: 11px; border: 1px solid transparent; border-radius: var(--r-ctl); background: transparent; color: var(--muted); cursor: pointer; }
+.tab:hover { color: var(--primary); }
+.tab.on { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+.split { display: grid; grid-template-columns: 1fr 1fr; }
+.split > div { padding: 14px 16px; }
+.split > div + div { border-left: 1px solid var(--line); }
+.col-lab { font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 10px 12px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; color: var(--ink); overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+pre.out-ok { border-color: var(--ok-dot); box-shadow: inset 3px 0 0 var(--ok-dot); }
+.mono-row { display: flex; flex-wrap: wrap; gap: 6px 16px; font-family: var(--font-mono); font-size: 11.5px; font-variant-numeric: tabular-nums; margin-top: 10px; color: var(--muted); }
+.mono-row b { color: var(--ink); font-weight: 600; }
+.ans-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-family: var(--font-mono); font-size: 12.5px; margin-top: 10px; }
+.ans-line .qid { color: var(--muted); }
+.ans-line .ttag { font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; font-weight: 700; background: var(--ok-bg); color: var(--ok-ink); }
+.ans-line .val { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--primary); }
+.tp-foot { border-top: 1px solid var(--line); background: var(--soft); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tp-foot .ep { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.run { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 20px; background: var(--primary); color: #fff; border: 1px solid var(--primary); border-radius: var(--r-ctl); font-family: var(--font-mono); font-size: 14px; font-weight: 700; cursor: pointer; }
+.run:hover { background: #0050c0; }
+*:focus-visible { outline: 2px solid var(--primary-bright); outline-offset: 2px; }
+
+footer { border-top: 1px solid var(--line); background: var(--panel); }
+footer .inner { max-width: 1120px; margin: 0 auto; padding: 12px 24px; font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+@media (max-width: 900px) {
+  .cards, .pg-grid, .split { grid-template-columns: 1fr; }
+  .split > div + div { border-left: 0; border-top: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+
+<!-- 方案横幅（对比用，非产品 UI） -->
+<div class="scheme-banner">
+  <strong>方案 C · 混合 — TeamSense 布局 × CC Switch 点缀色</strong>
+  <span class="chips">
+    <span class="chip"><i style="background:#f4f5f2"></i>bg #f4f5f2</span>
+    <span class="chip"><i style="background:#ffffff"></i>panel #fff</span>
+    <span class="chip"><i style="background:#0060df"></i>primary #0060DF</span>
+    <span class="chip"><i style="background:#d1fae5"></i>ok pill</span>
+    <span class="chip"><i style="background:#fef3c7"></i>warn pill</span>
+    <span class="chip"><i style="background:#fee2e2"></i>danger pill</span>
+  </span>
+  <span class="note">paper 底三段式面板 · 7/6px 圆角 · 图标+胶囊徽章 · 蓝 CTA/选中边 · ink 14.5 · muted 5.08 · primary 5.62 · pill 4.5–5.3 全 ≥4.5（soft 底不放 muted 文字）</span>
+</div>
+
+<header>
+  <div class="topbar-1">
+    <div class="inner">
+      <a class="logo" href="#"><span class="mark">J</span>Jev-Switch</a>
+      <nav class="nav" aria-label="primary">
+        <a href="#providers" class="active" aria-current="page">Providers</a>
+        <a href="#routing">Routing</a>
+        <a href="#playground">Playground</a>
+      </nav>
+    </div>
+  </div>
+  <div class="topbar-2">
+    <div class="inner">
+      <span><span class="d-dot"></span>daemon ok</span>
+      <span>masked-key</span>
+      <span>v0.5.0</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ Providers ============ -->
+  <section class="section" id="providers">
+    <div class="toolbar">
+      <div class="left">
+        <span class="eyebrow">Providers</span>
+        <span class="count">2 upstreams</span>
+        <span class="badge ok"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>daemon 可达</span>
+      </div>
+      <button class="btn primary" type="button">+ Add provider</button>
+    </div>
+
+    <div class="cards">
+      <!-- vercel：启用+健康 → 激活卡 -->
+      <article class="panel is-active" aria-label="provider vercel">
+        <div class="panel-head">
+          <h3>
+            <svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            <span class="p-id"><span class="p-dot ok"></span>vercel</span>
+            <span class="badge ok"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>健康</span>
+          </h3>
+          <div class="p-actions">
+            <button class="btn sm" type="button">Probe</button>
+            <span class="sw-label">ENABLED</span>
+            <span class="sw" role="switch" aria-checked="true" aria-label="enable vercel"></span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <dl class="kv">
+            <dt>kind</dt><dd>vercel-gateway</dd>
+            <dt>base</dt><dd><a href="#">https://ai-gateway.vercel.sh/v4/ai/evaluation-model</a></dd>
+            <dt>key</dt><dd>sk-****a1b2</dd>
+          </dl>
+        </div>
+        <div class="panel-foot">
+          <div class="srow">
+            <span>last probe → 200</span>
+            <span class="badge ok"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>42ms · 正常</span>
+            <span class="time">2h ago</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- laya：降级 -->
+      <article class="panel is-warn" aria-label="provider laya">
+        <div class="panel-head">
+          <h3>
+            <svg class="ico" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>
+            <span class="p-id"><span class="p-dot warn"></span>laya</span>
+            <span class="badge warn"><svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg>降级</span>
+          </h3>
+          <div class="p-actions">
+            <button class="btn sm" type="button">Probe</button>
+            <span class="sw-label">ENABLED</span>
+            <span class="sw" role="switch" aria-checked="true" aria-label="enable laya"></span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <dl class="kv">
+            <dt>kind</dt><dd>laya</dd>
+            <dt>base</dt><dd><a href="#">http://127.0.0.1:18765/v1/systemone</a></dd>
+            <dt>key</dt><dd>(unset)</dd>
+          </dl>
+        </div>
+        <div class="panel-foot">
+          <div class="srow">
+            <span>last probe → 200</span>
+            <span class="badge warn"><svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></svg>1120ms · 降级（慢）</span>
+            <span class="time">2h ago</span>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ Routing ============ -->
+  <section class="section" id="routing">
+    <div class="toolbar">
+      <div class="left">
+        <span class="eyebrow">Routing</span>
+        <span class="count">4 edges</span>
+        <span class="eyebrow">model endpoint → model endpoint</span>
+        <span class="badge ok"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>synced</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn sm" type="button">TABLE</button>
+        <button class="btn sm" type="button">刷新</button>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="canvas">
+        <svg class="edges" width="100%" height="380" viewBox="0 0 900 380" preserveAspectRatio="xMinYMin meet" aria-hidden="true">
+          <defs>
+            <marker id="ar-idle" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#b8c2b6"/></marker>
+            <marker id="ar-sel" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#0060df"/></marker>
+          </defs>
+          <path d="M 220 122 C 340 122, 520 134, 640 134" fill="none" stroke="#0060df" stroke-width="2" marker-end="url(#ar-sel)"/>
+          <path d="M 220 122 C 340 122, 520 224, 640 224" fill="none" stroke="#b8c2b6" stroke-width="1.5" marker-end="url(#ar-idle)"/>
+          <path d="M 220 190 C 340 190, 520 252, 640 252" fill="none" stroke="#b8c2b6" stroke-width="1.5" marker-end="url(#ar-idle)"/>
+          <path d="M 220 258 C 340 258, 520 280, 640 280" fill="none" stroke="#b8c2b6" stroke-width="1.5" marker-end="url(#ar-idle)"/>
+        </svg>
+
+        <div class="node is-sel" style="left:24px; top:96px;">
+          <span class="nid">jev</span><span class="tag info">model</span>
+          <span class="anchor" title="拖出连线"></span>
+        </div>
+        <div class="node" style="left:24px; top:164px;">
+          <span class="nid">jev-zh</span><span class="tag info">model</span>
+          <span class="anchor" title="拖出连线"></span>
+        </div>
+        <div class="node" style="left:24px; top:232px;">
+          <span class="nid">local/*</span><span class="tag">prefix</span>
+          <span class="anchor" title="拖出连线"></span>
+        </div>
+
+        <div class="rcard is-active" style="left:640px; top:80px;">
+          <div class="rcard-head">
+            <span class="n"><span class="p-dot ok"></span>vercel</span>
+            <span class="badge info">1 ep</span>
+          </div>
+          <div class="ports">
+            <div class="port" title="钉死端点：地址×模型×token 三固定">
+              <span class="pdot"></span><span>typesafe-ai/jev</span><span class="ptag pin">pin</span>
+            </div>
+          </div>
+        </div>
+        <div class="rcard" style="left:640px; top:170px;">
+          <div class="rcard-head">
+            <span class="n"><span class="p-dot warn"></span>laya</span>
+            <span class="badge plain">3 ep</span>
+          </div>
+          <div class="ports">
+            <div class="port" title="钉死端点">
+              <span class="pdot"></span><span>laya-english</span><span class="ptag pin">pin</span>
+            </div>
+            <div class="port" title="钉死端点">
+              <span class="pdot"></span><span>laya-multilingual</span><span class="ptag pin">pin</span>
+            </div>
+            <div class="port" title="透传端点：模型 = 调用方入参">
+              <span class="pdot pass"></span><span>* input model</span><span class="ptag passtag">pass</span>
+            </div>
+          </div>
+        </div>
+
+        <span class="e-badge sel" style="left:430px; top:128px;">p=10 · typesafe-ai/jev · sticky</span>
+        <span class="e-badge" style="left:430px; top:173px;">p=30 · laya-english</span>
+        <span class="e-badge" style="left:430px; top:221px;">p=20 · laya-multilingual</span>
+        <span class="e-badge" style="left:430px; top:269px;">p=40 · *input*</span>
+      </div>
+      <div class="canvas-foot">
+        <span class="badge info"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.5"/></svg>选中边 → EdgeInspector</span>
+        <span>点线开检视器 · Backspace 删边 · TABLE = 键盘等价</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Playground ============ -->
+  <section class="section" id="playground">
+    <div class="toolbar">
+      <div class="left"><span class="eyebrow">Playground</span></div>
+    </div>
+
+    <div class="hero">
+      <span class="eb"><i></i>MVP · M0.10</span>
+      <h1>One protocol. <span>Every upstream.</span></h1>
+      <p>Route a single Jev SystemOne call across heterogeneous upstream models — Vercel AI Gateway, local Laya daemon; switch the <code style="font-family:var(--font-mono);font-size:12px;border:1px solid var(--line);background:var(--soft);padding:1px 6px;border-radius:4px;">model</code> field, the router handles protocol translation.</p>
+    </div>
+
+    <div class="chips-row">
+      <span class="chip-ex on">Refund Verification</span>
+      <span class="chip-ex">Support Routing</span>
+      <span class="chip-ex">Incident Urgency</span>
+      <span class="chip-ex">中文·情感判断</span>
+    </div>
+
+    <div class="pg-grid">
+      <aside style="display:flex;flex-direction:column;gap:14px;">
+        <div class="panel">
+          <div class="panel-head">
+            <h3><svg class="ico" viewBox="0 0 24 24"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/></svg>Model</h3>
+            <span class="cap">via routes</span>
+          </div>
+          <div class="panel-body">
+            <select style="width:100%;height:34px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--bg);padding:0 10px;font-family:var(--font-mono);font-size:12px;">
+              <option>laya-english → laya</option>
+            </select>
+            <div class="mono-row" style="margin-top:8px;"><span>~12 tokens · 1 question</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h3><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>Endpoint</h3>
+          </div>
+          <div class="panel-body">
+            <dl class="kv">
+              <dt>POST</dt><dd>/v1/systemone</dd>
+              <dt>GET</dt><dd>/v1/models</dd>
+              <dt>GET</dt><dd>/health</dd>
+            </dl>
+          </div>
+        </div>
+      </aside>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div class="tp-tabs">
+            <button class="tab on" type="button">Form</button>
+            <button class="tab" type="button">JSON</button>
+          </div>
+          <span class="cap">~12 tokens · 1 question</span>
+        </div>
+        <div class="split">
+          <div>
+            <div class="col-lab"><span>Input · state</span><span>structured</span></div>
+            <pre>{
+  "order": {
+    "id": "ord_8821",
+    "amount": 129.99,
+    "days_since_purchase": 14
+  },
+  "reason": "Item arrived damaged"
+}</pre>
+            <div class="col-lab" style="margin-top:12px;"><span>questions · should_refund</span><span class="badge info">noul</span></div>
+            <pre>instructions: Should we approve this
+  refund request?
+criteria: { "true": "approve",
+             "false": "deny" }</pre>
+          </div>
+          <div>
+            <div class="col-lab">
+              <span>Output</span>
+              <span class="badge ok"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>ok · 42ms</span>
+            </div>
+            <pre class="out-ok">{
+  "model": "laya-english",
+  "answers": {
+    "should_refund": {
+      "type": "noul",
+      "noul": 0.96
+    }
+  },
+  "usage": { "input_tokens": 42,
+             "output_tokens": 0 },
+  "upstream_calls": 1,
+  "latency_ms": 42,
+  "cost_usd": null
+}</pre>
+            <div class="ans-line">
+              <span class="qid">should_refund</span><span class="qid">→</span>
+              <span class="ttag">noul 0.96</span>
+              <span class="qid">布尔族 · 无 confidence 行</span>
+            </div>
+            <div class="mono-row">
+              <span>usage <b>in 42</b> · <b>out 0</b></span>
+              <span>upstream_calls <b>1</b></span>
+              <span>latency <b>42ms</b></span>
+              <span>cost_usd <b>—</b></span>
+            </div>
+          </div>
+        </div>
+        <div class="tp-foot">
+          <span class="ep">POST 127.0.0.1:11435/v1/systemone</span>
+          <button class="run" type="button">Run Jev ↗</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="inner">endpoint 127.0.0.1:11435 · /v1/systemone · file=truth</div>
+</footer>
+
+</body>
+</html>
