@@ -10,6 +10,11 @@ repository.workspace = true
 name = "jev-switch"
 path = "src/main.rs"
 
+[features]
+default = []
+# ts-rs 类型导出（生成物 → ui/src/generated/）：转发协议 crate 同名 feature
+ts-rs = ["dep:ts-rs", "jev-protocol/ts-rs"]
+
 [dependencies]
 jev-protocol = { workspace = true }
 jev-core = { workspace = true }
@@ -24,6 +29,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tower-http = { workspace = true }
+ts-rs = { version = "12.0.1", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

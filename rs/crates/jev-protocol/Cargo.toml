@@ -9,3 +9,9 @@ repository.workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+ts-rs = { version = "12.0.1", optional = true }
+
+[features]
+# 类型导出 feature：默认关闭 = 零新依赖（协议 crate 依赖面不膨胀）
+# serde-json-impl：为 serde_json::Value 提供 TS（state / extra flatten 需要）
+ts-rs = ["dep:ts-rs", "ts-rs/serde-json-impl"]

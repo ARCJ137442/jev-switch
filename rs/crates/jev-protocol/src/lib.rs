@@ -1,4 +1,4 @@
-//! Jev 协议内核类型（P0-3 按 `docs/contracts/01-协议契约.md` 对齐）
+﻿//! Jev 协议内核类型（P0-3 按 `docs/contracts/01-协议契约.md` 对齐）
 //!
 //! 真值基准：TypeSafe `/v1/systemone` + `jev-life/src/shared/types.ts`。
 //! 分层铁律（contracts/01 红线）：厂商方言**不得**进入本 crate —— 方言只活在
@@ -51,6 +51,11 @@ impl QuestionType {
 
 /// 布尔族答案的 wire 判别值：`"noul" | "boolean"`（wire 兼容，contracts/01 §4）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 #[serde(rename_all = "lowercase")]
 pub enum NoulKind {
     Noul,
@@ -63,6 +68,11 @@ pub enum NoulKind {
 
 /// Jev 决策请求（contracts/01 §2）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 pub struct JevRequest {
     /// 必填。
     pub model: String,
@@ -91,6 +101,11 @@ pub type SystemOneRequest = JevRequest;
 /// 序列化恒写契约三判别值（`Noul` 写 `"noul"`；adapter 出站需要 `boolean` 方言时
 /// 在 outgoing 转换 —— 见 jev-core translate / 后续 ProtocolAdapter）。
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Question {
     Choice { instructions: String, criteria: Criteria },
@@ -139,6 +154,11 @@ impl Question {
 /// 校验由 [`Question`] 的手工 Deserialize 完成（同一 JSON 对 noul 归 `Bool`、
 /// 对 choice 归 `Map` —— untagged 单独做不到这一点）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 #[serde(untagged)]
 pub enum Criteria {
     Map(BTreeMap<String, String>),
@@ -321,6 +341,17 @@ impl<'de> Deserialize<'de> for Question {
 /// - 布尔族：[`Answer::Noul`]，概率即置信度 —— **没有 confidence 字段**
 /// - 未知 `type` → 拒绝（禁 best-effort 平移）
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(
+        export,
+        export_to = "../../../../ui/src/generated/",
+        // 手工 Serialize（非 serde derive）→ ts-rs 看不到 tag、默认生成错误的
+        // 外部标签形状（{Choice:{…}}）。按 contracts/01 §4 wire 字面做**容器级覆盖**。
+        type = "{ \"type\": \"choice\", choice: string, probabilities: { [key in string]: number }, confidence: number } | { \"type\": \"score\", score: number, probabilities: { [key in string]: number }, confidence: number } | { \"type\": \"noul\" | \"boolean\", noul?: number | null, probability?: number | null }"
+    )
+)]
 pub enum Answer {
     Choice {
         choice: String,
@@ -339,6 +370,11 @@ pub enum Answer {
 
 /// 布尔族答案：概率本身就是置信度 —— 没有 confidence 字段（contracts/01 §4）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 pub struct NoulAnswer {
     /// `"noul" | "boolean"`（wire 兼容）。
     #[serde(rename = "type")]
@@ -446,16 +482,25 @@ impl Serialize for Answer {
 ///
 /// 反序列化接受驼峰与下划线两套拼写（宽容读入，禁 400）；写出统一 snake_case。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 pub struct Usage {
+    // ts-rs：u64 默认映射 bigint；wire 是 JSON number —— 覆盖对齐运行时
     #[serde(default, alias = "inputTokens", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub input_tokens: Option<u64>,
     #[serde(default, alias = "outputTokens", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub output_tokens: Option<u64>,
     #[serde(
         default,
         alias = "reasoningTokens",
         skip_serializing_if = "Option::is_none"
     )]
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub reasoning_tokens: Option<u64>,
 }
 
@@ -465,6 +510,11 @@ fn default_upstream_calls() -> Option<u32> {
 
 /// Jev 决策响应（contracts/01 §5）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 pub struct JevResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -479,7 +529,9 @@ pub struct JevResponse {
     )]
     pub upstream_calls: Option<u32>,
     /// 双拼写宽容读入；写出 snake_case。null ≠ 0。
+    /// （ts-rs：u64 默认 → bigint，wire 是 JSON number —— 覆盖对齐运行时）
     #[serde(default, alias = "latencyMs")]
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub latency_ms: Option<u64>,
     /// null ≠ 0：未知就是 null —— 不 skip，显式写 null（契约字面）。
     #[serde(default, alias = "costUsd")]

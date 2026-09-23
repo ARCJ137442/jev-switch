@@ -1,4 +1,4 @@
-//! Jev-Switch MVP 入口（M0.9 · P0-1 迁入 jev-switch-daemon）
+﻿//! Jev-Switch MVP 入口（M0.9 · P0-1 迁入 jev-switch-daemon）
 //!
 //! 整合：jev-protocol / jev-core / jev-adapters / config / axum HTTP server。
 //!
@@ -42,6 +42,11 @@ struct AppState {
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 struct ErrorBody {
     error: String,
     upstream: Option<String>,
@@ -142,8 +147,15 @@ async fn main() -> anyhow::Result<()> {
 
 /// `GET /health` — contracts/05 §2：JSON 为准（旧文本 "jev-switch MVP" 弃用）。
 #[derive(Debug, Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 struct HealthBody {
+    #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     status: &'static str,
+    #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     version: &'static str,
 }
 
@@ -156,15 +168,27 @@ async fn health_handler() -> Json<HealthBody> {
 
 /// `GET /v1/models` — contracts/05 §2 冻结形状（OpenAI 风）。
 #[derive(Debug, Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 struct ModelEntry {
     id: String,
+    #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     object: &'static str,
     upstream: String,
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 struct UpstreamCapabilityEntry {
     id: String,
+    #[cfg_attr(feature = "ts-rs", ts(type = "string[]"))]
     question_types: Vec<&'static str>,
     has_confidence: bool,
     has_usage: bool,
@@ -172,7 +196,13 @@ struct UpstreamCapabilityEntry {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
 struct ModelsResponse {
+    #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     object: &'static str,
     data: Vec<ModelEntry>,
     upstreams: Vec<UpstreamCapabilityEntry>,
