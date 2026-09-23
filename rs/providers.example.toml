@@ -8,7 +8,7 @@
 # `JEV_SWITCH_CONFIG="rs\providers.example.toml"`），不是本文件/manifest 所在目录。
 # cargo workspace 拆分（rs/Cargo.toml → crates/*）不改变该基准。
 #
-# MVP 范围（M0）：2 provider + 静态 model→upstream 映射。
+# MVP 范围（M0）：2 provider + 模型路由 DAG（[[routes]]）+ 旧 [router] 兼容表。
 
 [providers.vercel]
 kind = "vercel"
@@ -21,9 +21,42 @@ kind = "laya"
 base = "http://127.0.0.1:18765/v1/systemone"
 enabled = true
 
-# Router 段：model id → upstream id
+# ── Router 段（旧式，兼容保留）：model id → upstream id ──────────────
+# 每条 = 单条 match=exact 边（priority=0、on_error=next、sticky=none）。
 # 调用方 POST {"model": "laya-english", ...} 即走 Laya
 # 调用方 POST {"model": "typesafe-ai/jev", ...} 即走 Vercel
+# —— 这两条映射的语义不因下方 [[routes]] 示例而改变（不同 left，互不冲突）。
 [router]
 "laya-english" = "laya"
 "typesafe-ai/jev" = "vercel"
+
+# ── 模型路由 DAG（contracts/03 §2 [[routes]]）────────────────────────
+# 示例一：对外 id "jev" 双候选（同模型可切换）——
+#   p10 优先走 Vercel（改写上游 model 为 typesafe-ai/jev）；
+#   Vercel 429/5xx/超时/网络类可重试错误自动 failover 到 p30 的 Laya
+#   （on_error=next；Laya 侧改写上游 model 为 laya-english）。
+[[routes]]
+left = "jev"
+match = "exact"
+right = "vercel"
+upstream_model = "typesafe-ai/jev"
+priority = 10
+sticky = "session"
+on_error = "next"
+
+[[routes]]
+left = "jev"
+match = "exact"
+right = "laya"
+upstream_model = "laya-english"
+priority = 30
+on_error = "next"
+
+# 示例二：前缀族 —— 调用方 POST {"model": "local/qwen", ...} 命中 Laya
+# （match=prefix：left 去掉尾部 * 后作前缀比较；无 upstream_model = 沿用原 model）。
+[[routes]]
+left = "local/*"
+match = "prefix"
+right = "laya"
+priority = 40
+on_error = "next"

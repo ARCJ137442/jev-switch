@@ -1,4 +1,4 @@
-//! Jev-Switch 内核（P0-1 迁入 jev-core）。
+//! Jev-Switch 内核（P0-1 迁入 jev-core · A4 模型路由 DAG）。
 //!
 //! 分层约束（contracts/02 §3）：
 //! - 允许：trait、Router、RetryPolicy、Capabilities、translate

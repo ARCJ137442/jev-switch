@@ -27,3 +27,4 @@ tower-http = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+async-trait = { workspace = true }
