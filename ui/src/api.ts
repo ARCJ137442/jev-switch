@@ -61,60 +61,26 @@ export interface SystemOneResponse {
   latency_ms?: number;
 }
 
+/** GET /v1/models → data 条目（contracts/05 §2 冻结形状，H1 收口直读） */
 export interface ModelInfo {
   id: string;
   object: string;
-  upstream?: string;
+  upstream: string;
+}
+
+/** GET /v1/models → 顶层 upstreams 能力条目（contracts/05 §2） */
+export interface UpstreamCapability {
+  id: string;
+  question_types: string[];
+  has_confidence: boolean;
+  has_usage: boolean;
+  noul_via_boolean: boolean;
 }
 
 export interface ModelsResponse {
   object: 'list';
   data: ModelInfo[];
-}
-
-interface RawModelEntry {
-  model?: string;
-  id?: string;
-  object?: string;
-  upstream?: string;
-}
-
-interface RawModelsResponse {
-  models?: RawModelEntry[];
-  data?: RawModelEntry[];
-  object?: string;
-}
-
-/**
- * Normalize the upstream `/v1/models` payload into `ModelsResponse`.
- *
- * The Rust daemon (rs/) currently returns
- *   { "models": [{ "model": "...", "upstream": "..." }, ...], "upstreams": [...] }
- * but the UI was originally written against an OpenAI-style
- *   { "object": "list", "data": [{ "id": "...", "object": "..." }, ...] }
- * shape. Accept either, prefer `data` when present, and normalize
- * `model` → `id` so the rest of the UI can stay shape-agnostic.
- */
-function normalizeModels(raw: unknown): ModelsResponse {
-  const obj = (raw ?? {}) as RawModelsResponse;
-  const rawList = Array.isArray(obj.data)
-    ? obj.data
-    : Array.isArray(obj.models)
-      ? obj.models
-      : [];
-  const data: ModelInfo[] = [];
-  for (const m of rawList) {
-    if (!m) continue;
-    const id = (m.id ?? m.model ?? '').toString();
-    if (!id) continue;
-    const out: ModelInfo = {
-      id,
-      object: (m.object ?? 'model').toString(),
-    };
-    if (typeof m.upstream === 'string') out.upstream = m.upstream;
-    data.push(out);
-  }
-  return { object: 'list', data };
+  upstreams: UpstreamCapability[];
 }
 
 /**
@@ -134,38 +100,40 @@ export function getBase(): string {
   return DEFAULT_BASE;
 }
 
-/**
- * health 双兼容（H1 后简化为只认 JSON）：
- * - 新形态（contracts/05）：JSON `{"status":"ok","version":…}` → ok
- * - 旧形态（兼容期）：纯文本 `jev-switch MVP` → ok
- * 其余 200 响应视为异常，避免「随便一个 200 都算健康」。
- */
-export async function fetchHealth(): Promise<string> {
-  const res = await fetch(`${getBase()}/health`);
-  if (!res.ok) throw new Error(`health ${res.status}`);
-  const text = await res.text();
-  let parsed: unknown = null;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    parsed = null;
-  }
-  if (
-    parsed !== null &&
-    typeof parsed === 'object' &&
-    typeof (parsed as { status?: unknown }).status === 'string'
-  ) {
-    return text;
-  }
-  if (text.trim() === 'jev-switch MVP') return text;
-  throw new Error(`health unexpected body: ${text.slice(0, 80)}`);
+/** GET /health（contracts/05 §2 冻结：恰两键 status/version） */
+export interface HealthResponse {
+  status: 'ok';
+  version: string;
 }
 
+/**
+ * health 只认 JSON 新形状（H1 收口）：`{"status":"ok","version":"0.1.0"}`。
+ * status === "ok" 才算健康；非 JSON / 其余 status 一律抛错
+ * （旧纯文本 `jev-switch MVP` 兼容分支已删）。
+ */
+export async function fetchHealth(): Promise<HealthResponse> {
+  const res = await fetch(`${getBase()}/health`);
+  if (!res.ok) throw new Error(`health ${res.status}`);
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error('health: non-JSON body');
+  }
+  if (!body || typeof body !== 'object') throw new Error('health: unexpected body');
+  const { status, version } = body as { status?: unknown; version?: unknown };
+  if (status !== 'ok') throw new Error(`health: status=${String(status)}`);
+  return { status: 'ok', version: typeof version === 'string' ? version : '' };
+}
+
+/**
+ * GET /v1/models — contracts/05 §2 冻结形状直读
+ * （`normalizeModels` 兼容桥与旧 `{models:…}` 键已随 H1 删除）。
+ */
 export async function fetchModels(): Promise<ModelsResponse> {
   const res = await fetch(`${getBase()}/v1/models`);
   if (!res.ok) throw new Error(`models ${res.status}`);
-  const raw = await res.json();
-  return normalizeModels(raw);
+  return (await res.json()) as ModelsResponse;
 }
 
 export async function postSystemOne(req: SystemOneRequest): Promise<SystemOneResponse> {

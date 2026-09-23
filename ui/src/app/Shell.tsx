@@ -41,10 +41,10 @@ export function useServerStatus(): { status: ServerStatus; text: string } {
     let cancelled = false;
     const probe = async () => {
       try {
-        const t = await fetchHealth();
+        const health = await fetchHealth();
         if (!cancelled) {
           setStatus('ok');
-          setText(t);
+          setText(health.version ? `v${health.version}` : 'ok');
         }
       } catch (e) {
         if (!cancelled) {

@@ -36,8 +36,8 @@ export function PlaygroundPage() {
     fetchModels()
       .then((m) => {
         if (!cancelled) {
-          // Defensive: `data` may be missing if the upstream returns an
-          // unexpected shape; always fall back to the bundled defaults.
+          // Runtime defense: shape is frozen (contracts/05 §2), but never
+          // crash the page — fall back to the bundled defaults.
           const next = Array.isArray(m?.data) ? m.data : [];
           setServerModels(next);
         }
@@ -56,13 +56,13 @@ export function PlaygroundPage() {
         upstream: o.value.startsWith('laya') ? 'laya' : 'vercel',
       }));
     }
-    // 当 server 返回时, 用 server 列表, 去重
+    // 当 server 返回时, 用 server 列表（upstream 取契约字段）, 去重
     const seen = new Set<string>();
     return serverModels
       .map((m) => ({
         value: m.id,
         label: m.id,
-        upstream: m.id.startsWith('laya') ? 'laya' : 'vercel',
+        upstream: m.upstream,
       }))
       .filter((o) => {
         if (seen.has(o.value)) return false;
