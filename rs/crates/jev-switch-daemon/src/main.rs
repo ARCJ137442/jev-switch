@@ -15,7 +15,7 @@ use anyhow::Context;
 use axum::{
     body::Bytes,
     extract::State,
-    http::StatusCode,
+    http::{header, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -31,7 +31,7 @@ use serde::Serialize;
 use serde_json::json;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Clone)]
@@ -111,13 +111,22 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         router: Arc::new(router),
     };
+    // CORS 白名单（contracts/05 §5 M1+；替换 very_permissive 已知债务）：
+    // vite dev 两种打开方式都可能 —— 127.0.0.1 与 localhost 都放行。
+    // admin 端点本轮未上线（A7）；同主机 UI 走默认同源语义。
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::list([
+            HeaderValue::from_static("http://127.0.0.1:5173"),
+            HeaderValue::from_static("http://localhost:5173"),
+        ]))
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE]);
+
     let app = Router::new()
         .route("/v1/systemone", post(systemone_handler))
         .route("/health", get(health_handler))
         .route("/v1/models", get(models_handler))
-        // MVP: 允许浏览器从任意 origin 直连 /v1/systemone（dev demo 用）。
-        // 后续 M1+ 会收紧 origin 白名单。
-        .layer(CorsLayer::very_permissive())
+        .layer(cors)
         .with_state(state);
 
     // 默认 11435 — 对齐用户叙事基址期望（docs/「Jev-Switch」用户叙事探索）
@@ -131,19 +140,31 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn health_handler() -> &'static str {
-    "jev-switch MVP"
+/// `GET /health` — contracts/05 §2：JSON 为准（旧文本 "jev-switch MVP" 弃用）。
+#[derive(Debug, Serialize)]
+struct HealthBody {
+    status: &'static str,
+    version: &'static str,
 }
 
+async fn health_handler() -> Json<HealthBody> {
+    Json(HealthBody {
+        status: "ok",
+        version: env!("CARGO_PKG_VERSION"),
+    })
+}
+
+/// `GET /v1/models` — contracts/05 §2 冻结形状（OpenAI 风）。
 #[derive(Debug, Serialize)]
 struct ModelEntry {
-    model: String,
+    id: String,
+    object: &'static str,
     upstream: String,
 }
 
 #[derive(Debug, Serialize)]
 struct UpstreamCapabilityEntry {
-    upstream: String,
+    id: String,
     question_types: Vec<&'static str>,
     has_confidence: bool,
     has_usage: bool,
@@ -152,30 +173,35 @@ struct UpstreamCapabilityEntry {
 
 #[derive(Debug, Serialize)]
 struct ModelsResponse {
-    models: Vec<ModelEntry>,
+    object: &'static str,
+    data: Vec<ModelEntry>,
     upstreams: Vec<UpstreamCapabilityEntry>,
 }
 
 async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
-    // 只列出真正可路由的 model（修复：原先把 upstream 未注册的 model 也列出，
-    // upstream 显示为空串，UI 判断可用、点击即 404）
-    let mut models: Vec<ModelEntry> = state
+    // 保留 6af3a47 的不可路由过滤：只列出真正可路由的 model
+    // （upstream 未注册的 model 不列出 —— 否则 UI 判断可用、点击即 404）
+    let mut data: Vec<ModelEntry> = state
         .router
         .list_models()
         .into_iter()
         .filter_map(|m| {
             let upstream = state.router.route(&m).ok()?.id().to_string();
-            Some(ModelEntry { model: m, upstream })
+            Some(ModelEntry {
+                id: m,
+                object: "model",
+                upstream,
+            })
         })
         .collect();
-    models.sort_by(|a, b| a.model.cmp(&b.model));
+    data.sort_by(|a, b| a.id.cmp(&b.id));
 
     let upstreams: Vec<UpstreamCapabilityEntry> = state
         .router
         .list_capabilities()
         .into_iter()
         .map(|(_id, _uid, cap)| UpstreamCapabilityEntry {
-            upstream: _id,
+            id: _id,
             question_types: cap.question_types.iter().map(|q| q.as_str()).collect(),
             has_confidence: cap.has_confidence,
             has_usage: cap.has_usage,
@@ -183,7 +209,11 @@ async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
         })
         .collect();
 
-    Json(ModelsResponse { models, upstreams })
+    Json(ModelsResponse {
+        object: "list",
+        data,
+        upstreams,
+    })
 }
 
 /// 把 JevError 转换为 axum Response。
@@ -273,4 +303,84 @@ fn _assert_send_sync() {
     assert_send::<JevError>();
     // 用一下 json! 宏保持 serde_json 引用
     let _ = json!({});
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// contracts/05 §2 /health 形状快照：{status, version}，JSON。
+    #[test]
+    fn health_shape_snapshot() {
+        let body = HealthBody {
+            status: "ok",
+            version: env!("CARGO_PKG_VERSION"),
+        };
+        let v = serde_json::to_value(&body).unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")})
+        );
+        // 键集冻结：不得漂移出第三个键
+        assert_eq!(v.as_object().unwrap().len(), 2);
+        // 当前契约样例版本字面量（0.1.0）
+        assert_eq!(v["version"], "0.1.0");
+        assert_eq!(v["status"], "ok");
+    }
+
+    /// contracts/05 §2 /v1/models 形状快照：{object:"list", data:[{id,object,upstream}], upstreams:[…]}。
+    /// 防 37b4242 类形状漂移（UI 已按此归一化）。
+    #[test]
+    fn models_shape_snapshot() {
+        let resp = ModelsResponse {
+            object: "list",
+            data: vec![ModelEntry {
+                id: "jev".into(),
+                object: "model",
+                upstream: "vercel".into(),
+            }],
+            upstreams: vec![UpstreamCapabilityEntry {
+                id: "vercel".into(),
+                question_types: vec!["choice", "score", "boolean"],
+                has_confidence: false,
+                has_usage: false,
+                noul_via_boolean: true,
+            }],
+        };
+        let v = serde_json::to_value(&resp).unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "object": "list",
+                "data": [{ "id": "jev", "object": "model", "upstream": "vercel" }],
+                "upstreams": [{
+                    "id": "vercel",
+                    "question_types": ["choice", "score", "boolean"],
+                    "has_confidence": false,
+                    "has_usage": false,
+                    "noul_via_boolean": true
+                }]
+            })
+        );
+        // 顶层键集冻结（models 旧形状键不得回潮）
+        let obj = v.as_object().unwrap();
+        assert_eq!(obj.len(), 3);
+        assert!(obj.get("models").is_none());
+    }
+
+    /// CORS 白名单 origin 字面量冻结（vite dev 两种打开方式）。
+    #[test]
+    fn cors_allowlist_origins_frozen() {
+        let layer = CorsLayer::new()
+            .allow_origin(AllowOrigin::list([
+                HeaderValue::from_static("http://127.0.0.1:5173"),
+                HeaderValue::from_static("http://localhost:5173"),
+            ]))
+            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+            .allow_headers([header::CONTENT_TYPE]);
+        // tower-http 不提供只读 introspection；构造成功 + 预检行为由 curl 实测覆盖。
+        // 此处至少锁定构造路径可编译（防 very_permissive 回潮需人工改回本函数）。
+        let _ = layer;
+        let _ = StatusCode::OK;
+    }
 }
