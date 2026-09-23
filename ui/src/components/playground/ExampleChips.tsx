@@ -23,6 +23,7 @@ export function ExampleChips({ examples, onPick, activeId }: Props) {
             key={ex.id}
             type="button"
             onClick={() => onPick(ex)}
+            title={`${ex.description} · ${Object.keys(ex.payload.questions).length} 题`}
             className={
               'inline-flex h-8 items-center gap-1.5 border px-2.5 font-mono text-xs transition-colors ' +
               (active

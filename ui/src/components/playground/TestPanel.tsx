@@ -6,6 +6,7 @@ import {
   type JevRequest,
   type JevResponse,
 } from '../../api';
+import { QuestionFormEditor } from './QuestionFormEditor';
 
 interface Props {
   model: string;
@@ -20,7 +21,8 @@ type Status = 'idle' | 'loading' | 'ok' | 'error';
 
 /**
  * 双栏布局的核心面板 — 左侧 Input，右侧 Output
- * 极简风 — 顶部 tab 切换 (Single / Multiple question 风格)，底部大黑色 CTA "Run Jev"
+ * 极简风 — 顶部 tab 真双视图 Form / JSON（questionsJson 仍是唯一真值，
+ * Form 视图由 QuestionFormEditor 双向同步写回），底部大黑色 CTA "Run Jev"
  */
 export function TestPanel({
   model,
@@ -34,12 +36,25 @@ export function TestPanel({
   const [response, setResponse] = useState<JevResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
-  const [inputMode, setInputMode] = useState<'single' | 'multiple'>('single');
+  const [inputMode, setInputMode] = useState<'form' | 'json'>('form');
 
   // Token 计数 — 极简近似: characters / 4
   const stateTokens = Math.ceil((stateJson.length || 0) / 4);
   const questionsTokens = Math.ceil((questionsJson.length || 0) / 4);
   const totalInputTokens = stateTokens + questionsTokens;
+
+  // header 题数 — JSON 中途坏时不崩面板（form 模式下可能短暂持有坏 JSON）
+  let questionCountLabel: string;
+  try {
+    const parsed = JSON.parse(questionsJson || '{}');
+    const n =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? Object.keys(parsed).length
+        : 0;
+    questionCountLabel = `${n} question(s)`;
+  } catch {
+    questionCountLabel = '? questions';
+  }
 
   const onRun = async () => {
     setStatus('loading');
@@ -112,17 +127,17 @@ export function TestPanel({
       {/* Top bar — input mode tabs */}
       <header className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-1">
-          <TabButton active={inputMode === 'single'} onClick={() => setInputMode('single')}>
-            Single question
+          <TabButton active={inputMode === 'form'} onClick={() => setInputMode('form')}>
+            Form
           </TabButton>
-          <TabButton active={inputMode === 'multiple'} onClick={() => setInputMode('multiple')}>
-            Multiple questions
+          <TabButton active={inputMode === 'json'} onClick={() => setInputMode('json')}>
+            JSON
           </TabButton>
         </div>
         <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
           <span className="tabular">~{totalInputTokens} tokens</span>
           <span className="text-inkSubtle">·</span>
-          <span className="tabular">{Object.keys(JSON.parse(questionsJson || '{}') || {}).length || 0} question(s)</span>
+          <span className="tabular">{questionCountLabel}</span>
         </div>
       </header>
 
@@ -134,7 +149,7 @@ export function TestPanel({
               Input
             </span>
             <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
-              JSON
+              {inputMode === 'form' ? 'structured' : 'raw JSON'}
             </span>
           </div>
 
@@ -154,22 +169,30 @@ export function TestPanel({
               }
             />
 
-            <Field
-              label={inputMode === 'single' ? 'question' : 'questions'}
-              hint={`${questionsTokens} tokens`}
-              raw={
-                <textarea
-                  value={questionsJson}
-                  onChange={(e) => onQuestionsChange(e.target.value)}
-                  spellCheck={false}
-                  rows={inputMode === 'multiple' ? 12 : 8}
-                  className="w-full resize-y border border-border bg-bg p-2.5 font-mono text-xs leading-relaxed text-ink"
+            {inputMode === 'form' ? (
+              /* Form 视图 — 每题一框 + 题型分段（卡片自带类型控件，不再显示 DecisionTypeHint） */
+              <QuestionFormEditor questionsJson={questionsJson} onChange={onQuestionsChange} />
+            ) : (
+              <>
+                <Field
+                  label="questions"
+                  hint={`${questionsTokens} tokens`}
+                  raw={
+                    <textarea
+                      value={questionsJson}
+                      onChange={(e) => onQuestionsChange(e.target.value)}
+                      spellCheck={false}
+                      rows={12}
+                      aria-label="questions JSON"
+                      className="w-full resize-y border border-border bg-bg p-2.5 font-mono text-xs leading-relaxed text-ink"
+                    />
+                  }
                 />
-              }
-            />
 
-            {/* Decision type hint */}
-            <DecisionTypeHint questionsJson={questionsJson} />
+                {/* Decision type hint */}
+                <DecisionTypeHint questionsJson={questionsJson} />
+              </>
+            )}
           </div>
         </div>
 
