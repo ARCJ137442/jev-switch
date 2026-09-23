@@ -33,7 +33,6 @@ use jev_core::{
 };
 use jev_protocol::{JevRequest, JevResponse};
 use serde::Serialize;
-use serde_json::json;
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
@@ -347,14 +346,15 @@ async fn run_request(
     }
 }
 
-// 防止 rust 误以为 lib 用不到的 import 是 dead_code
-#[allow(dead_code)]
-fn _assert_send_sync() {
+/// A9 收尾：类型 Send+Sync 编译期断言（axum state 要求）。
+/// 以 #[test] 形式调用 —— 取代原 `#[allow(dead_code)] fn _assert_send_sync`。
+#[test]
+fn state_types_are_send_sync() {
     fn assert_send<T: Send + Sync>() {}
     assert_send::<AppState>();
     assert_send::<JevError>();
-    // 用一下 json! 宏保持 serde_json 引用
-    let _ = json!({});
+    // json! 宏顺带自证 serde_json 可用（全限定路径，免顶层 import）
+    let _ = serde_json::json!({});
 }
 
 #[cfg(test)]

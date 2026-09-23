@@ -26,7 +26,8 @@ pub enum JevError {
     Timeout { upstream_id: String },
     #[error("upstream {upstream_id} network error: {message}")]
     Network { upstream_id: String, message: String },
-    #[allow(dead_code)]
+    // A9：原 `#[allow(dead_code)]` 已删 —— `Registry::invoke` 与
+    // `Router::check_capability` 均在构造本变体（422 路径），非死代码。
     #[error("capability mismatch for upstream {upstream_id}: {detail}")]
     Capability {
         upstream_id: String,

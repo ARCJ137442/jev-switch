@@ -122,7 +122,9 @@ impl Question {
         }
     }
 
-    /// 问题类型 → capability 校验枚举（handler 转发前调 `Router::check_capability`）。
+    /// 问题类型 → capability 校验枚举
+    /// （消费方：`Registry::invoke` 逐候选 capability 校验；`Router::check_capability`
+    /// 为「第一候选」单查工具 —— handler 不直接调它，A9 注释纠偏）。
     pub fn question_type(&self) -> QuestionType {
         match self {
             Question::Choice { .. } => QuestionType::Choice,
