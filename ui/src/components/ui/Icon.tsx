@@ -13,12 +13,12 @@ interface IconProps {
  * 替代项目中的 Unicode 字符与 emoji
  */
 export function Icon({ name, size = 16, className, color, strokeWidth = 2 }: IconProps) {
-  const LucideIcon = LucideIcons[name];
-  if (!LucideIcon) {
+  const IconComponent = LucideIcons[name] as React.ComponentType<any>;
+  if (!IconComponent) {
     console.warn(`Icon "${name}" not found in lucide-react`);
     return null;
   }
-  return <LucideIcon size={size} className={className} color={color} strokeWidth={strokeWidth} />;
+  return <IconComponent size={size} className={className} color={color} strokeWidth={strokeWidth} />;
 }
 
 /** 预设尺寸 */
