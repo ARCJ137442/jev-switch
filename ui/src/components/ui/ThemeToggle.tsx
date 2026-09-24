@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Sun, Moon } from 'lucide-react';
 import { useI18n } from '../../i18n';
 
 function readTheme(): 'light' | 'dark' {
@@ -31,6 +32,8 @@ export function ThemeToggle() {
     window.dispatchEvent(new Event('jev-theme-change'));
   };
 
+  const Icon = theme === 'dark' ? Moon : Sun;
+
   return (
     <button
       type="button"
@@ -47,7 +50,7 @@ export function ThemeToggle() {
       }}
       title={theme === 'dark' ? t('shell.themeToLight') : t('shell.themeToDark')}
     >
-      <span aria-hidden>{theme === 'dark' ? '☾' : '☀'}</span>
+      <Icon size={16} strokeWidth={2} />
     </button>
   );
 }

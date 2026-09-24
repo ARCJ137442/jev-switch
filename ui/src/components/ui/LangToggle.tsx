@@ -1,3 +1,4 @@
+import { Globe } from 'lucide-react';
 import { useI18n } from '../../i18n';
 
 /**
@@ -12,7 +13,7 @@ export function LangToggle() {
       type="button"
       onClick={toggleLang}
       aria-label={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
-      className="inline-flex h-8 min-w-8 items-center justify-center px-2 transition-colors"
+      className="inline-flex h-8 min-w-8 items-center justify-center gap-1.5 px-2 transition-colors"
       style={{
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
@@ -23,6 +24,7 @@ export function LangToggle() {
       }}
       title={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
     >
+      <Globe size={14} strokeWidth={2} />
       <span>{lang === 'en' ? 'EN' : '中'}</span>
     </button>
   );
