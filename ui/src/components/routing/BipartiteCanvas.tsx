@@ -273,7 +273,7 @@ export function BipartiteCanvas({
             key: e.key,
             model: e.model,
             pinned: e.pinned,
-            x: cardX + 6,
+            x: cardX,  // 端口在卡片左侧（电路板触点）
             y: y + CARD_HEAD_H + 2 + i * PORT_STEP,
             w: CARD_W - 12,
             h: PORT_H,
