@@ -43,3 +43,6 @@ async-trait = "0.1"
 tower-http = { version = "0.6", features = ["cors", "fs"] } # fs：#43 容器同源托管 ui/dist（ServeDir）
 # A6：P1-3 wiremock 验收（workspace 级）；A8 起 daemon 集成基座同源复用
 wiremock = "0.6"
+# Phase 4: 数据库支持（服务入口配置 + 调用统计）
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio-rusqlite = "0.6"

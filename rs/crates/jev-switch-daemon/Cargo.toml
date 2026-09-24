@@ -33,6 +33,9 @@ tower-http = { workspace = true }
 # A7 probe：HTTP 连通探测（GET base；与 adapters 同用 workspace reqwest）
 reqwest = { workspace = true }
 ts-rs = { version = "12.0.1", optional = true }
+# Phase 4: 数据库支持
+rusqlite = { workspace = true }
+tokio-rusqlite = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -32,6 +32,7 @@
 pub mod admin;
 pub mod auth;
 pub mod config;
+pub mod db;
 pub mod events;
 pub mod listen;
 
@@ -54,8 +55,9 @@ use jev_core::{
 use jev_protocol::{JevRequest, JevResponse};
 use serde::Serialize;
 use std::{
+    collections::HashMap,
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -82,6 +84,10 @@ pub struct AppState {
     pub listen: Arc<std::sync::OnceLock<listen::ListenHandle>>,
     /// 事件总线（Dashboard 实时流水数据源）。
     pub events: events::EventBus,
+    /// Phase 4.2: 服务入口配置（内存 + SQLite 持久化）
+    pub service_endpoints: Arc<RwLock<HashMap<String, db::endpoints::ServiceEndpoint>>>,
+    /// Phase 4: 数据库连接（SQLite，支持服务入口配置 + 调用统计）
+    pub db_conn: Arc<Mutex<rusqlite::Connection>>,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
