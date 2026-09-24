@@ -192,6 +192,28 @@ export const zh: Record<keyof typeof en, string> = {
   'api.kvOutside': '第 {n} 行：键值对出现在 [providers.<id>] 段之外',
   'api.valueType': '第 {n} 行：{key} 仅支持引号字符串或布尔值',
 
+  /* dashboard page */
+  'dash.running': '运行中',
+  'dash.unreachable': '不可达',
+  'dash.uptimePrefix': '运行时长',
+  'dash.switchTo': '切换到 {mode}',
+  'dash.switching': '切换中…',
+  'dash.switchBtn': '切换 →',
+  'dash.pwUnsetWarn': '⚠ admin 密码未设置',
+  'dash.healthy': '{ok}/{total} 健康',
+  'dash.noProviders': '暂无提供商',
+  'dash.routes': '{n} 条路由',
+  'dash.routesSummary': '{exact} exact · {prefix} prefix',
+  'dash.editRoutes': '编辑路由 →',
+  'dash.recentActivity': '最近活动',
+  'dash.needsApi': '需要 GET /v1/admin/logs',
+  'dash.historyUnavailable': '请求历史暂不可用。',
+  'dash.runTestRequest': '运行测试请求 →',
+  'dash.quickActions': '快捷操作',
+  'dash.testJev': '⚡ 测试 Jev',
+  'dash.editRoutesAction': '编辑路由',
+  'dash.addProvider': '+ 提供商',
+
   /* home（块 5） */
   'shell.navHome': '首页',
   'home.systemCard': '系统',

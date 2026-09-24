@@ -186,11 +186,11 @@ export function DashboardPage() {
               aria-hidden
             />
             <span className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
-              {daemonUp ? 'Running' : 'Unreachable'}
+              {daemonUp ? t('dash.running') : t('dash.unreachable')}
             </span>
           </div>
           <div style={cardLabel} className="tabular">
-            {status ? `uptime ${fmtUptime(status.uptime_s)} · v${status.version}` : '—'}
+            {status ? `${t('dash.uptimePrefix')} ${fmtUptime(status.uptime_s)} · v${status.version}` : '—'}
           </div>
         </section>
 
@@ -207,11 +207,11 @@ export function DashboardPage() {
               style={{ ...btn, color: 'var(--accent)', padding: '0.3rem 0.6rem' }}
               title={
                 status
-                  ? `Switch to ${status.mode === 'local' ? 'cloud' : 'local'}`
+                  ? t('dash.switchTo', { mode: status.mode === 'local' ? 'cloud' : 'local' })
                   : undefined
               }
             >
-              {switching ? '…' : 'Switch →'}
+              {switching ? t('dash.switching') : t('dash.switchBtn')}
             </button>
           </div>
           <div style={{ ...cardLabel, fontFamily: 'var(--font-mono)' }} className="tabular">
@@ -219,7 +219,7 @@ export function DashboardPage() {
           </div>
           {status && !status.password_set && status.mode === 'cloud' && (
             <div className="mt-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)' }}>
-              ⚠ admin password unset
+              {t('dash.pwUnsetWarn')}
             </div>
           )}
         </section>
@@ -246,7 +246,7 @@ export function DashboardPage() {
               })}
             </span>
             <span className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
-              {providers === null ? '—' : `${okCount}/${totalCount} healthy`}
+              {providers === null ? '—' : t('dash.healthy', { ok: okCount, total: totalCount })}
             </span>
           </div>
           <div className="space-y-1">
@@ -274,20 +274,20 @@ export function DashboardPage() {
                 </div>
               );
             })}
-            {providers?.length === 0 && <div style={cardLabel}>no providers yet</div>}
+            {providers?.length === 0 && <div style={cardLabel}>{t('dash.noProviders')}</div>}
           </div>
         </a>
 
         {/* routes 摘要 */}
         <a href="#/routing" className="fade-in card-hover block p-5" style={card}>
           <div className="mb-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
-            {routes === null ? '—' : `${routes.length} routes`}
+            {routes === null ? '—' : t('dash.routes', { n: routes.length })}
           </div>
           <div style={cardLabel} className="tabular">
-            {routes === null ? '—' : `${exactCount} exact · ${prefixCount} prefix`}
+            {routes === null ? '—' : t('dash.routesSummary', { exact: exactCount, prefix: prefixCount })}
           </div>
           <div className="mt-2" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>
-            Edit routes →
+            {t('dash.editRoutes')}
           </div>
         </a>
       </div>
@@ -296,19 +296,19 @@ export function DashboardPage() {
       <section className="fade-in mb-6 p-5" style={card}>
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="font-semibold" style={{ fontSize: 'var(--text-xl)' }}>
-            Recent activity
+            {t('dash.recentActivity')}
           </h2>
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-            needs GET /v1/admin/logs
+            {t('dash.needsApi')}
           </span>
         </div>
         <div
           className="flex flex-col items-center justify-center gap-2 py-10 text-center"
           style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}
         >
-          <span>Request history is not available yet.</span>
+          <span>{t('dash.historyUnavailable')}</span>
           <a href="#/playground" style={{ color: 'var(--accent)' }}>
-            Run a test request →
+            {t('dash.runTestRequest')}
           </a>
         </div>
       </section>
@@ -325,13 +325,13 @@ export function DashboardPage() {
             fontWeight: 600,
           }}
         >
-          ⚡ Test Jev
+          {t('dash.testJev')}
         </a>
         <a href="#/providers" style={btn}>
-          + Provider
+          {t('dash.addProvider')}
         </a>
         <a href="#/routing" style={btn}>
-          Edit routes
+          {t('dash.editRoutesAction')}
         </a>
       </div>
     </div>

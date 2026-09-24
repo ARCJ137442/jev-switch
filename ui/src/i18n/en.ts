@@ -196,6 +196,28 @@ export const en = {
   'api.kvOutside': 'line {n}: key/value outside a [providers.<id>] section',
   'api.valueType': 'line {n}: {key} only supports quoted string or boolean',
 
+  /* dashboard page */
+  'dash.running': 'Running',
+  'dash.unreachable': 'Unreachable',
+  'dash.uptimePrefix': 'uptime',
+  'dash.switchTo': 'Switch to {mode}',
+  'dash.switching': '…',
+  'dash.switchBtn': 'Switch →',
+  'dash.pwUnsetWarn': '⚠ admin password unset',
+  'dash.healthy': '{ok}/{total} healthy',
+  'dash.noProviders': 'no providers yet',
+  'dash.routes': '{n} routes',
+  'dash.routesSummary': '{exact} exact · {prefix} prefix',
+  'dash.editRoutes': 'Edit routes →',
+  'dash.recentActivity': 'Recent activity',
+  'dash.needsApi': 'needs GET /v1/admin/logs',
+  'dash.historyUnavailable': 'Request history is not available yet.',
+  'dash.runTestRequest': 'Run a test request →',
+  'dash.quickActions': 'Quick actions',
+  'dash.testJev': '⚡ Test Jev',
+  'dash.editRoutesAction': 'Edit routes',
+  'dash.addProvider': '+ Provider',
+
   /* home（块 5） */
   'shell.navHome': 'Home',
   'home.systemCard': 'System',
