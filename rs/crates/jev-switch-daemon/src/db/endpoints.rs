@@ -1,6 +1,6 @@
 //! Service endpoints CRUD operations.
 
-use rusqlite::{params, Connection, Result, Row};
+use rusqlite::{params, Connection, OptionalExtension, Result, Row};
 use serde::{Deserialize, Serialize};
 
 /// 服务入口配置（内存 + 数据库）

@@ -15,7 +15,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
 
     if !migrations_exist {
         // 首次初始化：执行初始 schema
-        let schema_sql = include_str!("../../../migrations/001_initial_schema.sql");
+        let schema_sql = include_str!("../../../../migrations/001_initial_schema.sql");
         conn.execute_batch(schema_sql)?;
         tracing::info!("database schema initialized (version 1)");
     } else {
@@ -29,7 +29,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
             .unwrap_or(0);
 
         if current_version < 1 {
-            let schema_sql = include_str!("../../../migrations/001_initial_schema.sql");
+            let schema_sql = include_str!("../../../../migrations/001_initial_schema.sql");
             conn.execute_batch(schema_sql)?;
             tracing::info!("database migrated to version 1");
         }

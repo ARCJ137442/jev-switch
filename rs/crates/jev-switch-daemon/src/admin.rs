@@ -19,6 +19,14 @@
 //!   local=loopback；cloud=有效会话 **或** loopback peer —— 服务器 SSH 上机一行
 //!   curl 忘密恢复）；一切密码变更统一走 [`set_admin_password`]
 //!
+//! Phase 4.2: 服务入口配置端点（见 endpoints 子模块）：
+//! - `GET  /v1/admin/endpoints` → 获取所有服务入口 + 健康状态 + 调用统计
+//! - `POST /v1/admin/endpoints` → 创建服务入口 + 可选路由
+//! - `PUT  /v1/admin/endpoints/{id}` → 更新策略/启用状态，支持修改 ID
+//! - `DELETE /v1/admin/endpoints/{id}` → 删除入口 + 级联删除路由
+//! - `GET  /v1/admin/config/default_strategy` → 获取全局默认策略
+//! - `PUT  /v1/admin/config/default_strategy` → 更新全局默认策略
+//!
 //! 防偷（contracts/04 §2）：
 //! - 响应 DTO [`ProviderView`] 只有 `api_key_masked` / `api_key_set` —— 序列化面
 //!   上不存在 `api_key` 字段（单测①⑦双重把守）
@@ -33,6 +41,8 @@
 //!   都会在下次加载时重复合并出多余边 / 复活已删边）。**注释不随 toml 往返保留**
 //!   （toml crate 不保注释 —— A7 报告备案项）。
 //! - mode/password/listen PUT：写对应单键，其余段原样（同上注释不保）。
+
+pub mod endpoints;
 
 use crate::config::{enforce_config_perms, enforce_dir_perms, Config, ProviderConfig};
 use crate::{error_response, known_keys_snapshot, AppState};

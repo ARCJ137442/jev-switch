@@ -212,7 +212,7 @@ pub async fn list_endpoints(State(state): State<AppState>) -> Response {
         }
     };
 
-    let endpoints = match crate::db::endpoints::load_all(&conn) {
+    let endpoints: Vec<crate::db::endpoints::ServiceEndpoint> = match crate::db::endpoints::load_all(&conn) {
         Ok(eps) => eps,
         Err(e) => {
             return err(
@@ -277,7 +277,7 @@ pub async fn create_endpoint(
     }
 
     // 数据库事务：创建入口 + 可选路由
-    let conn = match state.db_conn.lock() {
+    let mut conn = match state.db_conn.lock() {
         Ok(c) => c,
         Err(e) => {
             return err(

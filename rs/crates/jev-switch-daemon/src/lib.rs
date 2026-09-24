@@ -202,6 +202,32 @@ pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
         }
     }
 
+    // Phase 4: 初始化数据库
+    let db_path = db::db_path();
+    let db_conn = match db::open_connection(&db_path) {
+        Ok(conn) => {
+            if let Err(e) = db::init_database(&conn) {
+                tracing::error!(error = %e, "database migration failed");
+                panic!("failed to initialize database: {e}");
+            }
+            tracing::info!(path = %db_path.display(), "database initialized");
+            conn
+        }
+        Err(e) => {
+            tracing::error!(error = %e, path = %db_path.display(), "database open failed");
+            panic!("failed to open database: {e}");
+        }
+    };
+
+    // 加载服务入口到内存
+    let endpoints: HashMap<String, db::endpoints::ServiceEndpoint> = match db::endpoints::load_all(&db_conn) {
+        Ok(eps) => eps.into_iter().map(|ep| (ep.id.clone(), ep)).collect(),
+        Err(e) => {
+            tracing::warn!(error = %e, "load service endpoints failed, starting with empty map");
+            HashMap::new()
+        }
+    };
+
     AppState {
         registry: Arc::new(registry),
         config_path,
@@ -209,6 +235,8 @@ pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
         auth: Arc::new(auth::AuthState::from_config(&config)),
         listen: Arc::new(std::sync::OnceLock::new()),
         events: events::EventBus::new(200),
+        service_endpoints: Arc::new(RwLock::new(endpoints)),
+        db_conn: Arc::new(Mutex::new(db_conn)),
     }
 }
 
@@ -281,6 +309,19 @@ pub fn build_app(state: AppState) -> Router {
             get(admin::get_listen).put(admin::put_listen),
         )
         .route("/v1/admin/status", get(admin::get_status))
+        // Phase 4.2: 服务入口配置端点
+        .route(
+            "/v1/admin/endpoints",
+            get(admin::endpoints::list_endpoints).post(admin::endpoints::create_endpoint),
+        )
+        .route(
+            "/v1/admin/endpoints/:id",
+            put(admin::endpoints::update_endpoint).delete(admin::endpoints::delete_endpoint),
+        )
+        .route(
+            "/v1/admin/config/default_strategy",
+            get(admin::endpoints::get_default_strategy).put(admin::endpoints::update_default_strategy),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::require_admin_session,
