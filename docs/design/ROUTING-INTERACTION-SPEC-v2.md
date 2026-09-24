@@ -207,6 +207,7 @@
 
 #### 箭头中点标签
 - **priority 数字**: 显示在箭头中点（小圆圈内）
+- 小圆圈的颜色用一个类圆环图来表示（边缘是带颜色圆环）反映路由在24h的API调用成败情况（红失败绿成功黄慢速（>1s）），数字在小圆圈内
   ```
   ──────●10──────>
   ```
@@ -233,23 +234,25 @@
 
 | 调用次数 | 线条宽度 | 计算公式 |
 |---------|---------|---------|
-| 0 次 | 1px | 基准 |
-| 1-9 次 | 1px | `1px` |
-| 10-99 次 | 2px | `1 + floor(log10(count))` |
-| 100-999 次 | 3px | `1 + floor(log10(count))` |
-| 1000+ 次 | 4px | `1 + floor(log10(count))` |
+| 0 次 | 2px | 基准 |
+| 1-9 次 | 2px | `2px` |
+| 10-99 次 | 4px | `2 + 2 * floor(log10(count))` |
+| 100-999 次 | 6px | `2 + 2 * floor(log10(count))` |
+| 1000+ 次 | 8px | `2 + 2 * floor(log10(count))` |
+
+【批注：粗一些，避免点不到】
 
 **计算函数**:
 ```typescript
 function getStrokeWidth(callCount: number): number {
   if (callCount === 0) return 1;
-  return Math.min(1 + Math.floor(Math.log10(callCount)), 4);
+  return Math.min(2 + 2 * Math.floor(Math.log10(callCount)), 8);
 }
 ```
 
 #### 统计时间窗口
 - **窗口**: 最近 24 小时（滑动窗口）
-- **刷新频率**: SSE 推送，前端实时更新（< 5s 延迟）
+- **刷新频率**: 读取历史调用记录（这部分也存入数据库，后续可以配置数据保留期限（默认先存最近一个月的）），SSE 推送，前端实时更新（< 5s 延迟）
 - **显示**: hover 浮动卡片显示精确数字（如 "1,234 calls"）
 
 #### 视觉效果
