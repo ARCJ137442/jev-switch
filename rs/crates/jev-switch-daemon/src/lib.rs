@@ -32,6 +32,7 @@
 pub mod admin;
 pub mod auth;
 pub mod config;
+pub mod events;
 pub mod listen;
 
 use axum::{
@@ -79,6 +80,8 @@ pub struct AppState {
     /// `OnceLock` = build_state 时 supervisor 尚未创建）。缺失时 mode 翻转
     /// `rebind.skipped="no listener"`、`PUT /listen` → 503（oneshot 测试路径）。
     pub listen: Arc<std::sync::OnceLock<listen::ListenHandle>>,
+    /// 事件总线（Dashboard 实时流水数据源）。
+    pub events: events::EventBus,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -199,6 +202,7 @@ pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
         known_keys: Arc::new(RwLock::new(known_keys)),
         auth: Arc::new(auth::AuthState::from_config(&config)),
         listen: Arc::new(std::sync::OnceLock::new()),
+        events: events::EventBus::new(200),
     }
 }
 
