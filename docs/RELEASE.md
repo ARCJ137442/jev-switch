@@ -99,7 +99,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 
 若本轮确实要验安装器，在便携运行与页面/路由检查完成后使用同一构建的候选 MSI 升级，并在这一处处理 Windows UAC。确认 ProductCode/UpgradeCode、安装目录与 AppData migration；不要为每次 UI 或 daemon 修复重复安装。MSI 成功后，按同一 request ID / SQLite / 页面检查再抽查一次即可。
 
-有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。当前正式发布目标为 `v0.1.0`；本文中的 `0.6.0` 只作语法示例。
+有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.1.0` 已通过 tag 流水线发布；Windows MSI、NSIS、便携 ZIP 和 Docker 镜像均已生成。本文中的 `0.6.0` 只作语法示例。
 
 ---
 
