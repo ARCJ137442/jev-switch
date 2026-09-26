@@ -64,3 +64,9 @@ history row:    id 27, HTTP 200, route trace present
 | 公开入口 ↔ 直连上游 | `laya-english` (`jev-32`) ↔ `laya/laya-multilingual` (`jev-33`) | 两列 HTTP 200，各调用一次 Laya；左列走 `failover` 入口策略，右列走 `direct`；109/106 输入 tokens，trace 均存在 |
 
 Playground 对以上结果都先展示目标类型、模型、request ID、实际路径、策略、回答摘要、耗时、usage 和上游次数，原始响应保持折叠。1280×720 浏览器画面中，直连与混合比较的两列卡片并排占用内容宽度；这是当前打包 daemon 所服务页面的浏览器 UI 实测，不扩写成原生 Tauri WebView 截图或 DPI 验收。用户此前的 Tauri 截图仍对应 §19:48 中说明的当时实例。
+
+## 21:48 同一 Release 包 Vercel 入口补测
+
+为补足同一运行版本的两家上游证据，在当前便携实例的 Playground 仅运行一次既有公开入口 `jev-vercel`。该入口返回 HTTP 200、响应模型 `typesafe-ai/jev`、1 次上游调用、420 input / 45 output tokens；UI request ID `jev-34` 与 SQLite 行 `id=34` 一致。只读 route trace 解析为 `failover`，selected provider/model 为 `vercel / typesafe-ai/jev`，hops 为 `typesafe-ai/jev → vercel`，成本记录为 0.000018 USD。Dashboard 刷新后把这条成功摘要置顶，原始 JSON仍折叠，并显示 Laya/Vercel 两家当前 2/2 可达。
+
+SQLite `call_logs` 总数为 34；Vercel 凭据始终由 daemon 保管，没有读取、输出或写入本记录。该检查使用用户先前明确授权的真实 Vercel 配置；没有额外重试或调用。

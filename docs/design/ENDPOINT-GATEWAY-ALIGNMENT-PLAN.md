@@ -2,7 +2,7 @@
 
 **日期：2026-09-24（北京时间）**<br>
 **整理：GPT-6 Astra / Codex；演练场专项修订：GPT-6 Luna**<br>
-**状态（更新至 2026-09-26 21:30，北京时间）：**P1–P4 产品能力已实现并有分项验收；P4 还在同一 Release dry-run 便携实例上跑通了公开↔公开、直连↔直连、公开↔直连三种比较，各两列 HTTP 200，request ID `jev-28` 至 `jev-33` 与 SQLite 路由 trace 对齐。Release dry-run artifact 冷启动后，便携壳与 daemon 来自同一目录，daemon `/health` 为 0.1.0、build revision `f850d3f`，绑定 `127.0.0.1:11435`；该批 UI index/JS/CSS 在磁盘清单与运行服务间哈希一致。进程复用既有 `%APPDATA%\\jev-switch`，已有 Providers/Routes 与历史保留；调用历史共 33 条。Tauri MCP 不在当前工具集中，Computer Use 原生 app 列表为空；因此这轮能证明便携进程、所服务 UI 与真实 HTTP/SQLite 行为，不能伪称取得本批 Tauri 原生窗口或托盘全生命周期证据。用户对已安装版“关窗留托盘、点击托盘恢复”的人工确认仍按其真实范围记录。P5 仍待精确候选上的原生窗口/托盘验收；P6 的远端 Release dry-run、artifact 上传与八项哈希校验已通过，干净公开展示素材和正式发布仍未完成。其他 SQLite Unix 权限修复、Docker cloud、Linux/Windows、UI、Tauri 与 Release workflow 门禁已有通过证据；详见 §19:48、§20:48 与 §21:30。
+**状态（更新至 2026-09-26 21:48，北京时间）：**P1–P4 产品能力已实现并有分项验收；P4 还在同一 Release dry-run 便携实例上跑通了公开↔公开、直连↔直连、公开↔直连三种比较，各两列 HTTP 200，request ID `jev-28` 至 `jev-33` 与 SQLite 路由 trace 对齐。同一实例的 `jev-vercel` 真实请求也返回 HTTP 200，SQLite `jev-34` trace 对齐，Dashboard 刷新后显示 Laya/Vercel 2/2 可达。Release dry-run artifact 冷启动后，便携壳与 daemon 来自同一目录，daemon `/health` 为 0.1.0、build revision `f850d3f`，绑定 `127.0.0.1:11435`；该批 UI index/JS/CSS 在磁盘清单与运行服务间哈希一致。进程复用既有 `%APPDATA%\\jev-switch`，已有 Providers/Routes 与历史保留；调用历史共 34 条。Tauri MCP 不在当前工具集中，Computer Use 原生 app 列表为空；因此这轮能证明便携进程、所服务 UI 与真实 HTTP/SQLite 行为，不能伪称取得本批 Tauri 原生窗口或托盘全生命周期证据。用户对已安装版“关窗留托盘、点击托盘恢复”的人工确认仍按其真实范围记录。P5 仍待精确候选上的原生窗口/托盘验收；P6 的远端 Release dry-run、artifact 上传与八项哈希校验已通过，干净公开展示素材和正式发布仍未完成。其他 SQLite Unix 权限修复、Docker cloud、Linux/Windows、UI、Tauri 与 Release workflow 门禁已有通过证据；详见 §19:48、§20:48、§21:30 与 §21:48。
 
 **历史检查点（15:59，后续已更新）：**15:55 候选此前已按单一脚本构建、冷启动并完成真实 Laya 请求追踪；用户后来报告窗口已关闭，但进程只读检查显示其实际驻留托盘并占用 11435。由于缺少 Computer Use 原生控制与 Tauri MCP，当时没有强杀或改用其它桌面通道。旧实例退出与 Release dry-run 便携包冷启动现已在 §20:48 完成；六张截图和先前 Hide/Restore 人工证据的范围仍见 §19:48。**
 **来源：**接续 Claude Opus 5 会话 `afa3590a-4356-4af4-a2a7-f46b180dfc20` 后，用户的五项问题反馈、八条批注，以及本轮 `super-questioning` / `popup-ask` 的完整回答。原目标与运行证据见 [目标重评](../OPUS5-GOAL-REASSESSMENT.md)。
@@ -269,6 +269,7 @@ P6 最新截图、文档、提交推送与既定发布验证
 - [x] P5 冷启动 Release dry-run 便携包；核对 shell/daemon 进程来源、health/version/build revision、11435 监听与服务端 UI 资源哈希。
 - [x] P5 在该包复用原 `%APPDATA%\\jev-switch` 的状态下，真实调用 `laya-english` 并在 HTTP 响应、SQLite 历史、Dashboard 结构化摘要中对齐 `jev-27` 与 route trace。
 - [x] P4 在同一 Release dry-run 便携实例上完成公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三类同输入比较；六条 Laya 请求的 UI、request ID、HTTP 状态、usage 和 SQLite route trace 对齐。
+- [x] P5 在同一 Release dry-run 便携实例上各完成至少一次真实 Laya 与 Vercel 公开入口请求；Dashboard、request ID、usage 与持久化 SQLite route trace 对齐，Vercel 费用字段按上游用量如实记录。
 - [ ] P5 由可用的原生 Tauri 窗口工具验本批窗口尺寸/页面截图，并由本批窗口完成 Hide/Restore/Exit 生命周期验证。
 - [ ] 完成 P5 同版本应用联调与验收。
 - [x] P6 获取并归档当前 Tauri 正式窗口的六张验收截图；敏感原图仅保留在本机 Git 忽略目录。
@@ -278,7 +279,7 @@ P6 最新截图、文档、提交推送与既定发布验证
 - [ ] 完成 P6 公开展示素材筛选及正式发布；含敏感配置的截图继续只用于本机核验。
 - [ ] 全部目标验收完成后，正常退出便携版并清理 `E:\\tmp` 中确认属于本轮 Jev-Switch 的临时构建/解压文件；保留 `%APPDATA%\\jev-switch` 用户配置与调用历史，不触碰无关临时文件。
 
-P5 已有旧便携运行与真实 Laya/Vercel 调用、结构化请求历史、DAG/入口/比较页、Docker cloud 持久化、原生几何/DOM 和隔离生命周期测试证据；20:48 的 artifact 冷启动及 21:30 的同包三种比较补齐了当前 Release dry-run 包的进程、资源、HTTP、历史与 route trace 证据。当前 Tauri MCP 不可用且原生 app inventory 为空，精确候选上的原生窗口尺寸/截图和托盘 Hide/Restore/Exit 仍未验收。P6 本机截图证据索引、README 状态、同批 MSI/NSIS/便携构建、远端 dry-run CI 与 artifact 哈希核验已完成；干净公开素材筛选和正式发布仍待完成。
+P5 已有旧便携运行与真实 Laya/Vercel 调用、结构化请求历史、DAG/入口/比较页、Docker cloud 持久化、原生几何/DOM 和隔离生命周期测试证据；20:48 的 artifact 冷启动、21:30 的同包三种比较与 21:48 的 Vercel 真实调用补齐了当前 Release dry-run 包的进程、资源、HTTP、历史与 route trace 证据。当前 Tauri MCP 不可用且原生 app inventory 为空，精确候选上的原生窗口尺寸/截图和托盘 Hide/Restore/Exit 仍未验收。P6 本机截图证据索引、README 状态、同批 MSI/NSIS/便携构建、远端 dry-run CI 与 artifact 哈希核验已完成；干净公开素材筛选和正式发布仍待完成。
 
 ## 2026-09-26 15:19 用户提供的 Tauri 截图与托盘操作复核
 
@@ -844,3 +845,8 @@ Jeview 明确把每次完整请求和响应、以及明文 TypeSafe key 存入�
 - 在 Release dry-run 便携包的 Playground 页面以同一份 Support Routing 输入依次完成三组入口比较：公开 `laya-english` ↔ 公开 `laya-multilingual`（`jev-28`/`jev-29`）、直连 `laya/laya-english` ↔ `laya/laya-multilingual`（`jev-30`/`jev-31`）、公开 `laya-english` ↔ 直连 `laya/laya-multilingual`（`jev-32`/`jev-33`）。六列均 HTTP 200、一次本地 Laya 上游调用；DB 记录的入口/模型/策略/selected hops、usage 与 UI 结果逐一一致，trace 均可解析且非空。
 - 1280×720 的浏览器页面中，直连对直连和混合结果均以两列卡片呈现，包含目标/响应模型、request ID、实际选中路径、策略、回答概率摘要、耗时、token、上游次数；原始响应折叠。浏览器画面只作为当前 daemon 提供页面的布局证据，不代替 Tauri WebView 的原生截图/DPI。
 - SQLite `call_logs` 总数为 33（原有 27 条保留），六个新请求的 request IDs 为 `jev-28`–`jev-33`。无 Vercel 请求，无凭据或原始答案写入本记录。字段摘要和组合说明见 [便携运行验收记录](../verification/portable-runtime-acceptance-2026-09-26.md#2130-同一-release-dry-run-便携包的三种入口比较)。
+
+## 21:48 P5 同批包 Vercel 真实请求核验
+
+- 通过同一 Release dry-run 便携实例的公开入口 `jev-vercel` 发出一条调用，HTTP 200，`typesafe-ai/jev`，1 次上游调用，420 input / 45 output tokens，费用 0.000018 USD。Playground 展示 `jev-34`，Dashboard 最新活动同步置顶，SQLite 行 34 的 request ID、状态、模型、usage 与 route trace 对应一致。
+- 刷新 Dashboard 的 provider 探测状态后显示 Laya 与 Vercel 2/2 可达。Vercel key 未被读取或显示；没有重试调用。完整脱敏字段见 [便携运行验收记录](../verification/portable-runtime-acceptance-2026-09-26.md#2148-同一-release-包-vercel-入口补测)。

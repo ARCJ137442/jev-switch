@@ -113,8 +113,8 @@ Licensed under **MIT OR Apache-2.0**：
 
 ## 当前验收状态
 
-**状态截至 2026-09-26 21:30（北京时间）。** P1–P4 产品与 Web 能力已实现并分项验收。Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。当前 AppData 保留 2 个提供商、9 条路由、7 个公开入口和 33 条调用历史。调用历史以 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数作为摘要，原始 JSON 收在折叠详情中。
+**状态截至 2026-09-26 21:48（北京时间）。** P1–P4 产品与 Web 能力已实现并分项验收。Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。当前 AppData 保留 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史以 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数作为摘要，原始 JSON 收在折叠详情中。
 
-同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID `jev-28` 至 `jev-33` 与 SQLite route trace 对齐。远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对；Docker cloud 持久化和 CI 测试也有通过记录。
+同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID 与 SQLite route trace 对齐。该实例的 Vercel 公开入口也实测 HTTP 200；远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对，Docker cloud 持久化和 CI 测试也有通过记录。
 
 桌面验收仍有边界：当前工具没有 Tauri MCP，原生应用 inventory 为空，因此本批便携包的原生窗口尺寸、WebView 截图和托盘 Hide/Restore/Exit 未直接验收。用户此前人工确认的安装版 Hide/Restore 仍按其实际范围记录。README 中的 Dashboard 截图已通过安全筛查；其余含非公开配置或演示资料的用户截图只用于本机核验，不公开。正式 GitHub Release 尚未创建。最新计划、证据、未完成项见[实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)与[便携版运行验收记录](docs/verification/portable-runtime-acceptance-2026-09-26.md)。
