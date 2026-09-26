@@ -1,8 +1,12 @@
 # Jev-Switch 文档索引
 
+> **TL;DR：**当前正式版为 `v0.1.0`。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+>
+> **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。
+>
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
-> **当前核实状态（2026-09-26）**：P1–P4 已实现并分项验收；正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已由 tag 流水线发布，附 Windows MSI、NSIS、便携 ZIP，并成功推送 Docker 镜像。Release gate 的 Rust、UI、Tauri 与版本检查均通过。便携版复用现有 AppData；当前证据包含 2 家上游、9 条路由、7 个公开入口和 34 条调用记录，Laya 三种入口比较与 Vercel 公开入口的既有成功记录均已对齐 UI、request ID 和 SQLite trace。本轮未追加 Laya 请求。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
+> **当前核实状态（2026-09-27）**：正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已由 tag 流水线发布，含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。Release gate 的 Rust、UI、Tauri 与版本检查通过。验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。Laya 不重复实测。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
 > **当前施工入口**：[入口网关认知对齐、决策与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。便携运行时需整体保留壳、sidecar 与 UI 资源，配置仍从正式 AppData 读取；可用 `scripts/build-windows-release.ps1` 重建 MSI/NSIS 与便携包。总计划 §3/§3.1 记录决定及八条批注，§7/§8 和文末最新增量记录当前验收状态。
 
 ## 核心定位（一句话）
@@ -13,10 +17,12 @@
 
 | 文件 | 内容 | 状态 |
 |---|---|---|
+| **[../ROADMAP.md](../ROADMAP.md)** | **未来功能方向、优先级和可验收边界** | TypeSafe 官方/OpenRouter 适配器为最高优先级；不代表当前已实现或已排期 |
+| [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线说明与路线图各方向对应的具体用户旅程 | 早期场景已标为历史构想；第七、八节覆盖路线图中的未来体验提案，不表示已实现 |
 | **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **本轮用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收门槛** | **当前施工入口；P1–P4 已验；P5 有用户截图与 Hide/Restore 证据，候选 Exit/恢复边界仍开放；P6 v0.1.0 已发布** |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
-| [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 当前工作树已实现并分项验证；最新版安装验收待 P5 |
-| [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 多目标执行/直连持久追踪已实现；最新版 UI 验收待 P5 |
+| [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
+| [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
 | `01-Jev-Switch-原始计划书-DeepSeek.md` | DeepSeek 原始计划书（4 条需求 + 调研 + MVP + 风险） | baseline |
 | `02-Jev-Switch-新版计划书.md` | v2.1：5 类上游 + 桥接模式 + M1–M7 | 历史愿景，不能整体重启 |
 | `03-上游类别与协议兼容矩阵.md` | C1–C5 字段矩阵 + Vercel noul→boolean | 已写 |
@@ -30,7 +36,8 @@
 | `10-v0.5.0-验收报告.md` | 全量 DoD 复跑 + **P2-7 CDP 12/12**（第九节 + 截图归档 `design/screenshots-v0.5.0/`） | 历史版本验收 |
 | `11-提供商与模型接口路由.md` | 三元组、复合卡片内多模型及历史实证 | 同地址多账号旧限制已被本轮裁决更新 |
 | `12-路线收缩与三线作战计划.md` | **双态战略（本地可路由·云端可中转）** + 冻结清单 + UI/Docker/Tauri 三线计划 | 范围基线，结合后来批准专项阅读 |
-| **[contracts/00-INDEX.md](contracts/00-INDEX.md)** | **六份基线契约与本轮入口网关修订的入口** | **历史基线保留；修订实施中** |
+| [design/IMPLEMENTATION-PLAN.md](design/IMPLEMENTATION-PLAN.md) | 早期完整实施草案与当时的计划假设 | 历史参考，已由当前主计划和发版手册取代；其中旧版本/tag 指令不可执行 |
+| **[contracts/00-INDEX.md](contracts/00-INDEX.md)** | **六份基线契约与本轮入口网关修订的入口** | **历史基线保留；最新实现状态见当前主计划** |
 | `contracts/01-协议契约.md` | Jev 内核类型与不变量 | 定稿 |
 | `contracts/02-扩展点契约.md` | serde 同构：冻结 trait + 黄金测试 | 定稿 |
 | `contracts/03-路由契约.md` | **模型路由 DAG**（二部图 = 最简形式） | 定稿 |
@@ -39,25 +46,24 @@
 | `contracts/06-前端交互契约.md` | CC Switch 范式 + 三页 IA | 定稿 |
 | [contracts/07-入口网关修订.md](contracts/07-入口网关修订.md) | 接入配置、统一持久化、入口 API、直接上游调用及 UI 修订 | 当前工作树实现与回归已完成；最新安装版运行验收待 P5 |
 | **`design/01-frontend-design-sim.md`** | **前端与交互设计稿**（模拟 `/frontend-design` 流程，作者 Mimo-V2.6-Pro） | 定稿 |
-| `design/UI-REDESIGN-v2.md` | 历史 UI 导航与视觉草图 | 冲突以最新计划为准 |
 | `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 已补两端语义，交互待完整验收 |
 | `design/I18N-DESIGN.md` | **国际化与可扩展语言列表** | 基础机制存在，覆盖与扩展待验收 |
 | `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | `v0.1.0` 已发布 MSI/NSIS/便携 ZIP 与 Docker 镜像 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 公开筛选的 v0.1.0 界面图册 |
-| [AWESOME-JEV-ISSUE-BODY.md](AWESOME-JEV-ISSUE-BODY.md) | Awesome Jev 投稿文案草稿与隐私/限制说明 | Release 链接已补齐；待最终核对后投稿，尚未向外部仓库提交 |
-| `design/IMPLEMENTATION-PLAN.md` | 旧 SSE、权限、统计实施计划 | 专项目标保留，按最新计划重验 |
-| `E2E-VERIFICATION-REPORT.md` | 旧端到端验证声明 | 不能替代当前版本实测，结合目标重评阅读 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
 
 ## 阅读顺序（开发 Agent）
 
 1. `design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md`（最新用户决策、范围与施工顺序）
 2. `OPUS5-GOAL-REASSESSMENT.md`（原始目标、当前缺口与运行证据）
-3. `design/SERVICE-ENDPOINT-CONFIG-PLAN.md`、`design/PLAYGROUND-COMPARISON-PLAN.md`、路由交互与国际化专项
-4. `contracts/00-INDEX` → 01–06 基线与 07 修订，再按需查 `08-CONTRACT`（保留未变更的不变量，后续批准的修订优先）
-5. `12-路线收缩与三线作战计划.md`（范围基线，后续明确授权优先）
-6. `07-REVIEW`、历史验收与 `02`–`06`（了解原因与演变，不作当前完成证明）
-7. `PROGRESS.md`（MVP 历史实测）
+3. `../ROADMAP.md`（未来候选，不作为当前版本能力承诺）
+4. 路由交互与国际化专项；服务入口和 Playground 两份专项文档仅作历史设计参考
+5. `contracts/00-INDEX` → 01–06 基线与 07 修订，再按需查 `08-CONTRACT`（保留未变更的不变量，后续批准的修订优先）
+6. `12-路线收缩与三线作战计划.md`（范围基线，后续明确授权优先）
+7. `07-REVIEW`、历史验收与 `02`–`06`（了解原因与演变，不作当前完成证明）
+8. `PROGRESS.md`（MVP 历史实测）
+
+旧设计稿、会话产物和专项计划用于解释设计演变，不作为当前能力或待办状态的来源。当前实现与验收以主计划及对应版本记录为准；未来候选只记在 `../ROADMAP.md`。已从当前阅读路径撤下的文档仍可能留在仓库，清理状态以工作任务记录为准，不据此声称文件已删除。
 
 ## 早期对齐定稿速查（历史）
 
@@ -80,7 +86,7 @@
 
 ```
 rs/     Rust workspace：protocol / core / adapters / daemon
-ui/     React 控制台；入口配置、完整 DAG 与两类比较按最新计划补齐
+ui/     React 四页控制台：仪表盘、提供商、路由与演练场
 docs/   本目录
 ```
 
@@ -92,4 +98,4 @@ docs/   本目录
 - 种子数据：`jev-decision-lab`
 - 参考实现：`alvarobartt/sys1`、`Yinsongxu/LLM2Jev`
 
-— 原索引：Mimo-V2.6-Pro；本轮决策与状态索引更新：GPT-6 Astra / Codex（2026-09-24）
+— 原索引：Mimo-V2.6-Pro；本轮维护与 AI 披露：GPT-6 Luna xhigh（OpenAI Codex，2026-09-27）

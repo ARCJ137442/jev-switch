@@ -4,19 +4,23 @@
 
 ---
 
-## 发一个版本
+## 当前版本与下一次发版
 
-当前仓库四个发布版本字段及 `ui/package-lock.json` 均为 `0.1.0`。本次按这个已配置版本发稳定版 `v0.1.0`：远端已有的 `v0.1.0-mvp` 是较早的 MVP tag/Release，`v0.5.0-stable` 是历史代码 tag，均不等于包内 SemVer；精确的 `v0.1.0` tag 尚不存在。`0.6.0` 仍只是下列语法示例。版本门禁以 tag（`vX.Y.Z`）为准，并要求以下四处与 tag 去掉 `v` 后一致：
+截至 2026-09-27，GitHub 最新正式 Release 为 [`v0.1.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，当前源码的四个发布版本字段与锁文件也为 `0.1.0`。仓库另有历史 tag `v0.5.0-stable`，但没有对应 GitHub Release；该 tag 的旧实现元数据仍为 `0.1.0`，不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
+
+这次发布已完成。下一版号尚未裁定；发版前由用户确认版本号，再让 tag `vX.Y.Z` 与以下四处去掉 `v` 后完全一致：
 
 - `ui/package.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
 - `rs/Cargo.toml` 的 `[workspace.package].version`
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
+每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 README 和已发布能力一致。当前内置上游适配器为 Vercel/Laya；TypeSafe 官方与 OpenRouter 支持尚在最高优先级路线图中。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 以 0.6.0 为例，手动把上面四处版本字段统一改成该版本
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.2.0；统一修改上述四处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui
@@ -37,9 +41,10 @@ git diff --cached --check
 git diff --cached --stat
 git diff --cached
 
-git commit -m "chore: bump 0.6.0"
-git tag v0.6.0
-git push origin main v0.6.0    # 推 tag 触发发版
+VERSION=0.2.0  # 示例；必须替换成用户确认的下一个版本
+git commit -m "chore: bump ${VERSION}"
+git tag "v${VERSION}"
+git push origin main "v${VERSION}"    # 推 tag 触发发版
 ```
 
 不要用 `git commit -am` 代替显式暂存：它只包含已跟踪文件，新增的迁移、测试、`ui/src/generated` 类型、源码或文档不会进入 tag。Workflow 只构建 tag 对应的提交，工作树里未提交的修改不会参与发版。CI 的 ts-rs 门禁会同时检查生成目录中的已跟踪差异和未跟踪文件。
@@ -99,7 +104,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 
 若本轮确实要验安装器，在便携运行与页面/路由检查完成后使用同一构建的候选 MSI 升级，并在这一处处理 Windows UAC。确认 ProductCode/UpgradeCode、安装目录与 AppData migration；不要为每次 UI 或 daemon 修复重复安装。MSI 成功后，按同一 request ID / SQLite / 页面检查再抽查一次即可。
 
-有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.1.0` 已通过 tag 流水线发布；Windows MSI、NSIS、便携 ZIP 和 Docker 镜像均已生成。本文中的 `0.6.0` 只作语法示例。
+有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.1.0` 已通过 tag 流水线发布；Windows MSI、NSIS、便携 ZIP 和 Docker 镜像均已生成。
 
 ---
 
@@ -119,18 +124,19 @@ Actions → Release → Run workflow（`workflow_dispatch`）。
 | MSI / NSIS | Release 页附件；或 Actions run 的 `jev-switch-windows-<版本>` artifact |
 | Docker | `ghcr.io/<owner>/<repo>:<版本>` 与 `:latest`（owner 自动转小写） |
 
-发布页自动填入实际的小写镜像名称与版本，并提供带持久卷、管理员密码和 15 秒停机预算的启动命令。Bash 示例中的 `0.6.0` 仍只是示例，先替换 `<owner>/<repo>` 和版本，再将 `JEV_ADMIN_PASSWORD` 设置为自己的管理员密码：
+发布页自动填入实际的小写镜像名称与版本，并提供带持久卷、管理员密码和 15 秒停机预算的启动命令。下面以当前正式版 `0.1.0` 为例；部署其他版本时替换该值，并替换 `<owner>/<repo>`，再设置自己的 `JEV_ADMIN_PASSWORD`：
 
 ```bash
 : "${JEV_ADMIN_PASSWORD:?请先设置管理员密码}"
 export JEV_ADMIN_PASSWORD
-docker pull ghcr.io/<owner>/<repo>:0.6.0
+VERSION=0.1.0
+docker pull ghcr.io/<owner>/<repo>:${VERSION}
 docker run -d --name jev-switch \
   -p 127.0.0.1:11435:11435 \
   --restart unless-stopped --stop-timeout 15 \
   -e JEV_SWITCH_MODE=cloud -e JEV_BIND=0.0.0.0:11435 \
   -e JEV_ADMIN_PASSWORD -v jev-switch-data:/data \
-  ghcr.io/<owner>/<repo>:0.6.0
+  ghcr.io/<owner>/<repo>:${VERSION}
 ```
 
 打开 `http://127.0.0.1:11435`，使用管理员密码登录，再到 Token 管理创建调用 Token。示例只发布到宿主回环；远程部署、反向代理和配置导入按 [部署文档](deployment.md) 操作。命名数据卷保留数据库，容器替换不等于删除数据卷。
@@ -157,6 +163,8 @@ Settings → Actions → General → Workflow permissions → **Read and write**
 | `__TAURI_BUNDLE_TYPE` warn | 无 updater 插件的已知无害告警，忽略 |
 
 ---
+
+— GPT-6 Luna xhigh（OpenAI Codex），本轮发版文档修订，AI 辅助整理，2026-09-27
 
 ## 尚未做
 

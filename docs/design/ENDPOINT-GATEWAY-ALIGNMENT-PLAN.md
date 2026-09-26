@@ -2,7 +2,7 @@
 
 **日期：2026-09-24（北京时间）**<br>
 **整理：GPT-6 Astra / Codex；演练场专项修订：GPT-6 Luna**<br>
-**状态（2026-09-26，v0.1.0 已发布）：**P1–P4 产品能力已实现并有分项验收；P4 在同一 Release dry-run 便携实例上跑通公开↔公开、直连↔直连、公开↔直连三种比较，各两列 HTTP 200，request ID `jev-28` 至 `jev-33` 与 SQLite 路由 trace 对齐。同一实例的既有 Vercel 请求 `jev-34` 返回 HTTP 200，trace 对齐，Dashboard 显示 Laya/Vercel 2/2 可达；按用户指示，本阶段未追加 Laya 请求。便携壳与 daemon 来自同一 dry-run 包，health 为 0.1.0、build revision `f850d3f`，UI 资源哈希一致；既有 AppData 与 34 条历史保留。用户提供的 v0.1.0 Tauri 截图现整理为安全公开图册，并人工确认当时安装版“关窗留托盘、点菜单恢复”通过；这不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。P5 只认这些证据覆盖的范围。正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已通过版本/Rust/UI/Tauri 门禁，发布 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。首次 Release run `36249016862` 暴露 Cargo target 缓存中的旧便携目录与打包器 no-overwrite 保护冲突；修复为按 run/attempt 隔离目录后，`36250114541` 全 job 成功。Awesome Jev 投稿文案、隐私边界与限制已更新 Release 链接，等待最后核对清单当前分类后投稿；没有向外部仓库创建 issue 或 PR。
+**状态（2026-09-26，v0.1.0 已发布）：**P1–P4 产品能力已实现并有分项验收；P4 在同一 Release dry-run 便携实例上跑通公开↔公开、直连↔直连、公开↔直连三种比较，各两列 HTTP 200，request ID `jev-28` 至 `jev-33` 与 SQLite 路由 trace 对齐。同一实例的既有 Vercel 请求 `jev-34` 返回 HTTP 200，trace 对齐，Dashboard 显示 Laya/Vercel 2/2 可达；按用户指示，本阶段未追加 Laya 请求。便携壳与 daemon 来自同一 dry-run 包，health 为 0.1.0、build revision `f850d3f`，UI 资源哈希一致；既有 AppData 与 34 条历史保留。用户提供的 v0.1.0 Tauri 截图现整理为安全公开图册，并人工确认当时安装版“关窗留托盘、点菜单恢复”通过；这不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。P5 只认这些证据覆盖的范围。正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已通过版本/Rust/UI/Tauri 门禁，发布 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。首次 Release run `36249016862` 暴露 Cargo target 缓存中的旧便携目录与打包器 no-overwrite 保护冲突；修复为按 run/attempt 隔离目录后，`36250114541` 全 job 成功。
 
 **历史检查点（15:59，后续已更新）：**15:55 候选此前已按单一脚本构建、冷启动并完成真实 Laya 请求追踪；用户后来报告窗口已关闭，但进程只读检查显示其实际驻留托盘并占用 11435。由于缺少 Computer Use 原生控制与 Tauri MCP，当时没有强杀或改用其它桌面通道。旧实例退出与 Release dry-run 便携包冷启动现已在 §20:48 完成；六张截图和先前 Hide/Restore 人工证据的范围仍见 §19:48。**
 **来源：**接续 Claude Opus 5 会话 `afa3590a-4356-4af4-a2a7-f46b180dfc20` 后，用户的五项问题反馈、八条批注，以及本轮 `super-questioning` / `popup-ask` 的完整回答。原目标与运行证据见 [目标重评](../OPUS5-GOAL-REASSESSMENT.md)。
@@ -255,7 +255,7 @@ P6 最新截图、文档、提交推送与既定发布验证
 | [路由交互规范](ROUTING-INTERACTION-SPEC-v2.md) | 保留精确接线交互；左侧明确为对外入口，右侧为接入配置内模型端口，中间支持 DAG |
 | [演练场比较计划](PLAYGROUND-COMPARISON-PLAN.md) | 由仅公开入口扩展到两类入口，修订目标类型、执行路径和验收 |
 | [国际化设计](I18N-DESIGN.md) | 保留词典/类型约束，按 D10 更新语言选择与扩展要求；历史测试声明不作完成证明 |
-| [旧完整实施计划](IMPLEMENTATION-PLAN.md) | SSE、Token 分级、统计目标继续接续；旧导航草图与“完成”标记按本轮现状重新验收 |
+| 旧版完整实施计划 | 已由本计划、HTTP 契约与当前实现吸收；旧的三页导航方案不再作为实施依据 |
 | [目标重评与运行证据](../OPUS5-GOAL-REASSESSMENT.md) | 保留历史联调结果，更新两类比较范围与运行清理后的状态 |
 | [便携版冷启动验收](../verification/portable-runtime-acceptance-2026-09-26.md) | 记录 Release dry-run 便携包、本地 Laya 请求、历史持久化及 UI 资源身份 |
 
@@ -634,7 +634,7 @@ Vercel 当前官方文档确认 TypeSafe Gateway URL 由 `https://ai-gateway.ver
 
 - [发版手册](../RELEASE.md) 新增连续验收流程：先完成源码门禁、容器和包内哈希，再执行启动、当前配置迁移、Laya/Vercel 公开及直连请求、活动追踪、四页 WebView/多视口、托盘退出/恢复与最终截图。
 - [README](../../README.md) 的验收摘要现区分上一安装版的真实 Laya/Vercel 证据与尚未安装的最新候选包；删除了已过时的“当前没有 Vercel key / 真实 Vercel 尚未测试”说法，并链接到发布手册。
-- 当前四处产品版本字段（UI、Tauri、Rust workspace、Tauri shell）及 `ui/package-lock.json` 均核对为 `0.1.0`。发版手册示例 `0.6.0` 明确是语法样例；本轮不替用户决定版本，不建 tag、不推送。
+- 当前四处产品版本字段（UI、Tauri、Rust workspace、Tauri shell）及 `ui/package-lock.json` 均核对为 `0.1.0`。发版手册中的 `0.2.0` 仅用于演示下一版命令写法；本轮不替用户决定版本，不建 tag、不推送。
 - 当前工作树文本文件扫描常见 `vck_` / `sk-` 长 token、内联 `api_key` 与管理员密码形态，未发现命中文件。扫描跳过构建缓存/二进制文件，且不检查 `%APPDATA%` 等仓库外用户配置；仅是本次交付前启发式检查，不作为全量凭据证明。
 - 仍未触发安装/UAC；最新包未安装，P5 最终真实安装运行与 P6 最新截图、提交/发布继续未完成。
 
@@ -683,20 +683,7 @@ Vercel 当前官方文档确认 TypeSafe Gateway URL 由 `https://ai-gateway.ver
 - **Docker cloud 实跑：**WSL Ubuntu 的 Docker Server 28.4.0、Compose 2.39.2 可用（修正 11:51“没有 Docker”的 Windows-only 检查结论）。`docker compose config --quiet` 通过；从当前工作树构建 `jev-switch:codex-p5-20260926-1206`，build revision `codex-p5-20260926-1206`。隔离容器只映射 `127.0.0.1:11436`，使用独立临时卷及随机测试 admin/caller 凭据。health、同源首页均 HTTP 200；cloud admin 未登录与 models 无调用 token 均 401；登录后可读取两个提供商并看到 5 个公开模型。新建测试入口后重启容器，入口仍在、调用 token 仍有效、旧管理员 session 正确失效，health 恢复 200。验后删除专属容器及数据卷，确认 11436 无监听；其他容器未触碰。基础包下载在默认 Debian 镜像停滞后，使用此前已验证的 `mirror.nju.edu.cn` 完成构建。
 - **仍未完成：**正式 Tauri WebView 内四页/主题截图、托盘菜单退出和重启恢复、多 DPI/多屏系统级视觉、最新 11:50 shell 运行验收、P6 最终截图与提交/既定发布验证。MSI/NSIS 安装器交互不在便携默认验收门槛内。
 
-## 后续候选：Awesome Jev 投稿与调用记录可视化（2026-09-26 12:46，北京时间）
-
-**状态：**研究结论与后续候选已记录；不改变 P5/P6 当前收尾顺序。本轮没有向其他仓库提交 issue、PR 或资源建议。
-
-### Awesome Jev 投稿评估
-
-- Jev Switch 与清单主题直接相关：它提供 Jev/System One 原生网关入口，把公开模型 ID 路由到配置的 provider/model，并可记录安全路由追踪。最合适的类别初判是 `Client libraries and integrations`，因为该分类明确包含 gateway integrations；最终以清单维护者判断为准。
-- 清单要求资源公开可检查、当下可用或有持久说明、代码有许可证、只放入一个类别，并在条目中说清楚实际功能、离机数据和一个实质限制。初次 PR 只需改 README 单条目，按名称排序；不自行改生成页面。投稿时需披露我们维护该项目。
-- 仓库现为公开 GitHub 项目，采用 MIT OR Apache-2.0 双许可证；但当前公开 README 仍写着“Tauri future”、三页旧控制台和旧版状态，GitHub Releases 页面也尚无公开版本。这和当前工作树的 Tauri、四页 UI、Docker 与便携交付状态不一致。**结论：项目适合列为候选，但应先把最新且已验收的产品说明、启动/下载方式、数据边界及截图发布到公开仓库，再准备投稿。**
-- 未来条目草稿（待发布态和能力重新核对，不直接提交）：
-
-  > [Jev Switch](https://github.com/ARCJ137442/jev-switch) — A Rust, React, and Tauri gateway for Jev/System One requests that maps public model IDs to configurable provider/model routes with inspectable failover traces; request data is forwarded to the selected upstream, and the built-in adapters currently focus on Vercel and Laya.
-
-- 投稿核对清单：公开首页不再描述过时 UI/桌面计划；至少有可复现启动说明及可用发布物或公开演示；MIT/Apache 许可链接有效；说明请求会被转发至配置的上游、历史记录仅保留的字段及密钥保管边界；列明当前内置上游限制；最终只选一个类别并提交一条按字母序排列的 README 项。
+## 后续产品研究：调用记录可视化（2026-09-26 12:46，北京时间）
 
 ### Jeview 可借鉴的交互与边界
 
@@ -716,18 +703,17 @@ Jeview 明确把每次完整请求和响应、以及明文 TypeSafe key 存入�
 
 ### 后续顺序与验收点
 
-1. 先完成本计划已有的 P5/P6 连续验收、当前发布资料和正式截图；不为本候选打断尚未收口的运行态验收。
-2. 下一阶段候选 A：补足活动页的 metadata 筛选/搜索、逐跳 route trace 时间线与窄屏详情布局。验收须覆盖真实成功、failover 和终止失败三种记录；request ID 与 API/SSE/持久历史一致；原始 JSON 仍为次级内容；费用未知不伪造；敏感请求体和 key 不落入历史。
-3. 下一阶段候选 B：同步最新公开 README、公开启动/下载入口、许可证与数据处理说明；确认清单分类和一行文案后，再通过清单要求的单条 README PR 投稿。是否由我们打开 PR，留到实际发布就绪后再做。
+1. 后续调用记录体验应补足 metadata 筛选/搜索、逐跳 route trace 时间线与窄屏详情布局。验收须覆盖真实成功、failover 和终止失败三种记录；request ID 与 API/SSE/持久历史一致；原始 JSON 仍为次级内容；费用未知不伪造；敏感请求体和 key 不落入历史。
+2. 路由图动效与平台扩展方向见根目录 [ROADMAP.md](../../ROADMAP.md)，所有状态必须来自真实事件，不能由配置 DAG 推测执行过程。
 
-**核对来源：**[Awesome Jev README 与贡献规范](https://github.com/AbdelStark/awesome-typesafe-jev#contributing)、[贡献指南](https://github.com/AbdelStark/awesome-typesafe-jev/blob/main/CONTRIBUTING.md)、[Jev Switch 当前公开仓库](https://github.com/ARCJ137442/jev-switch)、[Jev Switch Releases](https://github.com/ARCJ137442/jev-switch/releases)、[Jeview README](https://github.com/andududu/jeview#readme)、[Jeview UI 结构](https://github.com/andududu/jeview/blob/main/ui/index.html)、[Jeview 活动列表、详情与图形逻辑](https://github.com/andududu/jeview/blob/main/ui/app.js)。
+**核对来源：**[Jeview README](https://github.com/andududu/jeview#readme)、[Jeview UI 结构](https://github.com/andududu/jeview/blob/main/ui/index.html)、[Jeview 活动列表、详情与图形逻辑](https://github.com/andududu/jeview/blob/main/ui/app.js)。
 
 ## 13:00 状态复核（2026-09-26，北京时间）
 
 - 用户启动的 Tauri 壳仍是 `E:\tmp\jev-switch-wix-verified-20260926-114045-417\jev-switch.exe`，PID 38364；当前 `127.0.0.1:11435` 由 PID 85628 监听，`/health` 返回 `status=ok`、`product=jev-switch`、`api_revision=1`。本次只读核对，没有向进程发信号、停止或重启。
 - 11:50 候选 shell 与正在运行的 11:40 shell 哈希不同。单实例插件会将候选启动转给旧实例，所以在不关停当前窗口的条件下，尚不能宣称已运行验收 11:50 shell。
 - 原生首窗及三屏/多 DPI 几何测试已有通过记录；托盘菜单的实际显示/恢复/退出以及 WebView 四页、主题和尺寸的正式截图仍未取得。本地 CUA 没有原生应用面，当前可用浏览器对 11435 的页面观察仅作 Web UI 证据。
-- Awesome Jev 与 Jeview 的研究已作为后续候选记录：先更新并公开经过最终验收的 README、启动/下载方式、隐私边界与截图，再按清单规则准备单条投稿；活动记录优先借鉴摘要先读、结构化详情、逐跳真实路由 trace 与搜索，不照搬保存完整请求/响应或明文 key 的做法。此候选不改变当前 P5/P6 顺序。
+- Jeview 的可视化研究已记录为后续产品参考；活动记录优先借鉴摘要先读、结构化详情、逐跳真实路由 trace 与搜索，不照搬保存完整请求/响应或明文 key 的做法。
 
 ## 13:12 便携壳二进制等价性核验（2026-09-26，北京时间）
 
@@ -850,3 +836,18 @@ Jeview 明确把每次完整请求和响应、以及明文 TypeSafe key 存入�
 
 - 通过同一 Release dry-run 便携实例的公开入口 `jev-vercel` 发出一条调用，HTTP 200，`typesafe-ai/jev`，1 次上游调用，420 input / 45 output tokens，费用 0.000018 USD。Playground 展示 `jev-34`，Dashboard 最新活动同步置顶，SQLite 行 34 的 request ID、状态、模型、usage 与 route trace 对应一致。
 - 刷新 Dashboard 的 provider 探测状态后显示 Laya 与 Vercel 2/2 可达。Vercel key 未被读取或显示；没有重试调用。完整脱敏字段见 [便携运行验收记录](../verification/portable-runtime-acceptance-2026-09-26.md#2148-同一-release-包-vercel-入口补测)。
+
+## 2026-09-27 发布资料状态与适配范围更新
+
+- 当前正式发布为 `v0.1.0`；其 MSI、NSIS、便携 ZIP 与 Docker 镜像都来自正式 tag workflow。本计划区分该发行包与任何后续源码改动；未另行发布的能力不作为 `v0.1.0` 功能对外宣传。
+- [ROADMAP.md](../../ROADMAP.md) 将 TypeSafe 官方 API 与 OpenRouter 原生适配器列为最高优先级，因为它决定软件可连接的服务范围；目前内置适配器仍只有 Vercel 与 Laya。
+- GitHub About 仓库简介已更新为“英文一句话 | 中文一句话介绍”双语格式；发版维护要求已写入 `CLAUDE.md`、`AGENTS.md` 与 [发版手册](../RELEASE.md)。
+- 作者与 AI 披露：GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理；本更新描述源码/测试范围，不代替 Tauri 原生视觉验收。
+
+## 2026-09-27 当前阶段收口状态（发布资料与投稿）
+
+- **P6 发布已完成：**正式 [`v0.1.0 Release`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已发布 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像；release workflow 的正式 tag run 通过。旧的 P6 “准备发布/尚未发布”文字是时间线记录，不再是当前状态。
+- **P5 证据按范围保留：**Release dry-run 同批便携壳完成冷启动、真实 Laya/Vercel 请求和持久 route trace；用户给出的六张截图已筛选整理为公开图册，用户人工确认当时安装版关窗驻留托盘、点菜单恢复窗口通过。它们没有证明截图实例或用户安装版与 Release 包的精确哈希对应，也没有覆盖托盘 Exit、退出后配置/历史恢复、浅色主题及现场系统 DPI，因此这些桌面边界仍保持未验收，不反推 `v0.1.0` 发布失效。
+- **版本边界：**2026-09-27 工作树新增的活动历史搜索、筛选、分页与逐跳 trace 展示属于发布后的源码，不在 `v0.1.0` 安装包、便携 ZIP 或 Docker 镜像中。相应测试与契约只说明当前源码状态；未发布前不得把它们写成 `v0.1.0` 已有能力。
+- **当前工作目标：**整理 README、Agent 入口、发版资料、主计划、用户旅程和路线图；向 `awesome-typesafe-jev` 与 `awesome-jev` 提交单条 README 投稿，并在 Git 忽略目录维护私有投稿正文和跟踪清单。该阶段不重新调用 Laya、不继续扩大网关功能，也不在清单实际收录前添加徽章。
+- 作者与 AI 披露：GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。

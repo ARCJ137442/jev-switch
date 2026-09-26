@@ -1,71 +1,51 @@
-# Jev-Switch — 项目规则（给后续开发 Agent）
+# Jev-Switch — 项目规则
 
-**一句话**：本地 Jev 协议多上游路由器 —— Jev 原生入口 × 多上游切换 × 桥接（Rust axum 后端 + React 控制台，目标形态含 Tauri）。
+## 产品边界
 
-**定位**：轻量级、本地云端双兼容、快速配置与高度可集成的 Jev 路由器，侧重性能与用户友好（界面和配置流畅度），应对大型中转站臃肿的生态位。
+Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳和 Docker 部署。基本数据流是：
 
-## 命令速查
+```text
+调用者（网关地址 + 可选调用 Token + 对外模型/入口 ID）
+  → 服务入口与路由策略
+  → 可编辑调用路由 DAG
+  → 提供商接入配置（地址 + 上游 key + 模型）
+  → 上游适配器（当前内置 Vercel、Laya）
+```
 
-| 事 | 命令 |
+- `local` 描述网关运行位置与默认监听方式，不代表离线；它仍可调用远程上游。云机器上的 `127.0.0.1` 指云机器自身。
+- 对外服务入口与上游提供商配置是两种不同对象；不要混淆网关调用 Token 和供应商 API key。
+- 仅提供 Jev 原生 `/v1/systemone` 接口；不实现 OpenAI/Anthropic 聊天格式兼容入口。
+- 当前内置上游适配器为 Vercel 与 Laya；TypeSafe 官方 API 和 OpenRouter 尚未实现，属于 [最高优先级路线图事项](ROADMAP.md)。不要将计划写成当前功能。
+- 上游 key 只由 daemon 持有；不得输出、写入公开文档、日志、测试产物或提交。管理 API 仅返回掩码状态。
+
+## 开发与交付
+
+- 开始跨层功能前先看 [当前实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[HTTP 契约](docs/contracts/05-HTTP契约.md)和[入口网关修订](docs/contracts/07-入口网关修订.md)，再按涉及范围读其他契约。
+- [ROADMAP.md](ROADMAP.md) 记录未排期的未来方向，不代表当前发布包含或承诺了这些能力。
+- Rust workspace 位于 `rs/`，React UI 位于 `ui/`，Tauri 桌面壳位于 `src-tauri/`。`ts-rs` 的 UI 类型来自 Rust 导出。
+- 保持改动局部化；验证与改动职责相称。不要用历史测试计数或旧版运行报告替代当前工作树的结果。
+- GitHub 仓库 About 简介保持“英文一句话 | 中文一句话介绍”的双语格式；每次发版或调整产品定位时核对其内容与 README/当前能力一致。当前简介由仓库维护者在 GitHub 设置中维护，不是代码版本字段。
+- commit、push、对外发布需用户明确授权；未经授权不得操作远端项目状态。
+
+## 常用命令
+
+| 任务 | 命令 |
 |---|---|
-| 后端测试 | `cargo test --manifest-path rs/Cargo.toml --workspace` → 81 passed |
-| 启动后端 | `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"; cargo run --manifest-path rs/Cargo.toml` → 监听 `127.0.0.1:11435` |
-| 前端开发服务 | `npm run dev --prefix ui` → http://127.0.0.1:5173 |
-| 前端检查 / 构建 | `npm run lint --prefix ui` / `npm run build --prefix ui` |
+| 后端测试 | `cargo test --manifest-path rs/Cargo.toml --workspace --locked --offline` |
+| Rust 生成类型门禁 | `cargo test --manifest-path rs/Cargo.toml --workspace --features ts-rs --locked --offline` |
+| UI 测试/类型检查/构建 | `npm test --prefix ui` · `npm run lint --prefix ui` · `npm run build --prefix ui` |
+| UI 开发服务 | `npm run dev --prefix ui`（默认 `http://127.0.0.1:5173`） |
+| Tauri 测试 | 先 `npm run build --prefix ui`，再 `cargo test --manifest-path src-tauri/Cargo.toml --locked` |
+| 本地 daemon | 设置 `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"` 后运行 `cargo run --manifest-path rs/Cargo.toml` |
 | 健康检查 | `curl http://127.0.0.1:11435/health` |
-| SSE 实时流 | `curl -N http://127.0.0.1:11435/v1/admin/events` |
-| Laya 本地上游 | `E:\venvs\laya\Scripts\python.exe E:\tmp\jev_laya_server.py --port 18765` |
 
-## CI/CD 策略
+版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前正式 GitHub Release 为 v0.1.0；新版本号须先经用户确认，并同步发布元数据。
 
-| 触发时机 | 动作 | 产物 |
-|---------|------|------|
-| 每次 push | 自动测试（cargo test --workspace + npm run lint + npm run build） | CI 通过/失败状态 |
-| 打 tag（如 `v0.6.0`） | 自动构建并发版 | Windows Tauri APP (.msi) + Docker 镜像 |
+## 文档入口
 
-**发版流程**: `git tag v0.6.0` → `git push origin v0.6.0` → GitHub Actions 自动构建 → Release 页出现 msi 和 docker 镜像
-
-**workflows 位置**: `.github/workflows/ci.yml` + `.github/workflows/release.yml` ✅ 已配置
-
-## 权限模型速查
-
-| 路径 | 认证方式 | 权限 |
-|------|----------|------|
-| `/v1/systemone` | 可选 Bearer token | 只读（调用 Jev API） |
-| `/v1/admin/*` | admin 密码 或 读写 token | 全权限（配置管理） |
-| `/v1/admin/events` (SSE) | admin 密码 或 任意 token | 实时流（Dashboard 用） |
-| `/v1/admin/stats/by-token` | admin 密码 | 查看所有 token 统计 |
-| `/v1/stats/my` | Bearer token | 只看自己的统计 |
-
-**双角色 Dashboard**:
-- 管理员模式：输入 admin 密码 → 全量数据 + Token 管理页
-- 用户模式：输入 API token → 只看自己的数据，部分管理功能不呈现
-
-## 硬红线（违者打回）
-
-1. 未读完 `docs/contracts/` 六份契约 → 不改 `rs/` / `ui/`
-2. **P0（`docs/07-REVIEW` §7）未完成前不加第 5 个上游**
-3. `git push` / 提交推送必须用户下令；密钥真实值不进上下文 / 日志 / UI 明文 / 提交信息
-4. 只写本仓库；不碰 `~/Rime/`、`jev-life/`、`jev-rime/`
-5. **`/openai-compat` 不做**（用户裁决 2026-09-23；01 §四.3 与 09 §二.1 同）——不实现 OpenAI/Anthropic 格式入口
-
-## 深入文档指针表
-
-| 要知道什么 | 去哪 |
-|---|---|
-| 对齐定稿 Q1–Q6、施工顺序 | `docs/08-CONTRACT`（冲突以此为准） |
-| P0/P1/P2 意见清单 + 验收 | `docs/07-REVIEW` §7 |
-| 协议 / 扩展 / 路由 / 密钥 / HTTP / 前端细则 | `docs/contracts/00-INDEX` → 01–06 |
-| UI 重构设计稿（三页架构） | `docs/design/UI-REDESIGN-v2.md` |
-| 路由可视化交互规范（磁吸、拖拽、端口、撤销） | `docs/design/ROUTING-INTERACTION-SPEC-v2.md` |
-| 国际化设计（词条结构、扩展方案） | `docs/design/I18N-DESIGN.md` + `docs/I18N-GUIDE.md` |
-| 发版（三处版本号门禁、流水线结构、排查表） | `docs/RELEASE.md` |
-| 完整实施计划（后端 SSE + 权限系统 + 用户叙事） | `docs/design/IMPLEMENTATION-PLAN.md` |
-| 端到端验证报告（v0.5.1） | `docs/E2E-VERIFICATION-REPORT.md` |
-| 索引 / 快照 / 叙事匹配 | `docs/README`、`docs/PROGRESS`、`docs/09` |
-
-## 踩坑警示
-
-- UI 曾因 `/v1/models` 形状漂移整体崩溃（`37b4242` 止血）——形状以 `contracts/05` 为准，TS 类型最终从 Rust 生成
-- Vercel 概率曾被硬编码 0.95/0.05（已修 `6af3a47`）——动 `translate.rs` 必跑 `cargo test`
-- 历史文档 01–06 中的端口 8765、旧 M1+ 排序等已过时——一律以 07 / 08 / contracts 为准
+- 产品决策、当前施工状态与验收边界：[docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)
+- 未来迭代方向：[ROADMAP.md](ROADMAP.md)
+- 文档导航与历史资料说明：[docs/README.md](docs/README.md)
+- 契约目录：[docs/contracts/00-INDEX.md](docs/contracts/00-INDEX.md)
+- 发布流程：[docs/RELEASE.md](docs/RELEASE.md)
+- 原目标恢复与评估：[docs/OPUS5-GOAL-REASSESSMENT.md](docs/OPUS5-GOAL-REASSESSMENT.md)
