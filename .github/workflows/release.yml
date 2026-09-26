@@ -139,6 +139,10 @@ jobs:
             "src-tauri/binaries/jev-switch-daemon-${{ env.SIDECAR_TRIPLE }}.exe" -Force
           Get-ChildItem src-tauri/binaries
 
+      # cargo test 编译 Tauri build script，它要求 ui/dist 已存在；fresh runner 不会继承 gate job 的产物。
+      - name: 构建桌面测试所需 UI 资源
+        run: npm run build --prefix ui
+
       - name: 桌面内核身份与产物解析回归
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
 
