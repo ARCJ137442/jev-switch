@@ -1,5 +1,7 @@
 # Jev-Switch 新版计划书
 
+> **历史方案说明（2026-09-27）：**本文记录 2026-09-22 的扩展愿景与阶段假设，其中上游类别、桥接范围和 M1–M7 顺序均不能当作当前承诺。现行决策与实施状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准，未来候选见[路线图](../ROADMAP.md)。历史定位由 GPT-6 Luna xhigh（OpenAI Codex）补充。
+
 **版本**：v2（基于 DeepSeek 原始计划书 v1 + 本仓库 jev-decision-lab 实测数据 + jev-life broker 调研）
 **撰写日期**：2026-09-22
 **前置文档**：[`01-Jev-Switch-原始计划书-DeepSeek.md`](./01-Jev-Switch-原始计划书-DeepSeek.md)
@@ -414,7 +416,7 @@ proptest = "1"              # broker 模糊测试
 
 ## 九、当前状态（2026-09-22）
 
-- **仓库**：`H:\A137442\Develop\AI\Jev\jev-decision-lab`（GitHub: `ARCJ137442/jev-decision-lab`，已 7 commits）
+- **实验仓库**：作者本机的 `jev-decision-lab`；对应 GitHub 项目当前为私有仓库，不随本仓库公开，本文不再列本机绝对路径。
 - **已交付**：
   - `ts/decision-bricks.ts`：4 Runtime（local-qwen / openrouter / vercel / laya）原型
   - `life-series-benchmark/`：5 provider × 14 标签 benchmark 脚本 + HTML 报告

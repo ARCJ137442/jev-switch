@@ -1,5 +1,7 @@
 # Jev-Switch 全方位评审 — v0.1.0-mvp
 
+> **历史评审说明（2026-09-27）：**本文是针对旧 `v0.1.0-mvp` tag 的评审意见，不是当前正式 `v0.1.0` Release 的验收或当前待办清单。现行实现边界与证据以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[README](../README.md)为准。历史定位由 GPT-6 Luna xhigh（OpenAI Codex）补充。
+
 **作者（Author）：Mimo-V2.6-Pro**
 
 > **作者**：Mimo-V2.6-Pro  
@@ -574,7 +576,7 @@ registry.register(Box::new(NotionJevAdapter::from_config(cfg)?));
 | 无根 README / LICENSE 文件 | `Cargo.toml` 写了 `MIT OR Apache-2.0` 但仓库无 LICENSE，GitHub license=null |
 | `docs/README.md` 过时 | 仍说「规划与文档仓库」「03-05 待写」 |
 | 无 `examples/`、无 `tests/` 目录、无 CI | 不可验证「别人怎么用」 |
-| PROGRESS 里的 Windows 路径 | `H:\A137442\...`、`E:\venvs\...` 与本机 Termux 路径不一致；复现步骤要双路径 |
+| PROGRESS 里的 Windows 路径 | 仓库绝对路径与虚拟环境路径依赖作者本机；复现步骤应改为相对仓库根目录或明确环境变量 |
 
 ---
 

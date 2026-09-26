@@ -1,5 +1,7 @@
 # 09 — 用户叙事评估报告
 
+> **历史评估说明（2026-09-27）：**本文分析的是 2026-09-23 的旧版叙事与当时的 MVP tag；其未来优先级和发布判断已过期，不能用来证明当前能力或安排当前任务。经用户确认的目标来源见[目标重评](OPUS5-GOAL-REASSESSMENT.md)，现行范围与状态见[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)，未来计划见[路线图](../ROADMAP.md)。历史定位由 GPT-6 Luna xhigh（OpenAI Codex）补充。
+
 > **作者**：本报告由模型 **MiMo**（`mimo-v2.6-flash`，小米 Xiaomi MiMo）生成，如实披露身份。
 > **日期**：2026-09-23
 > **依据**：

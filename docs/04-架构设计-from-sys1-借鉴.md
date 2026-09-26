@@ -1,7 +1,9 @@
 # Jev-Switch 架构设计 — 借鉴 sys1 与本仓库实测
 
+> **历史架构草案说明（2026-09-27）：**本文把早期 Rust/React/Tauri 设想具体化为代码结构，不是当前架构的权威描述。当前模块职责与已实现边界以仓库 [README](../README.md) 和[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；本文仅用于追溯设计来源。历史定位由 GPT-6 Luna xhigh（OpenAI Codex）补充。
+
 **版本**：v1（2026-09-23）  
-**前置文档**：[02- v2.1](./02-Jev-Switch-新版计划书.md)（5 类上游 + 桥接 + M1-M7）、[03-](./03-上游类别与协议兼容矩阵.md)（capability + 翻译层）、[`../jev-decision-lab/ts/decision-bricks.ts`](../jev-decision-lab/ts/decision-bricks.ts)、[`../jev-decision-lab/runs/integrated-benchmark-data.json`](../jev-decision-lab/runs/integrated-benchmark-data.json)（trace JSON 兼容目标）
+**前置文档**：[02- v2.1](./02-Jev-Switch-新版计划书.md)（5 类上游 + 桥接 + M1-M7）、[03-](./03-上游类别与协议兼容矩阵.md)（capability + 翻译层）、本地实验参考 `jev-decision-lab/ts/decision-bricks.ts` 与 `jev-decision-lab/runs/integrated-benchmark-data.json`（该工作区项目为私有仓库，不随本文公开）
 
 **目标**：把 02- 规划与 03- capability 矩阵落地为 Rust 后端 + React 前端 + 未来 Tauri 的具体代码与目录结构。
 
@@ -593,4 +595,4 @@ tauri-app/
 - **TypeSafe API**：[docs.typesafe.ai/api](https://docs.typesafe.ai/api)
 - **02- v2.1 §4.2**：`./02-Jev-Switch-新版计划书.md` — Rust 模块树原始版
 - **03- §2.4**：`./03-上游类别与协议兼容矩阵.md` — Vercel 翻译层字段级
-- **同级 trace JSON**：`../jev-decision-lab/runs/integrated-benchmark-data.json`
+- **本地 trace JSON**：`jev-decision-lab/runs/integrated-benchmark-data.json`（位于私有 companion 项目，不随本仓库公开）

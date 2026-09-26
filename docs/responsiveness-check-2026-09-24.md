@@ -1,5 +1,7 @@
 # 窗口与响应式布局验收（2026-09-24）
 
+> **历史验收记录（2026-09-27）：**本文保留截至 2026-09-25 的浏览器视口、窗口几何与多屏测试证据；“最新”仅指当时记录的增量，不代表当前整版 Release 或所有 DPI/显示器场景均已验收。当前状态与证据范围以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准。
+
 ## 要求与取舍
 
 用户反馈 Tauri 首次窗口过大，并要求网关 UI 适配不同像素大小与长宽比，参考 CC Switch。该要求已纳入 [主计划 §3.2](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md#32-后续补充窗口与响应式布局)。最新首窗尺寸证据见文末 2026-09-25 12:28，三屏几何证据见 05:05；早期“仅实测 100%”的记录已被后续增量补充。
@@ -43,7 +45,7 @@
 结论：窗口在工作区内居中，未超出工作区
 ```
 
-执行命令：`cargo test --manifest-path src-tauri/Cargo.toml --locked native_initial_window_stays_inside_current_work_area -- --ignored --nocapture`。测试的 WebView 数据目录隔离在 `E:/tmp/jev-window-layout-native`。
+执行命令：`cargo test --manifest-path src-tauri/Cargo.toml --locked native_initial_window_stays_inside_current_work_area -- --ignored --nocapture`。测试的 WebView 数据目录隔离在 `本机临时目录/jev-window-layout-native`。
 
 ### 浏览器页面
 
@@ -83,13 +85,13 @@ Codex 内置浏览器访问已确认来源的 `http://127.0.0.1:11435` 静态 UI
 
 最新版 UI 检查点为 `index-B48eZbwp.js` / `index-DIHmDJnI.css`。Token 面板补测中英文 390×844 无横向越界；760×480 时主区域保持滚动，键盘可以到达创建按钮（y=250–286），未提交测试名称。选择既有 Token 可读取真实统计，结束后已清空测试输入并恢复中文与默认视口。
 
-未登录仪表盘不再把 401 当作零配置，改为明确提示与未知数量；管理员登录后恢复真实概览。当前 MSI 解包目录已更新为 `E:/tmp/jev-package-acceptance-20260925-dashboard/PFiles/jev-switch`，资源与最新 UI 哈希一致。窗口尺寸和系统 DPI 的验收边界仍按上节保留，不因重新打包而自动视作完整桌面验收。
+未登录仪表盘不再把 401 当作零配置，改为明确提示与未知数量；管理员登录后恢复真实概览。当前 MSI 解包目录已更新为 `本机临时目录/jev-package-acceptance-20260925-dashboard/PFiles/jev-switch`，资源与最新 UI 哈希一致。窗口尺寸和系统 DPI 的验收边界仍按上节保留，不因重新打包而自动视作完整桌面验收。
 
 ### 2026-09-25 03:20 产物更新
 
-监听热切修复后的包已再次核对，最新解包目录为 `E:/tmp/jev-package-acceptance-20260925-rebind/PFiles/jev-switch`。UI 仍为上述 B48eZbwp / DIHmDJnI，Windows daemon 更新为 `339DDB1D…`，没有借重新打包扩大布局或 DPI 的验证结论。Tauri 主程序与 release 输入仅相差格式标记 `UNK→MSI` 三字节，代码段一致。完整包哈希与运行来源见 [联调记录末节](verification/2026-09-24-entry-gateway-integration.md)。
+监听热切修复后的包已再次核对，最新解包目录为 `本机临时目录/jev-package-acceptance-20260925-rebind/PFiles/jev-switch`。UI 仍为上述 B48eZbwp / DIHmDJnI，Windows daemon 更新为 `339DDB1D…`，没有借重新打包扩大布局或 DPI 的验证结论。Tauri 主程序与 release 输入仅相差格式标记 `UNK→MSI` 三字节，代码段一致。完整包哈希与运行来源见 [联调记录末节](verification/2026-09-24-entry-gateway-integration.md)。
 
-03:25 的追加日志修正将最终 Windows daemon 更新为 `3C8C2D71…`，UI 与壳代码未变。最终包文件现位于 `E:/tmp/jev-package-acceptance-20260925-token-log/PFiles/jev-switch`，由 WiX 从 MSI 提取并按 File 表还原、逐字节核对；原生 administrative extraction 因 C 盘空间为零失败，不能把文件提取当成安装器验收。响应式与真实 DPI 的证据边界仍保持上述范围。
+03:25 的追加日志修正将最终 Windows daemon 更新为 `3C8C2D71…`，UI 与壳代码未变。最终包文件现位于 `本机临时目录/jev-package-acceptance-20260925-token-log/PFiles/jev-switch`，由 WiX 从 MSI 提取并按 File 表还原、逐字节核对；原生 administrative extraction 因 C 盘空间为零失败，不能把文件提取当成安装器验收。响应式与真实 DPI 的证据边界仍保持上述范围。
 
 ### 2026-09-25 04:15：路由表格双语与窄屏
 
@@ -97,11 +99,11 @@ Codex 内置浏览器访问已确认来源的 `http://127.0.0.1:11435` 静态 UI
 
 390×844 英文视口下文档宽 390px、表格滚动容器宽 348px、表格约 530px：较长标签使用表格自身横向滚动，页面不溢出。测试未修改路由；已恢复中文、默认视口并关闭临时标签。这是前端布局/词条检查，不是新 Windows 内核运行证明。
 
-本次 MSI/NSIS 与 Docker 内 UI 资源哈希一致，CSS 仍为 `DIHmDJnI`。C 盘已有约 528MB 空闲，原生 MSI 文件提取成功，最新目录 `E:/tmp/jev-package-acceptance-20260925-history/PFiles/jev-switch`；此前空间失败是历史记录。完整 Tauri 的运行切换仍因待答的明确重试授权未进行，真实多显示器/运行中系统缩放测试仍未覆盖；默认 1000×650、工作区 90% 限制及既有几何测试结论不变。
+本次 MSI/NSIS 与 Docker 内 UI 资源哈希一致，CSS 仍为 `DIHmDJnI`。C 盘已有约 528MB 空闲，原生 MSI 文件提取成功，最新目录 `本机临时目录/jev-package-acceptance-20260925-history/PFiles/jev-switch`；此前空间失败是历史记录。完整 Tauri 的运行切换仍因待答的明确重试授权未进行，真实多显示器/运行中系统缩放测试仍未覆盖；默认 1000×650、工作区 90% 限制及既有几何测试结论不变。
 
 ### 2026-09-25 04:42：最新安装包与边界核对
 
-Unix 停机修复后的 Windows 内核为 `F8534846…`，最新 MSI 文件提取目录为 `E:/tmp/jev-package-acceptance-20260925-signal/PFiles/jev-switch`；原生提取退出 0，资源逐字节核对通过。前端仍为 ZCEhu_bP / DIHmDJnI，Tauri 窗口代码未变，既有响应式证据继续适用，未扩充实际 DPI 验收范围。完整 SHA 与 Docker 正常停机证据见[联调检查点](verification/2026-09-24-entry-gateway-integration.md#容器正常停机与交付门禁2026-09-25-0442)。
+Unix 停机修复后的 Windows 内核为 `F8534846…`，最新 MSI 文件提取目录为 `本机临时目录/jev-package-acceptance-20260925-signal/PFiles/jev-switch`；原生提取退出 0，资源逐字节核对通过。前端仍为 ZCEhu_bP / DIHmDJnI，Tauri 窗口代码未变，既有响应式证据继续适用，未扩充实际 DPI 验收范围。完整 SHA 与 Docker 正常停机证据见[联调检查点](verification/2026-09-24-entry-gateway-integration.md#容器正常停机与交付门禁2026-09-25-0442)。
 
 只读复核确认用户提出的首开大小、像素大小与长宽比适配、借鉴 CC Switch 三项均已对应总计划 §3.2。补记一个尚未实测的异常边界：无法取得显示器信息，或尺寸设置失败时，壳继续显示窗口，可能保留配置中的 1000×650 默认尺寸；不能声称此时也必然满足工作区 90% 上限。
 
@@ -118,11 +120,11 @@ Unix 停机修复后的 Windows 内核为 `F8534846…`，最新 MSI 文件提�
 三屏全部满足：外框完整落在对应工作区、90% 尺寸预算（最多 2 个物理像素的舍入容差）、默认逻辑尺寸上限（最多 1 个逻辑像素的舍入容差）、居中及负坐标保留。较小逻辑工作区会收小对应维度：上方屏压低高度，左侧竖屏收窄宽度。
 
 ```powershell
-$env:JEV_WINDOW_TEST_DATA_DIR = 'E:\tmp\jev-window-multimonitor-20260925'
+$env:JEV_WINDOW_TEST_DATA_DIR = '本机临时目录\jev-window-multimonitor-20260925'
 cargo test --manifest-path src-tauri/Cargo.toml --locked native_initial_window_fits_each_attached_monitor -- --ignored --nocapture
 ```
 
-实际 **1/1 通过，1.36 秒**；常规壳回归 **5 passed / 2 ignored**。两个原生测试默认忽略，分别按函数名执行，不能把常规测试中的 ignored 当作通过。日志为 `E:/tmp/jev-window-multimonitor-20260925/native-multimonitor-test.log`，profile 位于同目录 `webview-profile`。测试进程已退出，没有启动 daemon、托盘、单实例插件或改变系统显示设置。
+实际 **1/1 通过，1.36 秒**；常规壳回归 **5 passed / 2 ignored**。两个原生测试默认忽略，分别按函数名执行，不能把常规测试中的 ignored 当作通过。日志为 `本机临时目录/jev-window-multimonitor-20260925/native-multimonitor-test.log`，profile 位于同目录 `webview-profile`。测试进程已退出，没有启动 daemon、托盘、单实例插件或改变系统显示设置。
 
 本次只新增测试，生产尺寸函数、UI 与安装包输入未变，因此未重复打包。这里验证的是每块真实屏上的首窗算法与 DPI 换算，仍不等同于完整 Tauri 冷启动、安装器、用户交互拖动或运行中修改系统缩放的整体验收。
 
@@ -149,7 +151,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked native_initial_window_f
 | 1600×900 | Playground 同时显示公开入口和直连 Laya 两个已完成结果 | 两张结果卡各约 763 px，并排使用可用内容宽度 |
 | 1280×720 | 延续 2026-09-25 的包内 UI 检查 | 输入与目标区使用主内容宽度；此项不是本次新截图 |
 
-本轮使用浏览器视口尺寸检查，没有把 viewport 模拟当作 Windows DPI 测试。浏览器标签、视口覆盖和 `127.0.0.1:5173` 服务均已关闭/重置；测试副本 `E:\tmp\jev-switch-ui-review-20260925` 仍保留，不含凭据，仅有包内静态资源与 localhost API base 覆盖。原生 Tauri 四页画面、安装版首开尺寸、多屏/DPI、托盘及退出重启仍需单独完成；最新版截图按先前决定待这些工作结束后再统一生成。
+本轮使用浏览器视口尺寸检查，没有把 viewport 模拟当作 Windows DPI 测试。浏览器标签、视口覆盖和 `127.0.0.1:5173` 服务均已关闭/重置；测试副本 `本机临时目录\jev-switch-ui-review-20260925` 仍保留，不含凭据，仅有包内静态资源与 localhost API base 覆盖。原生 Tauri 四页画面、安装版首开尺寸、多屏/DPI、托盘及退出重启仍需单独完成；最新版截图按先前决定待这些工作结束后再统一生成。
 
 ### 2026-09-26 03:20：当前工作树视口复测
 

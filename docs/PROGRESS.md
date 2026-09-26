@@ -4,7 +4,7 @@
 > ① 默认端口 `8765` → **`11435`**（叙事基址期望，见 09）；
 > ② P0 三修已合入 `6af3a47`（capability 422 接线 / probability 假值 / `/v1/models` 过滤不可路由项；cargo test 28/28）；
 > ③ Phase 0 六份契约 + 前端设计稿齐备（`08-CONTRACT` · `contracts/` · `design/01`）；
-> ④ **§十「下一步 M1+」排序已被 `07-REVIEW §7` 与 `08-CONTRACT §4` 施工计划取代**（先拆 lib / DAG 路由，后加上游）。现行状态以 `README.md` 与 08 为准。
+> ④ **§十「下一步 M1+」排序已被当时的 `07-REVIEW §7` 与 `08-CONTRACT §4` 施工计划取代**（先拆 lib / DAG 路由，后加上游）。本快照只记录当时决策；当前发布范围以 `README.md` 为准，现行实施与阶段状态以 `docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md` 为准，08 仅作历史参考。
 
 > **封存时间**：2026-09-23
 > **Git tag**：`v0.1.0-mvp`
@@ -47,7 +47,7 @@ OPTIONS *            → CORS 预检（Access-Control-Allow-Origin: *）
 - Edge headless + CDP 验证：`Runtime.exceptionThrown` 0 次
 - React root 渲染：`root.children=1, innerHTML.length=12884`
 - 实际请求：UI 调 `/v1/models` 拿到 2 models，UI 调 `/v1/systemone {model:"laya-english"}` 拿到 Laya 真实推理响应
-- 截图：`H:\A137442\Develop\AI\Jev\Jev-Switch\..\..\jev-final.png`（或 `C:\Users\56506\jev-final.png`）
+- 截图：历史本机截图 `jev-final.png`（当时未随仓库提交）
 
 ---
 
@@ -71,7 +71,7 @@ b2a9387 docs(05): 从 jev-life 超越的 5 个设计点
 ## 四、仓库结构
 
 ```
-H:\A137442\Develop\AI\Jev\Jev-Switch\        ← GitHub: ARCJ137442/jev-switch (private)
+Jev-Switch 仓库根目录    ← GitHub: ARCJ137442/jev-switch（当时为 private）
 ├── docs/                       规划与文档（2141 行）
 │   ├── 01-Jev-Switch-原始计划书-DeepSeek.md   baseline
 │   ├── 02-Jev-Switch-新版计划书.md           v2.1
@@ -140,16 +140,16 @@ H:\A137442\Develop\AI\Jev\Jev-Switch\        ← GitHub: ARCJ137442/jev-switch (
 
 ```bash
 # 1. 启动 Laya 本地后端
-E:\venvs\laya\Scripts\python.exe E:\tmp\jev_laya_server.py --port 18765 &
+<laya-venv>\Scripts\python.exe 本机临时目录\jev_laya_server.py --port 18765 &
 
 # 2. 启动 jev-switch
-cd H:\A137442\Develop\AI\Jev\Jev-Switch\rs
+cd <repository-root>\rs
 export AI_GATEWAY_API_KEY="<your-vercel-key>"
 export JEV_SWITCH_CONFIG="$PWD/providers.example.toml"
 cargo run
 
 # 3. 启动 React UI
-cd H:\A137442\Develop\AI\Jev\Jev-Switch\ui
+cd <repository-root>\ui
 npm run dev   # http://127.0.0.1:5173
 
 # 4. 浏览器打开 http://127.0.0.1:5173

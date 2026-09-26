@@ -1,5 +1,7 @@
 # 从 jev-life 超越的设计点
 
+> **历史设计说明（2026-09-27）：**本文讨论的是早期差异化愿景和开放问题，不证明所列能力当前存在或已获排期。当前发布范围见 [README](../README.md)，经过筛选的未来方向见[路线图](../ROADMAP.md)。历史定位由 GPT-6 Luna xhigh（OpenAI Codex）补充。
+
 > **目的**：jev-life（`ARCJ137442/jev-life`，已 1.0.0 上线）是一个**成熟且公开**的
 > TypeScript 实现 —— 它的 broker、capability 矩阵、决策结果结构已被生产环境验证。
 > 本文**承认先**（第一节列出 jev-life 做得好的地方），再**指明** Jev-Switch 必须
@@ -12,7 +14,7 @@
 
 ## 一、jev-life 设计的优点（承认先）
 
-读 `C:\Users\56506\AppData\Local\Temp\jev-life\src\shared\backend.ts`、
+读 `%LOCALAPPDATA%\Temp\jev-life\src\shared\backend.ts`、
 `llm-broker.ts`、`types.ts`，以及 `CLAUDE.md` 与 `DESIGN.md` 引用的注释密度，
 可以提炼出 8 条**值得直接借鉴**的设计：
 
@@ -580,7 +582,7 @@ Metrics 三页）。配置文件位置约定（与 LM Studio / CC Switch 一致�
 
 ## 七、参考链接
 
-- jev-life broker：`C:\Users\56506\AppData\Local\Temp\jev-life\src\shared\backend.ts`
+- jev-life broker：`%LOCALAPPDATA%\Temp\jev-life\src\shared\backend.ts`
 - jev-life 纯函数 broker / 协议最小集：`...\shared\llm-broker.ts` / `...\shared\types.ts`
 - 本仓库 `02-` v2.1：5 类上游定义；`03-`：capability 矩阵 + 翻译层细节
 - jev-decision-lab `runs/integrated-benchmark-data.json`（5×4×12 高考题）+ `life-series-benchmark/`（80 篇）

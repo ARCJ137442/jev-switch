@@ -168,6 +168,6 @@ Settings → Actions → General → Workflow permissions → **Read and write**
 
 ## 尚未做
 
-- macOS / Linux 打包（Windows 首发裁决，`docs/12` §三冻结）
+- macOS / Linux 桌面打包（当前正式发行仅提供 Windows 桌面包；后续支持范围与排期以 [ROADMAP](../ROADMAP.md) 为准）
 - 代码签名与公证
 - Tauri updater 增量更新

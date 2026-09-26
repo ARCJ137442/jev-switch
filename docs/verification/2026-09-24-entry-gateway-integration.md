@@ -20,7 +20,7 @@
 
 ## 隔离运行来源
 
-只使用测试数据与受控上游，不使用个人真实 API key。配置：`E:/tmp/jev-ui-acceptance/providers.toml`；独立数据目录：`E:/tmp/jev-ui-acceptance/data`；受控上游脚本：`E:/tmp/jev-ui-acceptance/upstream.mjs`，监听 18766，输出明确为测试固定值，不能作为真实模型质量证据。
+只使用测试数据与受控上游，不使用个人真实 API key。配置：`本机临时目录/jev-ui-acceptance/providers.toml`；独立数据目录：`本机临时目录/jev-ui-acceptance/data`；受控上游脚本：`本机临时目录/jev-ui-acceptance/upstream.mjs`，监听 18766，输出明确为测试固定值，不能作为真实模型质量证据。
 
 前端 Vite 5173 后转用 daemon 11435 托管的 `ui/dist` 静态构建，避免并行施工热更新影响操作。保留同地址 personal/team 两个配置，每个配置具有 M1/M2。后续更换内核须记录准确产物，不能把磁盘源码更新当作运行中进程已更新。
 
@@ -29,7 +29,7 @@
 1. **开发页面热更新异常。** Edge 的 Vite 页面在并行热更新期间出现 `removeChild` 异常并丢失编辑弹窗；页面存在翻译扩展标记，但没有证据将原因单独归于扩展。冷加载静态构建后，已操作的创建流程未复现此异常；未宣称一般性 HMR 问题已修复。
 2. **入口列表死锁。** UI 创建 `jev-fast → personal/M1` 后，自动 GET 入口列表无响应，连 `/health` 也在 3 秒内无法返回。`list_endpoints` 持有 SQLite mutex，又在 `count_routes` 重入同一锁。后端已提前释放 guard，新增创建后列表读取及健康检查回归；新进程复验列表恢复、原入口从独立 DB 保留。
 3. **双来源路由覆盖。** 实际拖到 M2 端口附近松手创建第二条连线，修改优先级与 sticky，再插入 `fallback-main` 后，图上是三条边，但较早内核 GET 仅剩两条，缺少 `jev-fast → fallback-main`。调用仍返回 M1，不能按图形或 PUT 200 验收。后端继续统一快照与入口事务，前端增加独立回读检查。
-4. **产物版本差异。** `E:/tmp/jev-switch-cargo-20260924/debug/jev-switch.exe` 的 21:09:55 构建早于后续快照/事务修订；该产物也复现第 3 项。此结果只证明该旧产物的问题，不冒充对最新源码的结论。须等待明确的新产物并重跑完整操作链。
+4. **产物版本差异。** `本机临时目录/jev-switch-cargo-20260924/debug/jev-switch.exe` 的 21:09:55 构建早于后续快照/事务修订；该产物也复现第 3 项。此结果只证明该旧产物的问题，不冒充对最新源码的结论。须等待明确的新产物并重跑完整操作链。
 5. **新快照产物与优先级语义分开验证。** 21:25:00 构建的 SHA256 为 `99D3F5692F175ED07A5B143FE2E945550C247250BF1A81ED4540974ADFFCFEFC`，复制到隔离目录运行后，管理 API 和实际浏览器都已返回完整三条边，入口路由数为 2。但调用仍命中 M1：旧 core 按末跳 priority 全局排序，将两条末跳 priority=10 的候选并列，忽略根分支 7 优于 10 的含义。这与契约 03 的“同 left 下越小越优先”不一致。后端已改为逐层优先级遍历并通过针对性测试，尚待对应新产物真实复验；不能把此次 M1 简单归为快照仍丢边，也不能用图已恢复宣称调用语义已正确。
 6. **公开集合边界。** 99D3 产物的 `/v1/models` 仍列出中间节点 `fallback-main`，演练场会误将其当公开候选。后端正在改为仅发布启用的服务入口，并为旧 TOML 的根入口做一次兼容迁移；中间别名不能单独绕过入口配置调用。
 7. **前端操作细节。** 真实重连后提供商卡片曾因路由行顺序改变而交换位置，现已改为稳定对象顺序并有回归。比较面板已选目标仍显示空目标提示、无 key 本地上游被前端禁选、无效 questions 被误报成 state 错误，也已修正。表单现在阻止重复选项键静默覆盖；在真实页面改出重复键后，显示错误并禁用“运行全部”，修复后恢复可用。
@@ -53,7 +53,7 @@
 
 ### 逐层优先级、启停与重启恢复
 
-Windows daemon SHA256 `2A5BFBCD1702C0B0F147EE67138C28C07CE44912DCE60680C077EA76C45C3C5C`，复制到 `E:/tmp/jev-ui-acceptance/bin/jev-switch-2a5bfbcd.exe` 后运行。直接调用证据修正了前文 99D3 检查点的遗留项：
+Windows daemon SHA256 `2A5BFBCD1702C0B0F147EE67138C28C07CE44912DCE60680C077EA76C45C3C5C`，复制到 `本机临时目录/jev-ui-acceptance/bin/jev-switch-2a5bfbcd.exe` 后运行。直接调用证据修正了前文 99D3 检查点的遗留项：
 
 ```text
 jev-fast
@@ -104,7 +104,7 @@ Windows PATH 没有 Docker，但 WSL Ubuntu 中实际存在 Docker 28.4.0，使�
 
 新 daemon SHA256 为 `A2BD71B44F9AD70575CF8D7E9050EB97D8CF5553E0DA0AC0A0A2CBDB7C99D020`（构建时间 2026-09-24 15:12:28 UTC，18,895,360 bytes）。11436 cloud 测试实例已使用该检查点；11435 仍运行前文 933CB46A 副本，不能混用两者的验证结论。
 
-- 后端 `cargo test --workspace` 与 `cargo test --workspace --features ts-rs` 均通过。核心计数：adapter 23 + wiremock 2、core 56、daemon lib 70、endpoints_runtime 5、integration_http 8、listen_rebind 7。隔离构建目录为 `E:/tmp/jev-switch-ci-luna`。
+- 后端 `cargo test --workspace` 与 `cargo test --workspace --features ts-rs` 均通过。核心计数：adapter 23 + wiremock 2、core 56、daemon lib 70、endpoints_runtime 5、integration_http 8、listen_rebind 7。隔离构建目录为 `本机临时目录/jev-switch-ci-luna`。
 - 57 个生成文件在 ts-rs 测试前后 SHA 相同；当前相对 HEAD 的生成类型差异来自尚未提交的接口修改，不是此次生成漂移。提交时须连同源码保存，再在干净 checkout 上执行 CI 差异门禁。
 - cloud HTTP 验证覆盖 admin/readonly 身份、Token 创建/修改/停用/恢复/撤销、停用及撤销后 401、自身统计和调用记录、拒绝跨 Token 查询、拒绝 readonly 管理权限，以及管理端/自身 SSE。Token 列表不回传一次性 secret。A2 检查点升级后身份、入口及已有统计保持。
 - Race 只统计实际进入 adapter.evaluate 的请求；胜出后取消尚未完成的任务。Shadow 保证影子任务已进入 evaluate 后再启动主路。调用响应中的 usage/cost/latency 属于返回的上游结果；网关总耗时另记为 `route_trace.gateway_latency_ms`，多请求的未知合计费用保持未知。迁移 `004_call_usage_observability.sql` 保存调用计量。
@@ -114,7 +114,7 @@ Windows PATH 没有 Docker，但 WSL Ubuntu 中实际存在 Docker 28.4.0，使�
 
 实际 11436 页面暴露了生产 UI 默认连错 11435 的问题。`api/base.ts` 已改为生产 HTTP(S) 页面默认同源，开发模式保留 11435，显式 `__JEV_BASE__` 仍可覆盖。新测试覆盖自定义端口、HTTPS 反向代理、开发与非 HTTP 环境，前端测试现为 17 项。
 
-11436 使用 `E:/tmp/jev-responsive/dist`，已在真实浏览器完成管理员密码登录；页脚正确显示 11436。全局策略参数按顺序保存并重新打开核实：race timeout=1500、load_balance weight=equal、shadow target=team，最后恢复 failover。登录弹窗取消与重新打开均可操作。
+11436 使用 `本机临时目录/jev-responsive/dist`，已在真实浏览器完成管理员密码登录；页脚正确显示 11436。全局策略参数按顺序保存并重新打开核实：race timeout=1500、load_balance weight=equal、shadow target=team，最后恢复 failover。登录弹窗取消与重新打开均可操作。
 
 管理员密码会话仅用于管理，公开模型与公开调用仍需要调用 Token。演练场此前将 401 误显示为空模型集合；现已分开 loading/ready/empty/401/403/network/other HTTP error，并提供前往 Dashboard“我的用量”输入调用 Token 的路径，没有扩大后端权限。该修复 lint 和 17 项测试通过，最新静态构建为 `index-uiXSIxOV.js` / `index-BIQ2wcjF.css`；浏览器复验在下文续记。
 
@@ -132,8 +132,8 @@ Windows PATH 没有 Docker，但 WSL Ubuntu 中实际存在 Docker 28.4.0，使�
 
 首次构建暴露 UI 阶段缺少共享 JsonValue 生成类型，已补 `rs/crates/jev-protocol/bindings` 的 COPY。随后 Debian HTTP 包索引连接超时；改为 HTTPS，并从同 Debian 系列的官方 Rust 构建镜像引入信任根，未关闭证书或仓库签名校验。
 
-- `E:/tmp/jev-ui-acceptance/docker-build-https.log`：Linux Rust release 编译成功（6m33），APT 索引获取部分成功，最终因 `deb.debian.org:443` 超时失败。
-- `E:/tmp/jev-ui-acceptance/docker-build-host.log`：诊断性 host-network 构建仍在相同 CDN 的 Packages 索引超时，失败退出。
+- `本机临时目录/jev-ui-acceptance/docker-build-https.log`：Linux Rust release 编译成功（6m33），APT 索引获取部分成功，最终因 `deb.debian.org:443` 超时失败。
+- `本机临时目录/jev-ui-acceptance/docker-build-host.log`：诊断性 host-network 构建仍在相同 CDN 的 Packages 索引超时，失败退出。
 - 两个构建会话均已终止，没有可验收的最终镜像或运行容器。后续须先改变并验证包下载条件，不能重复同一长构建或把网络失败写成代码验收成功。
 
 P1–P4 仍按各项操作证据逐步收口，P5 的完整 Tauri 与 Docker 验收、P6 的正式截图/提交/CI/发布仍未完成。
@@ -146,12 +146,12 @@ P1–P4 仍按各项操作证据逐步收口，P5 的完整 Tauri 与 Docker 验
 
 - 新增回归测试覆盖数据库 ID 从 101 开始、其他 Token 插入 102、历史/SSE 完整 JSON 相等、从 101 重连不重播、后续本 Token 的 103 正常到达且不混入另一 Token。
 - daemon 完整测试通过：lib 71、endpoints_runtime 5、integration_http 8、listen_rebind 7。未改 DTO，无须变更生成类型。
-- 新二进制 SHA256 `2DBB3D3ED8FD681967A44E2649B6467E7D00ADB00C7B92734504F23B3EFF17CD`，复制为 `E:/tmp/jev-access-acceptance/bin/jev-switch-2dbb3d3e.exe`。核对 11436 端口和旧 A2 副本的进程身份后，仅更新该 cloud 测试实例；配置与 `data-cloud` 保持。11435 和原 Tauri 进程不变。
+- 新二进制 SHA256 `2DBB3D3ED8FD681967A44E2649B6467E7D00ADB00C7B92734504F23B3EFF17CD`，复制为 `本机临时目录/jev-access-acceptance/bin/jev-switch-2dbb3d3e.exe`。核对 11436 端口和旧 A2 副本的进程身份后，仅更新该 cloud 测试实例；配置与 `data-cloud` 保持。11435 和原 Tauri 进程不变。
 - 实际浏览器重新进入个人活动：两次调用只显示两行，已有统计保留；随后外部发起一次同 Token 请求，实时流只新增一行。清除 Token 后个人数据区域消失；刷新页面不保留内存调用凭据。
 - 英文 readonly 页面在 390×844 时 document.scrollWidth=390，导航、身份、个人统计与活动表可访问。统计为加载时的时间范围快照，已补可随时使用的用量刷新按钮，不要求重新登录才能更新统计；追加第四次调用后，真实点击用量刷新得到请求数 4、平均 179ms、错误率 0，活动表也是四行。结束时恢复中文与默认视口。
 - 最新 UI 为 `index-B7kICrc5.js` / `index-BIQ2wcjF.css`，lint、17 项测试和生产构建通过。公开模型 401 提示有可操作的 Dashboard 路径，并且不再同时误标“已发现”。
 
-Docker 网络条件已取得新证据：[Debian 官方镜像列表](https://www.debian.org/mirror/list) 中的 USTC 镜像在真实容器内通过 HTTPS 下载 8,790,396 bytes 的 Packages.xz，HTTP 200、3.47 秒。Dockerfile 增加可选 `DEBIAN_MIRROR` 构建参数，默认仍为 Debian CDN。以 USTC 进行的新构建 APT 阶段 12.4 秒通过，日志为 `E:/tmp/jev-ui-acceptance/docker-build-ustc.log`；随后 cargo 仍在获取 crates.io 索引，进程已确认存活。此构建的源码快照早于上面的个人 SSE 修复，即使成功也须更新产物后再宣称最终同版本验收。
+Docker 网络条件已取得新证据：[Debian 官方镜像列表](https://www.debian.org/mirror/list) 中的 USTC 镜像在真实容器内通过 HTTPS 下载 8,790,396 bytes 的 Packages.xz，HTTP 200、3.47 秒。Dockerfile 增加可选 `DEBIAN_MIRROR` 构建参数，默认仍为 Debian CDN。以 USTC 进行的新构建 APT 阶段 12.4 秒通过，日志为 `本机临时目录/jev-ui-acceptance/docker-build-ustc.log`；随后 cargo 仍在获取 crates.io 索引，进程已确认存活。此构建的源码快照早于上面的个人 SSE 修复，即使成功也须更新产物后再宣称最终同版本验收。
 
 ## Windows 安装包与剩余交付门槛（2026-09-25）
 
@@ -159,7 +159,7 @@ Docker 网络条件已取得新证据：[Debian 官方镜像列表](https://www.
 
 在 11436 cloud 页面以管理员密码登录后，实际执行“将当前配置写入文件”。导出文件保留在内核机器，页面只显示掩码。随后将测试提供商 `team` 的名称从 `Laya Team` 改为 `Laya Team Import Check`：刷新同步区会显示外部修改，但提供商卡仍为原名；显式导入成功后卡片才更新。
 
-向测试 TOML 追加不完整表头后，再次导入被拒绝；页面显示 parse error，原有卡片和已生效配置保留。恢复导出时的文件并在 UI 重新导入后，卡片恢复 `Laya Team`。独立 API 回读两提供商启用、M1/M2 两入口仍启用且 follow_global，证明入口策略没有被文件同步覆盖。备份位于 `E:/tmp/jev-access-acceptance/providers-before-sync-20260925.toml` 与 `providers-exported-20260925.toml`，不进入仓库。
+向测试 TOML 追加不完整表头后，再次导入被拒绝；页面显示 parse error，原有卡片和已生效配置保留。恢复导出时的文件并在 UI 重新导入后，卡片恢复 `Laya Team`。独立 API 回读两提供商启用、M1/M2 两入口仍启用且 follow_global，证明入口策略没有被文件同步覆盖。备份位于 `本机临时目录/jev-access-acceptance/providers-before-sync-20260925.toml` 与 `providers-exported-20260925.toml`，不进入仓库。
 
 管理员角色调用 Token `tok_0108f255067a375912ae` 的浏览器登录已验证：可查看多个 Token 的用量汇总，导航保留管理功能，可查询并执行 M1/M2 公开入口。凭据没有写入文档。
 
@@ -182,7 +182,7 @@ Windows release daemon SHA256：`F634A6CC80BC915A4AB2FEF684B2C599220BD83B893FF1E
 | `src-tauri/target/release/bundle/msi/jev-switch_0.1.0_x64_en-US.msi` | `E92CB8F94D200C6EBB1CD17E840AFC9F3C5B0F139FA1BBBBEC6D7C2859F116DE` |
 | `src-tauri/target/release/bundle/nsis/jev-switch_0.1.0_x64-setup.exe` | `D61556A1BAA66624D6A74EE1403E3C083738CC99DD5A773D3AFCC72F6F0AF2D9` |
 
-MSI 以 administrative extraction 解包到 `E:/tmp/jev-package-acceptance-20260925-trace`（退出码 0），没有启动应用。随包 daemon 与上述 release 二进制 SHA 相同，JS 为 `7E3DBAAC1675F85EE9F8BFB41F52F3D1F57CC842C2F5F56890FF783804EE80B0`，CSS 为 `04A5EC7C208CA1804F23C0D0C6F608F87F51A69D32519BFDACBFD4196704F3AC`，均与 ui/dist 当前输入相同。
+MSI 以 administrative extraction 解包到 `本机临时目录/jev-package-acceptance-20260925-trace`（退出码 0），没有启动应用。随包 daemon 与上述 release 二进制 SHA 相同，JS 为 `7E3DBAAC1675F85EE9F8BFB41F52F3D1F57CC842C2F5F56890FF783804EE80B0`，CSS 为 `04A5EC7C208CA1804F23C0D0C6F608F87F51A69D32519BFDACBFD4196704F3AC`，均与 ui/dist 当前输入相同。
 
 完整冷启动必须释放 11435。此前自动审批拒绝停止旧 Tauri/daemon 的操作后，未绕过该拒绝；本轮已在产物具体可审阅后，通过异步弹窗请求重新尝试的明确授权（或由用户手动退出）。尚未收到答复，不能将安装包构建/解包当作冷启动验收。
 
@@ -192,7 +192,7 @@ USTC 构建中的 Cargo 在索引阶段约 24 分钟持续零 CPU、无进一步
 
 Dockerfile 将依赖获取拆为有 300 秒上限的 `cargo fetch --locked`，后续编译使用 `--offline`，缓存 registry/target 并将产物复制到稳定阶段路径。`CARGO_HTTP_MULTIPLEXING` 等仅是可选构建参数，默认沿用 Cargo 行为；诊断性关闭 HTTP/2 多路复用没有关闭 TLS 校验。
 
-新的 HTTP/1.1 构建日志 `E:/tmp/jev-ui-acceptance/docker-build-http1.log` 显示 UI 构建通过、APT 复用成功，但 fetch 仍超时（exit 124），构建退出 1。当前无运行中的 Jev Docker 构建或已通过验收的最终镜像。后续应利用可校验的依赖缓存或进一步定位 Cargo 下载路径，不能继续无界等待。
+新的 HTTP/1.1 构建日志 `本机临时目录/jev-ui-acceptance/docker-build-http1.log` 显示 UI 构建通过、APT 复用成功，但 fetch 仍超时（exit 124），构建退出 1。当前无运行中的 Jev Docker 构建或已通过验收的最终镜像。后续应利用可校验的依赖缓存或进一步定位 Cargo 下载路径，不能继续无界等待。
 
 ## Docker 构建与持久化实测、仪表盘空态修正（2026-09-25 02:20–02:50）
 
@@ -210,11 +210,11 @@ Dockerfile 改为完整缓存优先离线校验，缺失才执行有界联网 fe
 | UI JS | `index-B48eZbwp.js`；SHA256 `66932b6b95b252665e1e91fb701ee6bf03167f4474926243b95c036a86ad86b4` |
 | UI CSS | `index-DIHmDJnI.css`；SHA256 `04a5ec7c208ca1804f23c0d0c6f608f87f51a69d32519bfdacbfd4196704f3ac` |
 
-日志为 `E:/tmp/jev-ui-acceptance/docker-build-cached.log` 与 `docker-build-dashboard.log`。JS/CSS 在容器实际 HTTP 服务、Windows ui/dist 与 MSI 解包目录中 SHA 一致。daemon 平台不同，二进制 SHA 不应相同；两端由同一批源码/锁文件构建，health 仍为 0.1.0、api_revision=1、build_revision=null，尚未发布。
+日志为 `本机临时目录/jev-ui-acceptance/docker-build-cached.log` 与 `docker-build-dashboard.log`。JS/CSS 在容器实际 HTTP 服务、Windows ui/dist 与 MSI 解包目录中 SHA 一致。daemon 平台不同，二进制 SHA 不应相同；两端由同一批源码/锁文件构建，health 仍为 0.1.0、api_revision=1、build_revision=null，尚未发布。
 
 ### 容器功能与重建恢复
 
-隔离 Compose 项目 `jev-acceptance-20260925` 使用当前仓库 Compose 配置的副本，仅调整测试镜像名、容器名、数据目录、宿主回环端口 11437 和重启策略，追加一个不发布端口的受控上游。数据目录 `E:/tmp/jev-docker-acceptance-20260925/data`；随机测试凭据只保存在该临时项目，不进入仓库。
+隔离 Compose 项目 `jev-acceptance-20260925` 使用当前仓库 Compose 配置的副本，仅调整测试镜像名、容器名、数据目录、宿主回环端口 11437 和重启策略，追加一个不发布端口的受控上游。数据目录 `本机临时目录/jev-docker-acceptance-20260925/data`；随机测试凭据只保存在该临时项目，不进入仓库。
 
 第一次后台测试期间 WSL 整体重启，两测试容器退出 255，其他已有容器也重新启动；网关日志无应用错误。之后保持本次 Compose 前台会话，完成以下检查，没有修改 WSL 系统设置：
 
@@ -251,7 +251,7 @@ Token 面板补测中英文 390×844，文档宽 390、输入/按钮无横向越
 
 - MSI SHA256：`3E88E3FF037DFF4F328E0A56B3999D4C66572B0D183C453FE345E9A7B191B3DB`。
 - NSIS SHA256：`F45E76CE7AB74CA12899012BFF5BCF1E3DA93C0F61EC5B13E51D148DA9B4E792`。
-- 当前解包根：`E:/tmp/jev-package-acceptance-20260925-dashboard/PFiles/jev-switch`。daemon SHA 仍为 `F634A6CC80BC915A4AB2FEF684B2C599220BD83B893FF1EAC93A1A438E6687FA`；UI SHA 与上表相同。
+- 当前解包根：`本机临时目录/jev-package-acceptance-20260925-dashboard/PFiles/jev-switch`。daemon SHA 仍为 `F634A6CC80BC915A4AB2FEF684B2C599220BD83B893FF1EAC93A1A438E6687FA`；UI SHA 与上表相同。
 - MSI administrative extraction 首次因 TARGETDIR 使用正斜杠被 Windows Installer 视为网络位置（1606/1603）失败；改为原生反斜杠路径后退出 0，三份资源 SHA 比对通过。没有启动应用或执行普通安装。
 
 完整 Tauri 冷启动/退出依然等待此前弹窗的明确回复。自动审批曾拒绝停止旧 Tauri 和 11435 daemon，理由仅为 `blocked by policy`；未重试这些进程操作。原生窗口几何测试和安装包资源核对不能替代该项验收。
@@ -289,9 +289,9 @@ Token 面板补测中英文 390×844，文档宽 390、输入/按钮无横向越
 
 ### Windows 和容器实际运行
 
-Windows `339DDB1D…` release 内核在独立的 11436 实例启动，数据仍来自 `E:/tmp/jev-access-acceptance/data-cloud`。实际测试将端口改为 11438 后恢复，PUT 分别为 **31.905ms / 30.052ms**；每次旧端口均不能再建立连接。测试在临时端口执行 M1，固定夹具值 0.73 返回，其他 readonly Token 的累计调用从 4 增至 5。
+Windows `339DDB1D…` release 内核在独立的 11436 实例启动，数据仍来自 `本机临时目录/jev-access-acceptance/data-cloud`。实际测试将端口改为 11438 后恢复，PUT 分别为 **31.905ms / 30.052ms**；每次旧端口均不能再建立连接。测试在临时端口执行 M1，固定夹具值 0.73 返回，其他 readonly Token 的累计调用从 4 增至 5。
 
-两提供商 personal/team、两启用入口 M1/M2 及托管 Token 从持久存储恢复；未带调用 Token 仍为 401，readonly 不能访问管理接口，admin Token 可管理。11436 浏览器刷新后要求重新登录，登录后显示真实两提供商/两路由、Cloud 模式及“实时”事件流。报告保存于 `E:/tmp/jev-access-acceptance/result-rebind-339ddb1d.json`，其中只有摘要，无凭据。
+两提供商 personal/team、两启用入口 M1/M2 及托管 Token 从持久存储恢复；未带调用 Token 仍为 401，readonly 不能访问管理接口，admin Token 可管理。11436 浏览器刷新后要求重新登录，登录后显示真实两提供商/两路由、Cloud 模式及“实时”事件流。报告保存于 `本机临时目录/jev-access-acceptance/result-rebind-339ddb1d.json`，其中只有摘要，无凭据。
 
 Docker 镜像 `sha256:ed755c5bc43c64dae8265846bcf8bc8aadf4fc9feada86140c220ae3c0788337`，Linux daemon SHA256 `d77d24fac094f6540d9d6d61eabc15d7948ee85a3da6a90038452ecd253ca217`。使用已有隔离数据重建后，cloud→local / local→cloud 请求分别为 **5.204ms / 4.769ms**，3 秒客户端预算内完成；容器回环免 Token、宿主发布端口在 local 下不可达，恢复 cloud 后 health 正常。没有再出现原来的等待排空超时日志。`result-modes-rebind.json` 保存时序；当时累计五次调用、费用未知、错误率 0，`result-current.json` 随后续复验更新为最新检查点。
 
@@ -309,7 +309,7 @@ Docker 镜像 `sha256:ed755c5bc43c64dae8265846bcf8bc8aadf4fc9feada86140c220ae3c0
 | release Tauri 主程序 | `75C576B5A0ACD0CE45DB1067D5820AAD551A2D39FE3ECA957DAB81666B3E25E4` |
 | MSI 随包 Tauri 主程序 | `194BA674D93F25185DA6EBD21AF5A7DEF3A5A2E2DA4C561D7B9D701EE6DAD525` |
 
-解包目录为 `E:/tmp/jev-package-acceptance-20260925-rebind/PFiles/jev-switch`。JS/CSS 仍为 B48eZbwp / DIHmDJnI，与前节完整 SHA 相同。
+解包目录为 `本机临时目录/jev-package-acceptance-20260925-rebind/PFiles/jev-switch`。JS/CSS 仍为 B48eZbwp / DIHmDJnI，与前节完整 SHA 相同。
 
 主程序哈希不同已进一步定位：整个文件只相差偏移 `0x3dfcb8` 起的三个字节，Tauri 将 `__TAURI_BUNDLE_TYPE_VAR_UNK` 替换为 `__TAURI_BUNDLE_TYPE_VAR_MSI`。替换后整份字节完全一致，所有代码段一致；本机依赖 `tauri-utils` 的 `platform.rs` 定义了该打包类型标记。这一格式处理不能被误判为旧壳混入。
 
@@ -329,13 +329,13 @@ Docker 镜像 `sha256:ed755c5bc43c64dae8265846bcf8bc8aadf4fc9feada86140c220ae3c0
 | MSI | `B43AF38BB6448E006D075BF0E6624A54C359CF5CB4144D78651E239AB2418502` |
 | NSIS | `5BA0C06532E0DBDEF2C127C99176AA1284A9E340B4732CC206548EB0192CB9FD` |
 
-Windows 11436 的当前进程 PID 82904，路径 `E:/tmp/jev-access-acceptance/bin/jev-switch-3c8c2d71.exe`。启动日志正确显示 `legacy_config_tokens=0`、`enabled_tokens=3`、`total_tokens=5`。未认证公开查询 401，托管调用 Token 查询 200，admin Token 查询管理状态 200；原 readonly 的五次调用仍保留。浏览器重新登录后两提供商/两路由及实时流恢复。全局活动是内存 EventBus，重启后为空；个人 SQLite 历史与统计仍保留，两者不混同。
+Windows 11436 的当前进程 PID 82904，路径 `本机临时目录/jev-access-acceptance/bin/jev-switch-3c8c2d71.exe`。启动日志正确显示 `legacy_config_tokens=0`、`enabled_tokens=3`、`total_tokens=5`。未认证公开查询 401，托管调用 Token 查询 200，admin Token 查询管理状态 200；原 readonly 的五次调用仍保留。浏览器重新登录后两提供商/两路由及实时流恢复。全局活动是内存 EventBus，重启后为空；个人 SQLite 历史与统计仍保留，两者不混同。
 
-Docker 隔离容器更新至上述镜像后 healthy，日志显示 `legacy_config_tokens=1`、`enabled_tokens=2`、`total_tokens=3`。已撤销的旧环境 Token 没有因重建恢复；当前受控调用成功，累计六次，费用未知、错误率 0。`E:/tmp/jev-docker-acceptance-20260925/result-current.json` 是这一最终运行检查点；构建日志 `E:/tmp/jev-ui-acceptance/docker-build-token-log.log`。
+Docker 隔离容器更新至上述镜像后 healthy，日志显示 `legacy_config_tokens=1`、`enabled_tokens=2`、`total_tokens=3`。已撤销的旧环境 Token 没有因重建恢复；当前受控调用成功，累计六次，费用未知、错误率 0。`本机临时目录/jev-docker-acceptance-20260925/result-current.json` 是这一最终运行检查点；构建日志 `本机临时目录/jev-ui-acceptance/docker-build-token-log.log`。
 
-最后一次 MSI administrative extraction 退出 1603，日志明确为 C 盘可用 0 KB，Installer 还需 6,164 KB；PowerShell 同样读到 C 盘 Free=0，E 盘仍有约 157GB。没有把空间不足归因于应用，也未删除用户其他文件。失败日志保留为 `E:/tmp/jev-package-acceptance-20260925-token-log.log`。
+最后一次 MSI administrative extraction 退出 1603，日志明确为 C 盘可用 0 KB，Installer 还需 6,164 KB；PowerShell 同样读到 C 盘 Free=0，E 盘仍有约 157GB。没有把空间不足归因于应用，也未删除用户其他文件。失败日志保留为 `本机临时目录/jev-package-acceptance-20260925-token-log.log`。
 
-使用已经安装的 WiX `dark.exe`，仅将当前进程 TEMP/TMP 指向 E 盘，从 MSI 提取文件到 `E:/tmp/jev-package-acceptance-20260925-token-log-wix`，退出 0。工具另报告若干安装 UI ControlEvent 外键的 DARK1059 反编译警告；没有据此宣称安装 UI 通过或失败。按 File 表映射还原五份文件到 `E:/tmp/jev-package-acceptance-20260925-token-log/PFiles/jev-switch`，主程序经上述格式标记归一后完全匹配，daemon、index.html、JS、CSS 逐字节匹配输入，结果在该目录上两级的 `resource-check.json`。
+使用已经安装的 WiX `dark.exe`，仅将当前进程 TEMP/TMP 指向 E 盘，从 MSI 提取文件到 `本机临时目录/jev-package-acceptance-20260925-token-log-wix`，退出 0。工具另报告若干安装 UI ControlEvent 外键的 DARK1059 反编译警告；没有据此宣称安装 UI 通过或失败。按 File 表映射还原五份文件到 `本机临时目录/jev-package-acceptance-20260925-token-log/PFiles/jev-switch`，主程序经上述格式标记归一后完全匹配，daemon、index.html、JS、CSS 逐字节匹配输入，结果在该目录上两级的 `resource-check.json`。
 
 当前剩余验收条件：释放 C 盘安装器所需空间；收到此前旧 Tauri/11435 停止操作的明确重试授权，或用户手动退出后，完成包内 sidecar 冷启动、复用和退出验证；继续记录真实多显示器 DPI 范围。随后才推进 P6 正式截图、提交和发布。旧完整 Tauri PID 36136 与旧 11435 daemon PID 73496 本轮均未停止。
 
@@ -355,17 +355,17 @@ Docker 隔离容器更新至上述镜像后 healthy，日志显示 `legacy_confi
 
 ### 浏览器失败恢复、加载与双语
 
-在 11436 的 `3C8C2D71…` 内核上执行 M1/M2 横比，临时停用 M2 使其返回 404，M1 成功结果保留。将 state 从 `compare-retry-before` 改成 `compare-retry-edited`，恢复 M2 后只重试该列：上游实际收到原快照，M1 没有再次调用，原 M1 结果未变化。M2 已恢复启用。两条实际请求及断言保存在 `E:/tmp/jev-access-acceptance/comparison-retry-evidence.json`，不把夹具 0.73 当模型质量证据。
+在 11436 的 `3C8C2D71…` 内核上执行 M1/M2 横比，临时停用 M2 使其返回 404，M1 成功结果保留。将 state 从 `compare-retry-before` 改成 `compare-retry-edited`，恢复 M2 后只重试该列：上游实际收到原快照，M1 没有再次调用，原 M1 结果未变化。M2 已恢复启用。两条实际请求及断言保存在 `本机临时目录/jev-access-acceptance/comparison-retry-evidence.json`，不把夹具 0.73 当模型质量证据。
 
-临时 18769 代理延迟真实列表响应 3 秒，并可返回受控 503，验证 Token 与活动首次加载提示、刷新期间保留内容、失败时保留旧内容并显示错误；SSE 暂时不可用时可通过轮询显示活动。修复了当前 Token 不变时刷新不重取用量的问题：一次实际 M1 调用后，点击刷新，所选 Token 请求数由 4 变 5。加载证据对应 `CLAVacTB`，用量刷新对应 `DXcWnhHg`；摘要在 `E:/tmp/jev-loading-acceptance/evidence.json`。代理与临时标签已关闭，未保留额外测试监听。
+临时 18769 代理延迟真实列表响应 3 秒，并可返回受控 503，验证 Token 与活动首次加载提示、刷新期间保留内容、失败时保留旧内容并显示错误；SSE 暂时不可用时可通过轮询显示活动。修复了当前 Token 不变时刷新不重取用量的问题：一次实际 M1 调用后，点击刷新，所选 Token 请求数由 4 变 5。加载证据对应 `CLAVacTB`，用量刷新对应 `DXcWnhHg`；摘要在 `本机临时目录/jev-loading-acceptance/evidence.json`。代理与临时标签已关闭，未保留额外测试监听。
 
 最终 UI `index-ZCEhu_bP.js` 补齐活动路由表格的中英文表头、枚举可读名称、逐行输入/删除标签；底层协议值不变。实际从 Routing → DAG → 表格切换语言，中文显示“起点/匹配规则/会话粘性/失败时”，英文显示对应完整名称。390×844 英文视口中文档宽 390、表格滚动容器宽 348，约 530px 表格仅在容器内横向滚动，未撑宽页面。此项由旧 11435 内核托管当前仓库 UI 验证，只证明前端双语/布局，不冒充最新版 Windows 内核验收。已恢复中文与默认视口，未提交任何路由编辑。
 
 ### 统一测试与制品来源
 
-- `cargo test --offline --locked --manifest-path rs/Cargo.toml --workspace --features ts-rs` 全套通过：daemon lib 116、入口 6、历史 4、HTTP 8、TCP 10、迁移 2；其他 workspace crate 同样通过。57 份生成类型前后 SHA 无变化。日志：`E:/tmp/jev-access-acceptance/workspace-history-tsrs.log`。
-- 前端 `npm run lint`、17 项测试与最终生产构建通过。Windows release、Docker build、MSI/NSIS bundle 均成功。构建日志分别为 `build-history-release.log`、`docker-build-history.log`、`bundle-history.log`（前者/后者在 `E:/tmp/jev-access-acceptance`，Docker 日志在 `E:/tmp/jev-ui-acceptance`）。
-- MSI 原生 administrative extraction 退出 0，目录 `E:/tmp/jev-package-acceptance-20260925-history/PFiles/jev-switch`。随包 daemon、index.html、JS、CSS 逐字节匹配；主程序仍只因 MSI 格式标记相差三字节。结果为目录上两级的 `resource-check.json`。这不是实际安装或完整应用启动。
+- `cargo test --offline --locked --manifest-path rs/Cargo.toml --workspace --features ts-rs` 全套通过：daemon lib 116、入口 6、历史 4、HTTP 8、TCP 10、迁移 2；其他 workspace crate 同样通过。57 份生成类型前后 SHA 无变化。日志：`本机临时目录/jev-access-acceptance/workspace-history-tsrs.log`。
+- 前端 `npm run lint`、17 项测试与最终生产构建通过。Windows release、Docker build、MSI/NSIS bundle 均成功。构建日志分别为 `build-history-release.log`、`docker-build-history.log`、`bundle-history.log`（前者/后者在 `本机临时目录/jev-access-acceptance`，Docker 日志在 `本机临时目录/jev-ui-acceptance`）。
+- MSI 原生 administrative extraction 退出 0，目录 `本机临时目录/jev-package-acceptance-20260925-history/PFiles/jev-switch`。随包 daemon、index.html、JS、CSS 逐字节匹配；主程序仍只因 MSI 格式标记相差三字节。结果为目录上两级的 `resource-check.json`。这不是实际安装或完整应用启动。
 
 | 本检查点产物 | SHA256 / 镜像 ID |
 |---|---|
@@ -383,7 +383,7 @@ Docker 新镜像、MSI 和本地 UI 的 index.html/JS/CSS 哈希一致。所有�
 
 重新检查时，既有隔离容器已为 exited。第一次 Compose 启动漏传既有 project 名而发生容器名冲突；核对容器标签后使用原 `-p jev-acceptance-20260925` 正常重建并启动，误建的空网络已删除。未改动其他项目容器。当前 11437 镜像为上表 `fa4b4e78…`，running/healthy；Compose 前台会话保持 WSL 测试实例运行。
 
-升级前备份了 SQLite。实际启动后 schema 为 6，原有 6 条 call_logs 每个字段均与备份相同，旧撤销环境 Token 仍为 401，只读 Token 仍不能管理。旧入口实际调用返回夹具 0.73；再创建 `DockerHistoryMigration`、尝试无效引用并附带停用，收到 400 且路由未变，实际调用继续成功。删除该测试入口后新调用 404，但统计、个人事件 ID/detail 完全保持，累计请求数为 8。证据：`E:/tmp/jev-docker-acceptance-20260925/result-history.json`；此前的 `result-current.json` 是累计 7 次的前一检查点。
+升级前备份了 SQLite。实际启动后 schema 为 6，原有 6 条 call_logs 每个字段均与备份相同，旧撤销环境 Token 仍为 401，只读 Token 仍不能管理。旧入口实际调用返回夹具 0.73；再创建 `DockerHistoryMigration`、尝试无效引用并附带停用，收到 400 且路由未变，实际调用继续成功。删除该测试入口后新调用 404，但统计、个人事件 ID/detail 完全保持，累计请求数为 8。证据：`本机临时目录/jev-docker-acceptance-20260925/result-history.json`；此前的 `result-current.json` 是累计 7 次的前一检查点。
 
 Windows 切换 11436 测试 daemon 的命令被自动审批拒绝，理由仅为 `blocked by policy`，整条命令未执行。已完成包内资源核对后，单独请求明确重试授权，尚未收到答复；没有将同一拒绝动作拆分重试。11436 仍为 PID 82904 / `3C8C2D71…`，已备份的数据库仍为 schema 4、12 条调用、5 个 Token、M1/M2。新 Windows daemon 仅完成构建和随包核对，未实际切换。
 
@@ -393,7 +393,7 @@ Windows 切换 11436 测试 daemon 的命令被自动审批拒绝，理由仅为
 
 ### 重启持久性与发现的停机缺口
 
-对上一检查点的隔离 Docker 实例执行实际重启，八条历史及全部字段、配置、Token 身份/角色/启停、统计、自增序列均保留；已删除入口没有重新发布，已撤销的旧环境 Token 仍被拒绝，个人事件增量游标没有产生重复。核对请求本身会推进有效 Token 的 `last_used_at`，因此该字段检查单调递增，其余相关字段逐项保持不变。结果为 `E:/tmp/jev-docker-acceptance-20260925/result-history-restart.json`。
+对上一检查点的隔离 Docker 实例执行实际重启，八条历史及全部字段、配置、Token 身份/角色/启停、统计、自增序列均保留；已删除入口没有重新发布，已撤销的旧环境 Token 仍被拒绝，个人事件增量游标没有产生重复。核对请求本身会推进有效 Token 的 `last_used_at`，因此该字段检查单调递增，其余相关字段逐项保持不变。结果为 `本机临时目录/jev-docker-acceptance-20260925/result-history-restart.json`。
 
 但 Docker 事件同时揭示另一问题：旧 `fa4b4e78…` 内核只监听 Ctrl-C，没有处理容器发送的 SIGTERM，重启等待 15 秒后以 SIGKILL / exit 137 结束。数据恢复通过不能说明停机过程正常；两项结论必须分开。
 
@@ -401,8 +401,8 @@ Unix 主程序现在同时等待 SIGINT/SIGTERM，收到后记录信号并进入
 
 ### Linux 与真实容器验证
 
-- 新增 Unix 子进程测试：独立配置/数据目录及临时端口，等待真实 `/health`，发送 SIGTERM，要求五秒内 exit 0 且日志记录 SIGTERM。Windows 编译通过但运行零项；Linux BuildKit 使用已有依赖缓存、禁用网络实际运行 **1/1 通过，0.55 秒**。日志为 `E:/tmp/jev-docker-acceptance-20260925/signal-test.log`，没有把 Windows 的零项当成信号验证。
-- 新镜像中用受控上游暂时保持一条真实调用，执行 `docker stop --timeout 15`。从容器网络空间确认监听约 **562.496ms** 后关闭；此时上游尚未放行，进程仍等待。放行后请求正常返回夹具值 0.73，整个 stop 约 **1644.116ms**，容器 exit **0**。重启后该次调用已持久记录，累计 **9** 次。证据为 `E:/tmp/jev-docker-acceptance-20260925/result-sigterm.json`。
+- 新增 Unix 子进程测试：独立配置/数据目录及临时端口，等待真实 `/health`，发送 SIGTERM，要求五秒内 exit 0 且日志记录 SIGTERM。Windows 编译通过但运行零项；Linux BuildKit 使用已有依赖缓存、禁用网络实际运行 **1/1 通过，0.55 秒**。日志为 `本机临时目录/jev-docker-acceptance-20260925/signal-test.log`，没有把 Windows 的零项当成信号验证。
+- 新镜像中用受控上游暂时保持一条真实调用，执行 `docker stop --timeout 15`。从容器网络空间确认监听约 **562.496ms** 后关闭；此时上游尚未放行，进程仍等待。放行后请求正常返回夹具值 0.73，整个 stop 约 **1644.116ms**，容器 exit **0**。重启后该次调用已持久记录，累计 **9** 次。证据为 `本机临时目录/jev-docker-acceptance-20260925/result-sigterm.json`。
 - 上述观测包含测试控制与 Docker 命令开销，不是生产延迟承诺；0.73 是夹具输出，不是模型质量证据。取消连接也不保证取消上游已经执行的计算或费用。
 - 随后按 15 秒配置重建同一隔离 Compose 实例，检查为 running/healthy，实际 `Config.StopTimeout=15`。启动时间为 `2026-09-24T20:35:51Z`；04:42 只读 SQLite 核对仍为 9 条日志、自增序列 9。未改动其他项目容器。
 
@@ -418,7 +418,7 @@ Unix 主程序现在同时等待 SIGINT/SIGTERM，收到后记录信号并进入
 
 前端未改动，仍为 `index-ZCEhu_bP.js` / `index-DIHmDJnI.css`，完整 SHA 见 04:15 表格。最新运行容器、MSI 和本地构建的 index.html/JS/CSS 哈希相同。
 
-Windows release 与 MSI/NSIS bundle 成功；原生 MSI administrative extraction 退出 0，目录为 `E:/tmp/jev-package-acceptance-20260925-signal/PFiles/jev-switch`。随包 daemon、index.html、JS、CSS 与输入逐字节相同；Tauri 主程序归一 `UNK→MSI` 格式标记后完全一致。结果保存在目录上两级 `resource-check.json`。构建日志为 `E:/tmp/jev-access-acceptance/build-signal-release.log`、`bundle-signal.log` 和 `E:/tmp/jev-ui-acceptance/docker-build-signal.log`。所有制品仍是未发布的 0.1.0 测试版本，未执行安装或完整 Tauri 启动。
+Windows release 与 MSI/NSIS bundle 成功；原生 MSI administrative extraction 退出 0，目录为 `本机临时目录/jev-package-acceptance-20260925-signal/PFiles/jev-switch`。随包 daemon、index.html、JS、CSS 与输入逐字节相同；Tauri 主程序归一 `UNK→MSI` 格式标记后完全一致。结果保存在目录上两级 `resource-check.json`。构建日志为 `本机临时目录/jev-access-acceptance/build-signal-release.log`、`bundle-signal.log` 和 `本机临时目录/jev-ui-acceptance/docker-build-signal.log`。所有制品仍是未发布的 0.1.0 测试版本，未执行安装或完整 Tauri 启动。
 
 ### 交付门禁与未完成范围
 
@@ -435,19 +435,19 @@ Windows 11436 仍为旧 `3C8C2D71…` 测试内核；旧完整 Tauri/11435 同�
 
 `workflow_dispatch` 的版本输入此前直接插入 Bash 源码；现通过 `REQUESTED_VERSION` 环境变量按普通字符串读取。版本仍需与仓库四处字段一致，输入不会被当成命令执行。使用从 YAML 提取的原始门禁脚本，在 WSL Bash/Node 对当前仓库做六组实际执行：空输入、匹配输入和匹配 tag 通过；版本不一致、tag 不一致、包含 shell 命令替换语法的输入均被拒绝，拒绝时没有写出发布输出或执行输入中的命令。另测混合大小写仓库名转为小写，合计七项通过。
 
-证据为 `E:/tmp/jev-release-gate-20260925/result.json`。两个 workflow YAML 解析、最新发布命令的 Bash 语法及变更文件 diff 检查通过。未拉取/发布镜像，未触发远端 workflow，也未把本地脚本测试当作远端 CI 验收。
+证据为 `本机临时目录/jev-release-gate-20260925/result.json`。两个 workflow YAML 解析、最新发布命令的 Bash 语法及变更文件 diff 检查通过。未拉取/发布镜像，未触发远端 workflow，也未把本地脚本测试当作远端 CI 验收。
 
 ## Windows 同版本隔离联调（2026-09-25）
 
-在确认 11439 空闲后，启动独立 cloud 测试实例，明确绑定 `127.0.0.1:11439`，使用 `E:/tmp/jev-windows-isolated-20260925` 内的新配置、数据库和日志。测试只控制自己创建的进程句柄，没有停止、替换或注入旧 Tauri/11435/11436；完成后测试 daemon 和本地 HTTP 夹具全部退出，11439 无监听。
+在确认 11439 空闲后，启动独立 cloud 测试实例，明确绑定 `127.0.0.1:11439`，使用 `本机临时目录/jev-windows-isolated-20260925` 内的新配置、数据库和日志。测试只控制自己创建的进程句柄，没有停止、替换或注入旧 Tauri/11435/11436；完成后测试 daemon 和本地 HTTP 夹具全部退出，11439 无监听。
 
-实际执行的 Windows daemon 为 `E:/tmp/jev-access-acceptance/bin/jev-switch-f8534846.exe`，SHA256 与 04:42 表中 `F8534846…` 完全一致。`/health` 返回产品 `jev-switch`、版本 `0.1.0`、`api_revision=1`；`build_revision` 实际为 null，本地构建未注入提交标识，因此本次由不可变路径与完整文件 SHA 确认来源。
+实际执行的 Windows daemon 为 `本机临时目录/jev-access-acceptance/bin/jev-switch-f8534846.exe`，SHA256 与 04:42 表中 `F8534846…` 完全一致。`/health` 返回产品 `jev-switch`、版本 `0.1.0`、`api_revision=1`；`build_revision` 实际为 null，本地构建未注入提交标识，因此本次由不可变路径与完整文件 SHA 确认来源。
 
 同一 daemon 通过 HTTP 提供 index.html、`index-ZCEhu_bP.js` 和 `index-DIHmDJnI.css`，响应均为 200，哈希与最新仓库构建、MSI 和 Docker 内资源一致。此项验证了同源托管来源，没有重新执行一遍未改动的前端视口矩阵。
 
 14 项场景全部通过：二进制及健康身份、静态资源、创建调用 Token、创建入口与路由、实际 HTTP 调用、重启恢复路由、停用后 404、恢复启用、无效环路返回 400 且完整图保持不变、拒绝后原调用仍正常、删除入口后 404、删除后历史保留、再次重启后入口不复活且统计/事件 ID 不变。三次成功调用的归属、累计统计和事件明细均保留。
 
-上游为本次测试创建的本机临时 HTTP 服务，返回的概率 0.91、usage 和费用都是显式夹具值。它证明真实 HTTP 路由与计量传递，不证明真实模型质量、推理性能或云账单。结果为 `E:/tmp/jev-windows-isolated-20260925/result.json`，日志与脚本同目录，结果不含凭据。
+上游为本次测试创建的本机临时 HTTP 服务，返回的概率 0.91、usage 和费用都是显式夹具值。它证明真实 HTTP 路由与计量传递，不证明真实模型质量、推理性能或云账单。结果为 `本机临时目录/jev-windows-isolated-20260925/result.json`，日志与脚本同目录，结果不含凭据。
 
 该验证补齐最新 Windows 内核的独立 Web 运行证据；新库测试不冒充旧 11436 数据库原地升级，进程重启也不冒充完整 Tauri 的 sidecar 生命周期。此前 Docker 旧库升级、删除历史与 SIGTERM 证据继续分别保留。完整 Tauri、安装器及实际系统 DPI 仍按 P5 自身门槛验收。
 
@@ -480,21 +480,21 @@ P6 文档收尾还应改正 README 中旧的“三页”“八个端点”“TOM
 
 从 MSI 的 administrative extraction 目录启动包内 Tauri 主程序，使用独立测试存储目录：
 
-- 包路径：`E:/tmp/jev-package-acceptance-20260925-signal/PFiles/jev-switch/jev-switch.exe`
+- 包路径：`本机临时目录/jev-package-acceptance-20260925-signal/PFiles/jev-switch/jev-switch.exe`
 - 壳 SHA256：`194BA674D93F25185DA6EBD21AF5A7DEF3A5A2E2DA4C561D7B9D701EE6DAD525`
 - sidecar SHA256：`F8534846040B598E8D791FB5A46E19D3A00166AD5950D4651575B260F020F779`
 - UI：`index-ZCEhu_bP.js` / `D03B2AF6B75C178161E8016D563E514DFB68C0551152EE097AC570849F622BFD`；`index-DIHmDJnI.css` / `04A5EC7C208CA1804F23C0D0C6F608F87F51A69D32519BFDACBFD4196704F3AC`
-- 隔离数据：`E:/tmp/jev-tauri-cold-start-20260925/appdata` 与 `E:/tmp/jev-tauri-cold-start-20260925/localdata`
+- 隔离数据：`本机临时目录/jev-tauri-cold-start-20260925/appdata` 与 `本机临时目录/jev-tauri-cold-start-20260925/localdata`
 
-原生窗口实测为 `x=292, y=82, 1016×689`，完整位于 `1600×852` 工作区内并居中。WebView CSS 视口为 `1000×650`。四个真实页面 Dashboard、Providers、Routing、Playground 均渲染完成，页面宽度均为 1000px，无水平溢出、无 renderer exception。操作系统选择的界面语言为中文。结果文件：`E:/tmp/jev-tauri-cold-start-20260925/native-window.json`、`E:/tmp/jev-tauri-cold-start-20260925/ui-smoke.json`。
+原生窗口实测为 `x=292, y=82, 1016×689`，完整位于 `1600×852` 工作区内并居中。WebView CSS 视口为 `1000×650`。四个真实页面 Dashboard、Providers、Routing、Playground 均渲染完成，页面宽度均为 1000px，无水平溢出、无 renderer exception。操作系统选择的界面语言为中文。结果文件：`本机临时目录/jev-tauri-cold-start-20260925/native-window.json`、`本机临时目录/jev-tauri-cold-start-20260925/ui-smoke.json`。
 
 health 报告产品 `jev-switch`、版本 `0.1.0`、`api_revision=1`、`build_revision=null`。端口 11435 属于随包 sidecar；WebView 调试端口为 9239。测试期间未发起真实上游请求；配置、数据库和日志全部位于隔离目录。取证完成后只停止本次创建的 Tauri PID 30152 与 sidecar PID 77988；端口 11435 和 9239 均释放。冷启动证明包内壳/sidecar/静态资源能运行，不等同于 MSI 实际安装验证。
 
 ### Windows v4→v6 数据升级
 
-从 `E:/tmp/jev-access-acceptance/before-history-migration.db` 创建字节副本，在隔离目录 `E:/tmp/jev-windows-upgrade-20260925/run` 运行最新 Windows sidecar。源备份 SHA256 为 `85AEA7772C4FCA262626B232A214D7551B33B9028F67C9100724F4364937D25F`；只操作副本，配套 provider TOML 也复制到隔离目录。
+从 `本机临时目录/jev-access-acceptance/before-history-migration.db` 创建字节副本，在隔离目录 `本机临时目录/jev-windows-upgrade-20260925/run` 运行最新 Windows sidecar。源备份 SHA256 为 `85AEA7772C4FCA262626B232A214D7551B33B9028F67C9100724F4364937D25F`；只操作副本，配套 provider TOML 也复制到隔离目录。
 
-十项检查全部通过：二进制/health 身份、schema v4→v6、12 条历史记录逐行逐字段一致、13 列与自增序列 12、一次性导入标记不变、provider 两次读取、M1/M2 入口读取、只读用量统计、admin 写入返回 401、重启后入口/历史/schema/统计保持。测试未调用上游；原始数据库备份未修改。机器可读结果为 `E:/tmp/jev-windows-upgrade-20260925/run/result.json`。
+十项检查全部通过：二进制/health 身份、schema v4→v6、12 条历史记录逐行逐字段一致、13 列与自增序列 12、一次性导入标记不变、provider 两次读取、M1/M2 入口读取、只读用量统计、admin 写入返回 401、重启后入口/历史/schema/统计保持。测试未调用上游；原始数据库备份未修改。机器可读结果为 `本机临时目录/jev-windows-upgrade-20260925/run/result.json`。
 
 ### 尚未完成的复用场景与当前边界
 
@@ -506,7 +506,7 @@ health 报告产品 `jev-switch`、版本 `0.1.0`、`api_revision=1`、`build_re
 
 ### 安装、来源与运行
 
-为覆盖不要求管理员权限的真实安装路径，按包内 NSIS 配置 `INSTALLMODE=currentUser` 执行 `src-tauri/target/release/bundle/nsis/jev-switch_0.1.0_x64-setup.exe /S /D=E:/tmp/jev-nsis-install-20260925/app`。安装进程退出码 0；HKCU 卸载登记为 `jev-switch 0.1.0`，安装目录和卸载器路径与隔离目标相符。
+为覆盖不要求管理员权限的真实安装路径，按包内 NSIS 配置 `INSTALLMODE=currentUser` 执行 `src-tauri/target/release/bundle/nsis/jev-switch_0.1.0_x64-setup.exe /S /D=本机临时目录/jev-nsis-install-20260925/app`。安装进程退出码 0；HKCU 卸载登记为 `jev-switch 0.1.0`，安装目录和卸载器路径与隔离目标相符。
 
 安装后核对：
 
@@ -519,7 +519,7 @@ health 报告产品 `jev-switch`、版本 `0.1.0`、`api_revision=1`、`build_re
 
 启动的是安装目录中的 `jev-switch.exe`（PID 79900），sidecar PID 34584、WebView2 PID 53660。`/health` 返回产品 `jev-switch`、版本 `0.1.0`、`api_revision=1`，`build_revision=null`。sidecar 只监听 `127.0.0.1:11435`。本地 UI CDP 走查 Dashboard、Providers、Routing、Playground 四页，均为 CSS 视口 `1000×650`、文档宽 1000px、无横向溢出；renderer exception 计数为 0。原生窗口位于 `(292,82)`，外框 `1016×689`，工作区 `1600×852`、96 DPI，完整居中可见。
 
-daemon 配置、SQLite 与日志通过 `APPDATA` 环境变量隔离在 `E:/tmp/jev-nsis-install-20260925/appdata/jev-switch`。该库 `call_logs=0`，未调用真实上游；用户现有 `C:/Users/56506/AppData/Roaming/jev-switch/providers.toml` 和 `C:/Users/56506/.jev-switch` 未被此次进程触碰。WebView2 自身仍使用默认 profile `C:/Users/56506/AppData/Local/io.github.arcj137442.jevswitch/EBWebView`；该 profile 早于本轮存在，实测后保留、未删除。页面与完整安装证据见 `E:/tmp/jev-nsis-install-20260925/ui-smoke.json` 和 `install-evidence.json`。
+daemon 配置、SQLite 与日志通过 `APPDATA` 环境变量隔离在 `本机临时目录/jev-nsis-install-20260925/appdata/jev-switch`。该库 `call_logs=0`，未调用真实上游；用户现有 `%USERPROFILE%/AppData/Roaming/jev-switch/providers.toml` 和 `%USERPROFILE%/.jev-switch` 未被此次进程触碰。WebView2 自身仍使用默认 profile `%USERPROFILE%/AppData/Local/io.github.arcj137442.jevswitch/EBWebView`；该 profile 早于本轮存在，实测后保留、未删除。页面与完整安装证据见 `本机临时目录/jev-nsis-install-20260925/ui-smoke.json` 和 `install-evidence.json`。
 
 ### 卸载、MSI 与仍未覆盖的动作
 
@@ -549,20 +549,20 @@ daemon 配置、SQLite 与日志通过 `APPDATA` 环境变量隔离在 `E:/tmp/j
 
 ## 追加 Tauri 包内调用联调的工具门槛（2026-09-25 10:11）
 
-准备以提取目录中经 SHA256 核对的 Tauri 包，使用全新 E 盘 APPDATA、WebView profile 与本机固定响应上游，补测入口创建、调用、停用和恢复。工具在 PowerShell 命令执行前返回 `blocked by policy`；因此夹具文件/目录、进程和监听均未创建。随后只读核对确认 `E:/tmp/jev-tauri-local-integration-20260925` 不存在、没有 Jev 可执行进程，11435、18768、9239 仍无监听。当前工具列表没有 Tauri MCP；本轮未通过 Node、其他 shell 或进程接口重试这个启动动作。它是额外尝试的包内冷启动联调，失败不影响此前已有的 MSI 解包冷启动与 NSIS currentUser 实装证据；但也不补足完整 Tauri 交互、复用既有 daemon、托盘退出、MSI per-machine 安装或真实上游调用。
+准备以提取目录中经 SHA256 核对的 Tauri 包，使用全新 E 盘 APPDATA、WebView profile 与本机固定响应上游，补测入口创建、调用、停用和恢复。工具在 PowerShell 命令执行前返回 `blocked by policy`；因此夹具文件/目录、进程和监听均未创建。随后只读核对确认 `本机临时目录/jev-tauri-local-integration-20260925` 不存在、没有 Jev 可执行进程，11435、18768、9239 仍无监听。当前工具列表没有 Tauri MCP；本轮未通过 Node、其他 shell 或进程接口重试这个启动动作。它是额外尝试的包内冷启动联调，失败不影响此前已有的 MSI 解包冷启动与 NSIS currentUser 实装证据；但也不补足完整 Tauri 交互、复用既有 daemon、托盘退出、MSI per-machine 安装或真实上游调用。
 
 ## MSI 机器级实装与已安装 Tauri 启动（2026-09-25 10:23）
 
 用户确认先前批准的 UAC 属于 Jev Switch 安装，并已完成安装、看到 Tauri 界面启动。随后只读核验确认：
 
 - 安装源是 `src-tauri/target/release/bundle/msi/jev-switch_0.1.0_x64_en-US.msi`，SHA256 `9EB29A439045908D47F62E0FD33A8C51CAB452C3697795751872FCBF8A396000`。MSI ProductName/ProductVersion 为 `jev-switch 0.1.0`，`ALLUSERS=1`；verbose MSI 日志记录安装成功、错误状态 0。
-- HKLM Windows Installer 卸载登记为 `jev-switch 0.1.0`，ProductCode `{36C89DAC-A2D0-4E54-A7FA-673C04767998}`，安装目录为 `E:/tmp/jev-nsis-install-20260925/app`。当前 `jev-switch.exe` 与 `jev-switch-daemon.exe` 均由该目录运行；daemon 仅监听 `127.0.0.1:11435`。
+- HKLM Windows Installer 卸载登记为 `jev-switch 0.1.0`，ProductCode `{36C89DAC-A2D0-4E54-A7FA-673C04767998}`，安装目录为 `本机临时目录/jev-nsis-install-20260925/app`。当前 `jev-switch.exe` 与 `jev-switch-daemon.exe` 均由该目录运行；daemon 仅监听 `127.0.0.1:11435`。
 - 已安装 Tauri sidecar 的 `/health` 返回 `status=ok`、产品 `jev-switch`、版本 `0.1.0`、`api_revision=1`、`build_revision=null`。用户确认桌面界面正常出现；本轮没有取得新截图或该次原生窗口尺寸数据。
 - 安装后的主程序 SHA256 为 `194BA674D93F25185DA6EBD21AF5A7DEF3A5A2E2DA4C561D7B9D701EE6DAD525`；daemon 为 `F8534846040B598E8D791FB5A46E19D3A00166AD5950D4651575B260F020F779`；JS/CSS 为 `D03B2AF6B75C178161E8016D563E514DFB68C0551152EE097AC570849F622BFD` / `04A5EC7C208CA1804F23C0D0C6F608F87F51A69D32519BFDACBFD4196704F3AC`。这些与本次 MSI 随包内容相符，JS/CSS 也与当前 `ui/dist` 相符。
 - 本次安装使用默认 `%APPDATA%\jev-switch`。应用运行配置含 Vercel 地址 `https://ai-gateway.vercel.sh/v4/ai/evaluation-model`，但未解析到 API key；runtime snapshot、当前 shell 及用户/机器环境均未提供 `AI_GATEWAY_API_KEY`。本地核查先前测试 TOML/JSON、相关 SQLite 数据库及指定 Claude Opus 5 会话记录，没有找到真实 Vercel key。可见的具体 key 只属于本地 Laya 夹具、`example.invalid` 自动化测试或 loopback demo，均不导入；密钥值没有写入终端结果或文档。
 - 已安装版 `jev-switch.db` 在 10:24 留有两条失败调用：`jev`、`jev-zh` 均为 HTTP 503，耗时约 6.7 秒，记录未选出 upstream provider/model。没有把失败记录误判为真实上游验收，也没有继续发起无凭据请求。成功调用仍需在取得真实 Vercel key 后进行。
 
-该检查点完成了 MSI perMachine 实装、实际安装版启动、daemon 身份与随包资源来源核对。它不替代复用已有 daemon、托盘退出、安装版窗口/DPI 几何、真实 Vercel 请求和 P6 展示/发布验收。MSI verbose 日志在 `E:/tmp/jev-switch-msi-install.log`，含 Windows 用户名元数据，没有 API key；删除该临时日志的操作被执行策略拦截，因此没有换其他方式删除，日志未进入仓库。
+该检查点完成了 MSI perMachine 实装、实际安装版启动、daemon 身份与随包资源来源核对。它不替代复用已有 daemon、托盘退出、安装版窗口/DPI 几何、真实 Vercel 请求和 P6 展示/发布验收。MSI verbose 日志在 `本机临时目录/jev-switch-msi-install.log`，含 Windows 用户名元数据，没有 API key；删除该临时日志的操作被执行策略拦截，因此没有换其他方式删除，日志未进入仓库。
 
 ## 已安装 Tauri 的 Vercel 配置与连通探测（2026-09-25 11:12）
 
@@ -576,7 +576,7 @@ daemon 配置、SQLite 与日志通过 `APPDATA` 环境变量隔离在 `E:/tmp/j
 
 ## 已安装 Tauri 的桌面恢复尝试（2026-09-25 11:41）
 
-按 `computer-use` 技能列出的 Windows app 清单选中唯一运行的 `jev-switch` 窗口（路径 `E:/tmp/jev-nsis-install-20260925/app/jev-switch.exe`，标题 `Jev-Switch`），调用窗口激活时两次均返回 `failed to activate captured window`；中间重新枚举并重新绑定窗口后再次失败。根据技能的恢复规则停止桌面输入，没有沿用坐标/句柄，也没有切换到 PowerShell/UIA 等自动化方式。没有获得新截图或 key 字段界面证据。窗口仍需在桌面端恢复显示；真实 Vercel key 仍未设置。
+按 `computer-use` 技能列出的 Windows app 清单选中唯一运行的 `jev-switch` 窗口（路径 `本机临时目录/jev-nsis-install-20260925/app/jev-switch.exe`，标题 `Jev-Switch`），调用窗口激活时两次均返回 `failed to activate captured window`；中间重新枚举并重新绑定窗口后再次失败。根据技能的恢复规则停止桌面输入，没有沿用坐标/句柄，也没有切换到 PowerShell/UIA 等自动化方式。没有获得新截图或 key 字段界面证据。窗口仍需在桌面端恢复显示；真实 Vercel key 仍未设置。
 
 ## 已安装实例的壳/sidecar 进程关系（2026-09-25 11:47）
 
@@ -607,12 +607,12 @@ daemon 配置、SQLite 与日志通过 `APPDATA` 环境变量隔离在 `E:/tmp/j
 
 先确认 `127.0.0.1:11435/health` 返回匹配的 Jev 身份、版本和 API revision，再启动一个隐藏的隔离 Tauri WebView 测试壳。该壳调用生产路径共用的 `start_with_probe()` 和 `spawn_watch()`：探测到的健康响应来自当前 MSI 安装版 daemon；启动逻辑命中复用分支后，WebView 从既有 daemon 成功导航到 `http://127.0.0.1:11435/`。
 
-为避免服务中途退出时产生副作用，测试注入的 spawn 回调只记录并返回错误，不会创建子进程。断言通过：导航加载成功、spawn 回调未执行、ShellState 没有子进程；测试壳以 exit 0 退出后再次探测，原 daemon 仍为 `RuntimeProbe::Ready`。WebView2 数据目录隔离在 `E:/tmp/jev-tauri-reuse-live-<test-process-id>`，未修改现有应用数据、停止或替换当前安装进程。
+为避免服务中途退出时产生副作用，测试注入的 spawn 回调只记录并返回错误，不会创建子进程。断言通过：导航加载成功、spawn 回调未执行、ShellState 没有子进程；测试壳以 exit 0 退出后再次探测，原 daemon 仍为 `RuntimeProbe::Ready`。WebView2 数据目录隔离在 `本机临时目录/jev-tauri-reuse-live-<test-process-id>`，未修改现有应用数据、停止或替换当前安装进程。
 
 执行命令：
 
 ```powershell
-$env:JEV_TAURI_REUSE_TEST_DIR = 'E:\tmp\jev-tauri-reuse-live-<test-process-id>'
+$env:JEV_TAURI_REUSE_TEST_DIR = '本机临时目录\jev-tauri-reuse-live-<test-process-id>'
 cargo test --manifest-path src-tauri/Cargo.toml --locked --offline isolated_tauri_shell_reuses_live_daemon_and_leaves_it_running -- --ignored --nocapture
 ```
 
@@ -637,7 +637,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked --offline isolated_taur
 
 ## 已安装 Tauri 导入真实凭据与实际调用（2026-09-25 13:54）
 
-当前机器级安装进程仍为 `E:\tmp\jev-nsis-install-20260925\app\jev-switch.exe`（PID 1620）及其 daemon（PID 62236，`127.0.0.1:11435`）；主窗口标题为 `Jev-Switch`。本次没有停止、替换或重启该实例。
+当前机器级安装进程仍为 `本机临时目录\jev-nsis-install-20260925\app\jev-switch.exe`（PID 1620）及其 daemon（PID 62236，`127.0.0.1:11435`）；主窗口标题为 `Jev-Switch`。本次没有停止、替换或重启该实例。
 
 用户提供的真实 Vercel 凭据通过该已安装 daemon 的 `PUT /v1/admin/providers` 写入现有 `vercel` provider。写入时保留完整提供商表，核验到 provider 数量仍为 2、`laya` 保留、Vercel 启用且地址未变，管理 API 返回 `api_key_set=true`。`/v1/admin/config/storage` 显示运行配置权威为 SQLite、TOML 快照无漂移。凭据明文没有写入本仓库文档、命令输出或测试日志。
 
@@ -653,13 +653,13 @@ cargo test --manifest-path src-tauri/Cargo.toml --locked --offline isolated_taur
 
 离线 `cargo test --manifest-path rs/Cargo.toml --workspace --locked --offline` 全部通过。随后以新构建 daemon、独立配置目录和 `127.0.0.1:11439` 做了一次真实上游调用；key 由子进程环境变量提供，没有写入候选配置。`typesafe-ai/jev` 返回 HTTP 200，route trace 选中 provider `vercel` / model `typesafe-ai/jev`，Jev `noul` 概率为 0.99，usage 为 352 input / 23 output tokens，1 次 upstream，daemon 记录延迟 31,596 ms；费用字段仍为 unknown。该实测证明**当前源码构建的 daemon** 已能按官方 TypeSafe API 完成一条真实调用，不代表当前已安装 Tauri 已升级或验证成功。Choice/Score 缺少 confidence 的响应映射仍需单独做协议核验。
 
-当前机器级安装 Tauri 仍保持原样并继续运行；其中已保存的 Vercel key 与旧 `/v4/ai/evaluation-model` 配置未改。之前对这个已安装实例的真实调用仍是 HTTP 404 / 847 ms，不能计作通过。源码候选的 Vercel provider 已通过临时管理 API 禁用，但测试 daemon PID 70548 仍监听 11439；key 仍在该进程继承的环境块中，直到该进程结束。尝试停止该临时候选并删除隔离目录的操作被自动策略拒绝（`blocked by policy`），没有继续尝试绕过；需要用户从任务管理器结束 PID 70548 后，再清理 `E:\tmp\jev-vercel-typesafe-candidate-20260925`。P5 仍待新包/已安装 Tauri 上的实测、Choice/Score 协议确认及其余验收。
+当前机器级安装 Tauri 仍保持原样并继续运行；其中已保存的 Vercel key 与旧 `/v4/ai/evaluation-model` 配置未改。之前对这个已安装实例的真实调用仍是 HTTP 404 / 847 ms，不能计作通过。源码候选的 Vercel provider 已通过临时管理 API 禁用，但测试 daemon PID 70548 仍监听 11439；key 仍在该进程继承的环境块中，直到该进程结束。尝试停止该临时候选并删除隔离目录的操作被自动策略拒绝（`blocked by policy`），没有继续尝试绕过；需要用户从任务管理器结束 PID 70548 后，再清理 `本机临时目录\jev-vercel-typesafe-candidate-20260925`。P5 仍待新包/已安装 Tauri 上的实测、Choice/Score 协议确认及其余验收。
 
 ## TypeSafe adapter 更新后的 Tauri 包构建（2026-09-25 14:34）
 
 按 `docs/deployment.md` 从 `src-tauri` 目录构建，避免在仓库根目录执行时把 `beforeBuildCommand` 的 `ui` 相对路径解析为 `ui/ui`。先用最新 release daemon 刷新 Tauri external sidecar，再运行 `cargo tauri build`；Tauri 自动完成 UI TypeScript 检查与 Vite 生产构建，NSIS/MSI 均成功生成。新的 NSIS SHA256 为 `D9BE4CAE577B0F93E8CE38F87D04BB79F357C22DA6173F738CCF8DEC165B64A4`，MSI SHA256 为 `DF5CB194676757161E1994F7F371E9F367F9B9EEA088D7BF65B13DE9255703BB`。此前 UI tests 为 17/17，Rust workspace 离线测试全通过，`git diff --check` 通过（仅换行符提示）。
 
-这两个是尚未安装的新候选包。机器级旧安装版仍运行于 `E:\tmp\jev-nsis-install-20260925\app`，Tauri PID 1620、daemon PID 62236 持续监听 11435；源码候选 daemon PID 70548 仍监听 11439，调用后 Vercel 已禁用，但它的进程环境仍保留 API key。此前对候选进程清理动作收到 `blocked by policy` 后，没有再换方法停止进程。新包尚未安装、冷启动或验证 UI/daemon 同版本一致。
+这两个是尚未安装的新候选包。机器级旧安装版仍运行于 `本机临时目录\jev-nsis-install-20260925\app`，Tauri PID 1620、daemon PID 62236 持续监听 11435；源码候选 daemon PID 70548 仍监听 11439，调用后 Vercel 已禁用，但它的进程环境仍保留 API key。此前对候选进程清理动作收到 `blocked by policy` 后，没有再换方法停止进程。新包尚未安装、冷启动或验证 UI/daemon 同版本一致。
 
 ## TypeSafe Choice/Score 候选核验、首启文件权限修复与同 revision 制品（2026-09-25 15:53）
 
@@ -692,7 +692,7 @@ Tauri CLI 生成 MSI/NSIS 时两次报告 bundle-type 标记写入失败，并�
 
 ### MSI 内嵌 payload 只读提取复核（2026-09-25 16:17）
 
-不运行 Installer 动作，使用只读 Windows Installer 数据库 API 从当前 MSI 的 `_Streams` 表读取 `app.cab`（6,000,491 bytes，SHA256 `4C110247D9828B291CCB31E0FD44201EC46BD06F904ABDE8C7D231BECE23F41F`），再以系统 `expand.exe` 展开到 `E:/tmp/jev-msi-unpacked-typesafe-final-20260925`。实际解出五个文件，shell、daemon、`index.html`、JS 与 CSS 均逐字节匹配本轮构建输入；分别匹配 `0B38C994…75677530`、`E071CB19…C63F8DEA`、`1D58352C…7761D0B`、`D03B2AF6…F622BFD`、`04A5EC7C…6704F3AC`。本项证明最新 MSI 封装来源正确；没有启动 shell 或修改当前安装。下一项仍是腾出 C 盘空间后做真实安装/冷启动。
+不运行 Installer 动作，使用只读 Windows Installer 数据库 API 从当前 MSI 的 `_Streams` 表读取 `app.cab`（6,000,491 bytes，SHA256 `4C110247D9828B291CCB31E0FD44201EC46BD06F904ABDE8C7D231BECE23F41F`），再以系统 `expand.exe` 展开到 `本机临时目录/jev-msi-unpacked-typesafe-final-20260925`。实际解出五个文件，shell、daemon、`index.html`、JS 与 CSS 均逐字节匹配本轮构建输入；分别匹配 `0B38C994…75677530`、`E071CB19…C63F8DEA`、`1D58352C…7761D0B`、`D03B2AF6…F622BFD`、`04A5EC7C…6704F3AC`。本项证明最新 MSI 封装来源正确；没有启动 shell 或修改当前安装。下一项仍是腾出 C 盘空间后做真实安装/冷启动。
 
 ### 仍需用户协助释放的已安装运行时
 
@@ -706,7 +706,7 @@ Tauri CLI 生成 MSI/NSIS 时两次报告 bundle-type 标记写入失败，并�
 
 ## P5 增量：同 revision 的隔离 Web 实跑（2026-09-25 16:45）
 
-之后把本轮生成的空白本地配置放在 `E:/tmp/jev-switch-same-revision-web-20260925-1633/providers.toml`，用 Windows sidecar 在 `127.0.0.1:11440` 启动；配置无 provider、无 key、无真实用户数据。其 `/health` 为 `typesafe-confidence-cost-perms-20260925`。当前工作树 Vite 再次运行于 5173，并只在本轮新建的浏览器标签内把 `window.__JEV_BASE__` 指到 11440。浏览器从 `http://127.0.0.1:5173` 跨源 `GET /health` 返回 200；四页正确显示该隔离实例的运行状态和空配置态，1592×768 下无水平溢出。没有写入设置、创建 Token、探测 provider 或运行模型，因此这次证明同 revision Web 页面能连接新内核并读取状态，不证明写入/重启恢复或真实上游路径。
+之后把本轮生成的空白本地配置放在 `本机临时目录/jev-switch-same-revision-web-20260925-1633/providers.toml`，用 Windows sidecar 在 `127.0.0.1:11440` 启动；配置无 provider、无 key、无真实用户数据。其 `/health` 为 `typesafe-confidence-cost-perms-20260925`。当前工作树 Vite 再次运行于 5173，并只在本轮新建的浏览器标签内把 `window.__JEV_BASE__` 指到 11440。浏览器从 `http://127.0.0.1:5173` 跨源 `GET /health` 返回 200；四页正确显示该隔离实例的运行状态和空配置态，1592×768 下无水平溢出。没有写入设置、创建 Token、探测 provider 或运行模型，因此这次证明同 revision Web 页面能连接新内核并读取状态，不证明写入/重启恢复或真实上游路径。
 
 测试完成后关闭了新建标签、Vite 与 sidecar，5173/11440 均无监听。无凭据隔离配置、SQLite 与启动日志保留在 E 盘临时测试目录供复核；原有安装 PID 1620/62236 与旧候选 PID 70548 保持运行且未修改。
 
@@ -724,7 +724,7 @@ Tauri CLI 生成 MSI/NSIS 时两次报告 bundle-type 标记写入失败，并�
 
 用户交接报告已记录旧 Jev 进程全部退出、相关端口释放及 C 盘 L1 清理完成。随后只读复核 C: 有 758.4 MB 可用，Jev 进程不存在，11435/11439 无监听。WebView2 仍有进程，但分别属于 Clash Verge、CC Switch 与 GameViewer，其 `--user-data-dir` 均不是 Jev profile；未终止这些进程。
 
-使用报告中已核对的最新 MSI，以普通权限运行 `msiexec /i <MSI> /qn /l*v E:\tmp\jev-msi-install-final-20260925.log`。安装器退出 1603；日志在 `InstallInitialize` 明确报告 Error 1730：“You must be an Administrator to remove this application.” 日志并显示静默安装禁用了 elevation prompt。失败后旧卸载登记 `{36C89DAC-A2D0-4E54-A7FA-673C04767998}` 仍在，未观察到 Jev 进程或端口重新出现；因此此动作没有证明新版已安装。
+使用报告中已核对的最新 MSI，以普通权限运行 `msiexec /i <MSI> /qn /l*v 本机临时目录\jev-msi-install-final-20260925.log`。安装器退出 1603；日志在 `InstallInitialize` 明确报告 Error 1730：“You must be an Administrator to remove this application.” 日志并显示静默安装禁用了 elevation prompt。失败后旧卸载登记 `{36C89DAC-A2D0-4E54-A7FA-673C04767998}` 仍在，未观察到 Jev 进程或端口重新出现；因此此动作没有证明新版已安装。
 
 随后通过标准 `Start-Process -Verb RunAs` 启动交互式安装，没有改用替代 shell 或禁用权限检查。系统产生 UAC `consent.exe`（PID 39188，20:26:42）；20:32 复核时该进程仍在，提权日志尚未生成。UAC 窗口须由用户亲自核对处理；Agent 不操作安全确认界面。等待用户处理后再查看 MSI 详细日志、ProductCode/安装路径、运行时 `/health` 与四页表现。
 
@@ -732,7 +732,7 @@ Tauri CLI 生成 MSI/NSIS 时两次报告 bundle-type 标记写入失败，并�
 
 ### 安装、启动和运行身份
 
-用户已完成 UAC 并安装。本轮读取 `E:\tmp\jev-msi-install-elevated-20260925.log`，确认安装退出状态 0 且末尾为 `Product: jev-switch -- Installation completed successfully`。机器级 ProductCode 为 `{408A33CD-E2A4-481F-8CCE-F6C9777C3554}`，安装目录为 `E:\tmp\jev-nsis-install-20260925\app\`。随后启动已安装 `jev-switch.exe`，PID 11680，主窗口标题 `Jev-Switch`、Responding=True；其 daemon 子进程 PID 84236 监听 `127.0.0.1:11435`。
+用户已完成 UAC 并安装。本轮读取 `本机临时目录\jev-msi-install-elevated-20260925.log`，确认安装退出状态 0 且末尾为 `Product: jev-switch -- Installation completed successfully`。机器级 ProductCode 为 `{408A33CD-E2A4-481F-8CCE-F6C9777C3554}`，安装目录为 `本机临时目录\jev-nsis-install-20260925\app\`。随后启动已安装 `jev-switch.exe`，PID 11680，主窗口标题 `Jev-Switch`、Responding=True；其 daemon 子进程 PID 84236 监听 `127.0.0.1:11435`。
 
 已安装 shell SHA256 为 `0B38C9947C76FE56DDFBC5B30131F8C68EEC049FB8382FC5AF01C05175677530`，sidecar SHA256 为 `E071CB195E7963E2F40F7CFF85C9EB148477CF13A0BD9FD78AB022CA1951264A`。`GET /health` 返回 HTTP 200、`status=ok`、`api_revision=1`、`build_revision=typesafe-confidence-cost-perms-20260925`；本次测试确认实际进程即目标 revision。
 
@@ -750,7 +750,7 @@ Tauri CLI 生成 MSI/NSIS 时两次报告 bundle-type 标记写入失败，并�
 
 ### 包内静态 UI 对已安装 daemon 的四页检查
 
-为不覆盖安装文件，将安装包 `ui/dist` 复制到 `E:\tmp\jev-switch-ui-review-20260925`，仅在副本 `index.html` 加入 `window.__JEV_BASE__="http://127.0.0.1:11435"`。临时静态服务在 `127.0.0.1:5173` 运行，Codex IAB 隔离标签读取这份包内 JS/CSS，并直接读取已安装 sidecar：
+为不覆盖安装文件，将安装包 `ui/dist` 复制到 `本机临时目录\jev-switch-ui-review-20260925`，仅在副本 `index.html` 加入 `window.__JEV_BASE__="http://127.0.0.1:11435"`。临时静态服务在 `127.0.0.1:5173` 运行，Codex IAB 隔离标签读取这份包内 JS/CSS，并直接读取已安装 sidecar：
 
 - Dashboard 显示 daemon 正常、Local 模式、9 条路由，最近调用列出两条成功和一条旧 404。
 - Providers 显示 2/2 启用；只确认 Vercel key 已配置，UI 未揭露 key。
@@ -758,7 +758,7 @@ Tauri CLI 生成 MSI/NSIS 时两次报告 bundle-type 标记写入失败，并�
 - Playground 显示共享输入表单、公开入口与直连上游的目标选择区；已选 `jev` 和 `jev-vercel` 两个入口，可“运行全部”。没有在此浏览器副本额外提交模型请求或修改配置。
 - 1280×720 IAB 截图显示输入/目标区域使用主内容宽度，未出现历史描述的左侧大块空白。截图来自浏览器，不是 Tauri WebView；尚不能据此判定安装版原生窗口在 900×560、其他长宽比、Windows DPI 或多屏环境下正确。
 
-临时静态服务和 IAB 标签已关闭；没有更改包内安装文件。尝试删除测试副本时，自动审批拦截了针对 `E:\tmp\jev-switch-ui-review-20260925` 的递归删除命令，因此该无凭据副本保留在 E 盘，仅含包内静态资源和 localhost API base 覆盖，不含 API key；没有换另一条删除路径重试。`apps=[]` 且当前 CUA 未提供 Windows 原生 window API，因此只能只读确认原生进程有窗口且响应，不能读取原生 Tauri screenshot、托盘菜单或实际客户区像素。本轮未操作托盘或宣称完成原生窗口验收。原生 Tauri 四页实景、首启大小、DPI/多屏、托盘退出与退出重启后的 DB 状态仍为 P5 未完成项。P5 的安装包身份、真实 TypeSafe 调用和配置热更证据已补齐；P6 仍未开始。
+临时静态服务和 IAB 标签已关闭；没有更改包内安装文件。尝试删除测试副本时，自动审批拦截了针对 `本机临时目录\jev-switch-ui-review-20260925` 的递归删除命令，因此该无凭据副本保留在 E 盘，仅含包内静态资源和 localhost API base 覆盖，不含 API key；没有换另一条删除路径重试。`apps=[]` 且当前 CUA 未提供 Windows 原生 window API，因此只能只读确认原生进程有窗口且响应，不能读取原生 Tauri screenshot、托盘菜单或实际客户区像素。本轮未操作托盘或宣称完成原生窗口验收。原生 Tauri 四页实景、首启大小、DPI/多屏、托盘退出与退出重启后的 DB 状态仍为 P5 未完成项。P5 的安装包身份、真实 TypeSafe 调用和配置热更证据已补齐；P6 仍未开始。
 
 ## P5 增量：本地 Laya 实路由与请求追踪（2026-09-26 00:42）
 
@@ -802,7 +802,7 @@ Tauri CLI 生成 MSI/NSIS 时两次报告 bundle-type 标记写入失败，并�
 
 `cargo tauri build --bundles nsis,msi` 以 exit 0 完成；Tauri CLI 为 2.9.6，build hook 重跑 `npm run build --prefix ui`，JS 产物为 `index-TdeG6B1Y.js`、CSS 为 `index-C4hssDtU.css`。生成 MSI SHA-256 `268F8820317FBECC7CA4D1631781F37D3CD6CF269F797D5F93E402870FB5E76A`，NSIS SHA-256 `BDBE3948ECB865E0FDDD527F20F0E9522B983BF67F709BF9C03A1790076B8409`。
 
-将 MSI 管理映像只读提取到 `E:\tmp\jev-call-history-msi-extract-20260926` 后，逐一比对源码与提取文件：`index.html` SHA-256 `58BE849C432404419E8C228007C019E3B46C03A2E0CD982CA65B3BC9E04C820F`；CSS `D2A0771D53024E6D3A1FE8EA6AE3AA6DD58B7FD652EDD8561050CE11696F0FF3`；JS `46AFBAE2F030C319E7A0375E30E27F831B43134B5EA3F1A38F5B01F485331036`；shell `D22C709F9D2804132581757A426FA54691E614B8B78AAA1072909F1098B8E095`；daemon `E071CB195E7963E2F40F7CFF85C9EB148477CF13A0BD9FD78AB022CA1951264A`，全部与包内副本一致。新 MSI 没有安装；NSIS 是本轮同次构建产物，未单独提取或运行安装程序。
+将 MSI 管理映像只读提取到 `本机临时目录\jev-call-history-msi-extract-20260926` 后，逐一比对源码与提取文件：`index.html` SHA-256 `58BE849C432404419E8C228007C019E3B46C03A2E0CD982CA65B3BC9E04C820F`；CSS `D2A0771D53024E6D3A1FE8EA6AE3AA6DD58B7FD652EDD8561050CE11696F0FF3`；JS `46AFBAE2F030C319E7A0375E30E27F831B43134B5EA3F1A38F5B01F485331036`；shell `D22C709F9D2804132581757A426FA54691E614B8B78AAA1072909F1098B8E095`；daemon `E071CB195E7963E2F40F7CFF85C9EB148477CF13A0BD9FD78AB022CA1951264A`，全部与包内副本一致。新 MSI 没有安装；NSIS 是本轮同次构建产物，未单独提取或运行安装程序。
 
 Tauri bundler 对 MSI/NSIS shell patch 都报告 `__TAURI_BUNDLE_TYPE variable not found`，并提示 updater 更新功能可能不可用。`src-tauri` 当前未发现 updater 插件依赖或注册，因此该项记录为构建警告，未据此宣称或测试 updater 功能。MSI/NSIS 成功产出；安装版 WebView、窄屏真实事件和托盘/数据库生命周期仍须运行验收，P5/P6 保持未完成。
 
@@ -822,7 +822,7 @@ Tauri bundler 对 MSI/NSIS shell patch 都报告 `__TAURI_BUNDLE_TYPE variable n
 
 daemon 将失败 trace 与 HTTP status、上游调用数写入 `call_logs.route_trace_json`，并与 `jev-<log id>` / `x-jev-request-id` 关联。活动 API 继续返回可读失败摘要（provider/model/status/calls），路由逐跳细节保留在次要 `route_trace` 字段。core 用单测验证 429 候选转移后安全记录不可重试失败；HTTP/SQLite 集成测试验证失败 request ID、provider/model、状态、调用数与数据库 trace 一致，且私有上游诊断串不进入 trace。Rust workspace 离线回归 **210 passed, 0 failed**，`history_retention` **5/5**。
 
-重新编译 release daemon 后，daemon 和 sidecar 输入 SHA-256 均为 `8A39D2E8A766C142C9046449CF7C7C51F17760EE954945BDB337C83023E362FE`。`npm --prefix ui run build` 通过，JS SHA-256 `46AFBAE2F030C319E7A0375E30E27F831B43134B5EA3F1A38F5B01F485331036`，CSS `D2A0771D53024E6D3A1FE8EA6AE3AA6DD58B7FD652EDD8561050CE11696F0FF3`。首次标准 Tauri 构建发现 beforeBuild hook 在 `ui` 子目录重复追加 `--prefix ui`；修正 `src-tauri/tauri.conf.json` 为 `npm run build` 后，UI hook 与未覆盖的 `cargo tauri build --bundles nsis,msi` 均成功。最终 MSI `11771F550F862051C67497630EA4964EA3C648A2C9D6165D06A4CF1448DE781E`，NSIS `7BF65D8FA30CEFA7F92296D7D668AA52EFB4D9E11ED0F30FC5A369F73C350283`。MSI 管理映像提取至 `E:\tmp\jev-failure-trace-msi-final-extract-20260926` 后，daemon、Tauri 主壳（SHA-256 `3A1F30E8CA07F2E63BFFADE3AE864637FB4514C2FB09144A7869A1FF55D45F7F`）、HTML、CSS、JS 全部逐文件 SHA-256 相同。
+重新编译 release daemon 后，daemon 和 sidecar 输入 SHA-256 均为 `8A39D2E8A766C142C9046449CF7C7C51F17760EE954945BDB337C83023E362FE`。`npm --prefix ui run build` 通过，JS SHA-256 `46AFBAE2F030C319E7A0375E30E27F831B43134B5EA3F1A38F5B01F485331036`，CSS `D2A0771D53024E6D3A1FE8EA6AE3AA6DD58B7FD652EDD8561050CE11696F0FF3`。首次标准 Tauri 构建发现 beforeBuild hook 在 `ui` 子目录重复追加 `--prefix ui`；修正 `src-tauri/tauri.conf.json` 为 `npm run build` 后，UI hook 与未覆盖的 `cargo tauri build --bundles nsis,msi` 均成功。最终 MSI `11771F550F862051C67497630EA4964EA3C648A2C9D6165D06A4CF1448DE781E`，NSIS `7BF65D8FA30CEFA7F92296D7D668AA52EFB4D9E11ED0F30FC5A369F73C350283`。MSI 管理映像提取至 `本机临时目录\jev-failure-trace-msi-final-extract-20260926` 后，daemon、Tauri 主壳（SHA-256 `3A1F30E8CA07F2E63BFFADE3AE864637FB4514C2FB09144A7869A1FF55D45F7F`）、HTML、CSS、JS 全部逐文件 SHA-256 相同。
 
 本轮未通过 Tauri MCP 重启安装版：当前可用工具集中没有 Tauri MCP；启动动作没有通过替代通道重试。新 MSI/NSIS 没有安装或运行，所以真实 Laya/Vercel 调用、正式数据目录 migration、WebView 屏幕尺寸与托盘/关闭生命周期仍需待安装版恢复后验证；本次 package/hash 与进程内测试不能替代原生联调。构建日志仍有 `__TAURI_BUNDLE_TYPE` updater 警告，仓库无 updater 插件配置，本次未验证 updater。
 
@@ -852,7 +852,7 @@ Playground 在短窗内主要操作离表单首部过远：“运行全部”在
 | 1440×900 | y=711–743 | 865 | 首屏内 |
 | 2560×1080 | y=695–727 | 1045 | 首屏内 |
 
-320×568 切换到直连上游后，按钮底 y=497、main 底 y=539；输入展开/收起及选择两类入口均实测往返。`npm run test --prefix ui` **21/21**，`npm run build --prefix ui`（含 `tsc --noEmit`）通过。`cargo tauri build --bundles nsis,msi` 成功：MSI SHA-256 `204281FF14C1BE8D875902647F85D55A8F2320CAD182A0B3498D84E16A289A51`，NSIS `B9CF2BA51775C1E65F0E4927A4E230F401BAA4373E8C5291DC2E4981DFBEFF68`。WiX `dark.exe` 提取到 `E:\tmp\jev-short-layout-msi-20260926`，shell、daemon、HTML、JS、CSS 全部与本次构建输入 SHA-256 匹配。MSI/NSIS 没有安装/启动；Tauri bundler 报 `__TAURI_BUNDLE_TYPE` 警告，dark.exe 有安装 UI ControlEvent 外键的 DARK1059 反编译警告。静态预览 daemon 不可达，不能调用真实模型；WebView/托盘/真实事件验收待后续，正式截图继续推迟。
+320×568 切换到直连上游后，按钮底 y=497、main 底 y=539；输入展开/收起及选择两类入口均实测往返。`npm run test --prefix ui` **21/21**，`npm run build --prefix ui`（含 `tsc --noEmit`）通过。`cargo tauri build --bundles nsis,msi` 成功：MSI SHA-256 `204281FF14C1BE8D875902647F85D55A8F2320CAD182A0B3498D84E16A289A51`，NSIS `B9CF2BA51775C1E65F0E4927A4E230F401BAA4373E8C5291DC2E4981DFBEFF68`。WiX `dark.exe` 提取到 `本机临时目录\jev-short-layout-msi-20260926`，shell、daemon、HTML、JS、CSS 全部与本次构建输入 SHA-256 匹配。MSI/NSIS 没有安装/启动；Tauri bundler 报 `__TAURI_BUNDLE_TYPE` 警告，dark.exe 有安装 UI ControlEvent 外键的 DARK1059 反编译警告。静态预览 daemon 不可达，不能调用真实模型；WebView/托盘/真实事件验收待后续，正式截图继续推迟。
 
 ### 2026-09-26 04:02：新包已核对，安装版仍关闭
 
@@ -861,7 +861,7 @@ Playground 在短窗内主要操作离表单首部过远：“运行全部”在
 
 ## 2026-09-26 04:28：安装版复起、Laya 历史摘要与升级待确认
 
-按用户指示重新启动已安装的 `jev-switch`。原安装目录为 `E:\tmp\jev-nsis-install-20260925\app`；health 返回 200，build revision 为 `typesafe-confidence-cost-perms-20260925`，daemon 监听 `127.0.0.1:11435`。复用本机 Laya `127.0.0.1:18767` 完成一次 `laya-english` 真实调用：HTTP 200、206 ms、49 input / 0 output tokens、1 次上游调用，答案 `noul=0.3461`。实时响应含完整 route trace（selected provider/model `laya` / `laya-english`）；该旧安装版持久化活动记录的 detail 只含入口、provider、model、状态、耗时、调用数、usage 与未知成本，没有答案和 trace。
+按用户指示重新启动已安装的 `jev-switch`。原安装目录为 `本机临时目录\jev-nsis-install-20260925\app`；health 返回 200，build revision 为 `typesafe-confidence-cost-perms-20260925`，daemon 监听 `127.0.0.1:11435`。复用本机 Laya `127.0.0.1:18767` 完成一次 `laya-english` 真实调用：HTTP 200、206 ms、49 input / 0 output tokens、1 次上游调用，答案 `noul=0.3461`。实时响应含完整 route trace（selected provider/model `laya` / `laya-english`）；该旧安装版持久化活动记录的 detail 只含入口、provider、model、状态、耗时、调用数、usage 与未知成本，没有答案和 trace。
 
 工作区前端已经对该事件做结构化摘要，并把原始 JSON 放在默认折叠的 disclosure 中。`npm test` 为 **21/21**，`npm run build` 通过。临时 Vite 页面连接同一个安装版 daemon；浏览器可访问性树显示“laya-english · 成功 HTTP 200 · 206 ms · laya → laya-english · 输入 49 / 输出 0 tokens · 1 次上游调用 · 成本未知”，其“展开原始 JSON”控件初始为 collapsed。临时 5173 服务在检查后已停止。
 
@@ -900,7 +900,7 @@ Tauri 更新仍等待 Windows UAC：consent.exe 存活，未见提权 msiexec、
 
 ### 安装版与 AppData
 
-用户已在 Windows UAC 安装确认并完成新版 MSI 安装。本轮启动安装目录 `E:\tmp\jev-nsis-install-20260925\app` 中的 `jev-switch.exe`：进程 PID 81208、标题 Jev-Switch；其子 daemon PID 83312。安装记录 ProductCode `{A01FC442-D138-4096-944C-7E80DD725222}`。`127.0.0.1:11435/health` 返回 200、version `0.1.0`、product `jev-switch`、API revision 1、`build_revision=null`。安装 shell SHA-256 `9BEA05596B3ACD42FDB1924F3EB44F65331F172CCC9F2ABB3104D12BDBBFB8D6`、daemon `8A39D2E8A766C142C9046449CF7C7C51F17760EE954945BDB337C83023E362FE`、UI JS `6C75A5A229333C8C3521219D053F0F7F33810CEB18A234B7A2895807617BCF57` 均和工作区 release 输入逐字节一致。以哈希和版本核对安装产物身份，不依赖 health 中空的 revision。
+用户已在 Windows UAC 安装确认并完成新版 MSI 安装。本轮启动安装目录 `本机临时目录\jev-nsis-install-20260925\app` 中的 `jev-switch.exe`：进程 PID 81208、标题 Jev-Switch；其子 daemon PID 83312。安装记录 ProductCode `{A01FC442-D138-4096-944C-7E80DD725222}`。`127.0.0.1:11435/health` 返回 200、version `0.1.0`、product `jev-switch`、API revision 1、`build_revision=null`。安装 shell SHA-256 `9BEA05596B3ACD42FDB1924F3EB44F65331F172CCC9F2ABB3104D12BDBBFB8D6`、daemon `8A39D2E8A766C142C9046449CF7C7C51F17760EE954945BDB337C83023E362FE`、UI JS `6C75A5A229333C8C3521219D053F0F7F33810CEB18A234B7A2895807617BCF57` 均和工作区 release 输入逐字节一致。以哈希和版本核对安装产物身份，不依赖 health 中空的 revision。
 
 正式数据目录 `%APPDATA%\jev-switch` 仍有 `providers.toml` 与 SQLite。只读查询表明数据库 migration 1–7 均已应用；历史保留至 event 15。Vercel key 仅通过管理 API 的掩码状态检查；不打印、不复制明文。当前 11435 由安装版 daemon 持有；验收 Docker 的 11436、旧 demo 的 5173 均未监听；Laya `127.0.0.1:18767` 仍监听。
 
@@ -934,13 +934,13 @@ Providers 页显示两项启用的接入配置、添加/ TOML 导入/编辑操�
 
 当前工作树的默认 Rust workspace 测试和 `ts-rs` feature workspace 测试均通过；Tauri shell 测试 10 项通过、3 项因需原生 Windows 环境而忽略；UI 测试 21/21，lint 与 TypeScript/Vite production build 通过。`cargo tauri build --bundles nsis,msi` 成功。
 
-发布制品 SHA-256：MSI `AF808B5F1C3151A600952CFE4D6759190F8F6B94DFCDD1911B78ADF43085F585`，NSIS `AD22835DFA59D157EABB08E7B19643E7A91868B778CEB593955D45FD642A6303`。使用 WiX `dark.exe` 将 MSI 解包到 `E:\tmp\jev-switch-goal-release-msi-20260926` 后，包内 Tauri shell、daemon、`index.html`、`index-rsyine2x.js` 和 `index-Cp7fxIgV.css` SHA-256 均与当前本地构建输入一致；解包退出码 0。`DARK1059` 报告的是安装 UI 表关联缺失，不影响载荷提取。构建仍提示未设置 `__TAURI_BUNDLE_TYPE`；仓库没有 updater 插件，因此没有宣称 updater 已验证。
+发布制品 SHA-256：MSI `AF808B5F1C3151A600952CFE4D6759190F8F6B94DFCDD1911B78ADF43085F585`，NSIS `AD22835DFA59D157EABB08E7B19643E7A91868B778CEB593955D45FD642A6303`。使用 WiX `dark.exe` 将 MSI 解包到 `本机临时目录\jev-switch-goal-release-msi-20260926` 后，包内 Tauri shell、daemon、`index.html`、`index-rsyine2x.js` 和 `index-Cp7fxIgV.css` SHA-256 均与当前本地构建输入一致；解包退出码 0。`DARK1059` 报告的是安装 UI 表关联缺失，不影响载荷提取。构建仍提示未设置 `__TAURI_BUNDLE_TYPE`；仓库没有 updater 插件，因此没有宣称 updater 已验证。
 
-只读检查显示安装版 daemon PID 83312 仍从 `E:\tmp\jev-nsis-install-20260925\app\jev-switch-daemon.exe` 服务，health HTTP 200，旧 UI JS 为 `index-BY96iTcq.js`。本轮未安装新包、未重启旧实例、未触发 UAC 或认证等待；新源码中的直连上游历史记录尚未在该安装版复验。Tauri WebView、托盘和原生 DPI/多屏仍待最终连续验收。
+只读检查显示安装版 daemon PID 83312 仍从 `本机临时目录\jev-nsis-install-20260925\app\jev-switch-daemon.exe` 服务，health HTTP 200，旧 UI JS 为 `index-BY96iTcq.js`。本轮未安装新包、未重启旧实例、未触发 UAC 或认证等待；新源码中的直连上游历史记录尚未在该安装版复验。Tauri WebView、托盘和原生 DPI/多屏仍待最终连续验收。
 
 ## 2026-09-26 09:03：隔离原生窗口多显示器几何
 
-对当前 `src-tauri/src/window_layout.rs` 显式运行隔离隐藏 WebView 测试 `native_initial_window_fits_each_attached_monitor`：1/1 通过。测试创建真实 Tauri 配置定义的隐藏 WebView 窗口，未启动 daemon、托盘、正式安装实例或访问用户数据；在三台连接的显示器上逐屏验证工作区边界、居中和最大逻辑客户区，显示缩放分别为 1.0、1.25、1.5，覆盖副屏负坐标。记录见 `E:\tmp\jev-window-multimonitor-20260925\native-multimonitor-test.log`。
+对当前 `src-tauri/src/window_layout.rs` 显式运行隔离隐藏 WebView 测试 `native_initial_window_fits_each_attached_monitor`：1/1 通过。测试创建真实 Tauri 配置定义的隐藏 WebView 窗口，未启动 daemon、托盘、正式安装实例或访问用户数据；在三台连接的显示器上逐屏验证工作区边界、居中和最大逻辑客户区，显示缩放分别为 1.0、1.25、1.5，覆盖副屏负坐标。记录见 `本机临时目录\jev-window-multimonitor-20260925\native-multimonitor-test.log`。
 
 该结果证明当前生产窗口尺寸/定位函数能在这些显示器几何下工作；它不验证正式安装版启动、多显示器间人工拖动、四页内容的 WebView 视觉重排或 DPI 截图。此前 14 项隔离 HTTP 检查使用的是另一版 daemon（SHA-256 `F8534846040B598E8D791FB5A46E19D3A00166AD5950D4651575B260F020F779`），全部针对 synthetic local HTTP fixture，未接真实上游；作为历史 HTTP 冒烟记录，不计为本次 MSI 载荷验收。
 
@@ -948,7 +948,7 @@ Providers 页显示两项启用的接入配置、添加/ TOML 导入/编辑操�
 
 直接启动本次 release daemon（SHA-256 `8A39D2E8A766C142C9046449CF7C7C51F17760EE954945BDB337C83023E362FE`），配置独立 `127.0.0.1:11439`、独立临时 providers 配置和 SQLite；上游使用进程内本机 synthetic HTTP fixture，不用任何真实 key 或账号。启动时移除继承环境内匹配 `API_KEY`、`TOKEN`、`SECRET`、`PASSWORD` 及厂商凭据的变量。静态首页、`index-rsyine2x.js`、`index-Cp7fxIgV.css` 的 SHA-256 分别与 MSI 解包内容完全一致。
 
-**14/14 场景通过**：验证当前二进制身份与 health；用管理 API 创建调用 token 和公开入口；三次请求都到达本机假上游并返回可追踪路由；强制终止/重启后路由和 token 可用、活动历史 3 条且 event IDs 稳定；禁用入口时公开调用为 404，启用后恢复；拒绝环路配置且保留原图；删除入口后请求为 404，历史和累计统计在再次重启后仍保留。结果 JSON 位于 `E:\tmp\jev-current-daemon-acceptance-20260926\result.json`，SQLite、providers 文件、daemon log 也都在该目录。结束复查：daemon 进程 0 个，11439 无监听。
+**14/14 场景通过**：验证当前二进制身份与 health；用管理 API 创建调用 token 和公开入口；三次请求都到达本机假上游并返回可追踪路由；强制终止/重启后路由和 token 可用、活动历史 3 条且 event IDs 稳定；禁用入口时公开调用为 404，启用后恢复；拒绝环路配置且保留原图；删除入口后请求为 404，历史和累计统计在再次重启后仍保留。结果 JSON 位于 `本机临时目录\jev-current-daemon-acceptance-20260926\result.json`，SQLite、providers 文件、daemon log 也都在该目录。结束复查：daemon 进程 0 个，11439 无监听。
 
 这补上此前隔离回归版本 SHA 与当前 build 不一致的问题，并证明当前 daemon、当前 UI 静态资产、持久配置和事件库在独立数据目录下共同工作。它不更改 `%APPDATA%\jev-switch`，不访问已安装实例、不安装 MSI、不验证原生 Tauri shell、不请求真实 Laya/Vercel，也不覆盖托盘/正式窗口验证。
 
@@ -956,19 +956,19 @@ Providers 页显示两项启用的接入配置、添加/ TOML 导入/编辑操�
 
 显式运行原本默认忽略的 `sidecar::tests::isolated_tauri_shell_reuses_live_daemon_and_leaves_it_running`，1/1 通过。测试先探测现有 `127.0.0.1:11435/health`，再创建独立 WebView2 profile 和隐藏 Tauri 测试壳；本地 UI 成功加载。注入的 sidecar 启动函数若被调用会直接失败，实际没有触发；退出时 `ShellState.child` 仍为空。
 
-结束后 health 仍为 HTTP 200，daemon PID 83312 与其原安装路径不变；测试 profile 在 `E:\tmp\jev-tauri-reuse-current-20260926`。该项证明当前壳代码可以识别兼容内核并复用其 HTTP 服务、完成 WebView 导航，同时不会误停已有 daemon。被复用 daemon 的 JS 仍是旧版，故该测试不验证本次 MSI 页面、冷启动 sidecar、托盘退出或正式 AppData 配置恢复。
+结束后 health 仍为 HTTP 200，daemon PID 83312 与其原安装路径不变；测试 profile 在 `本机临时目录\jev-tauri-reuse-current-20260926`。该项证明当前壳代码可以识别兼容内核并复用其 HTTP 服务、完成 WebView 导航，同时不会误停已有 daemon。被复用 daemon 的 JS 仍是旧版，故该测试不验证本次 MSI 页面、冷启动 sidecar、托盘退出或正式 AppData 配置恢复。
 
 ## 2026-09-26 09:26：原生 Tauri 壳 spawn 与退出收尾
 
 新增并显式运行忽略测试 `sidecar::tests::isolated_tauri_shell_spawns_and_stops_its_sidecar`。测试用当前 Tauri 壳测试 harness 建立隐藏 WebView，创建独立且 disabled 的 Laya 示例配置，强制启动分支为 `RuntimeProbe::Unavailable`，并通过工作目录中的当前 sidecar 与 `ui/dist` 启动临时服务 `127.0.0.1:11437`。`GET /health` 通过版本/API 身份验证，`GET /` 为 HTTP 200 且包含当前构建资源 `index-rsyine2x.js`。整个过程不使用真实 API key，不发送模型请求。
 
-在 `RunEvent::Exit` 中执行生产 `shutdown(&mut child)` 后，测试断言 ShellState 已收回子进程、11437 变为不可达。测试 1/1 通过；安装版 daemon PID 83312 与 11435 HTTP 200 未改变。临时配置、数据库、WebView2 profile 与 daemon 日志在 `E:\tmp\jev-tauri-spawn-current-20260926-run2`。常规 `cargo test --manifest-path src-tauri/Cargo.toml --locked` 为 10 passed、4 ignored，`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` 通过。
+在 `RunEvent::Exit` 中执行生产 `shutdown(&mut child)` 后，测试断言 ShellState 已收回子进程、11437 变为不可达。测试 1/1 通过；安装版 daemon PID 83312 与 11435 HTTP 200 未改变。临时配置、数据库、WebView2 profile 与 daemon 日志在 `本机临时目录\jev-tauri-spawn-current-20260926-run2`。常规 `cargo test --manifest-path src-tauri/Cargo.toml --locked` 为 10 passed、4 ignored，`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` 通过。
 
 这证明当前 Tauri 启动器能在隔离配置里拉起对应版本的 sidecar、从它提供的静态目录读取当前 UI，并在壳退出时收尾自己拥有的 child。它不触发安装，不操作托盘菜单，也不覆盖真实 AppData、用户配置升级与恢复、四页 UI 视觉或真实 Vercel/Laya 模型调用。
 
 ## 2026-09-26 09:32：当前原生首窗单屏几何
 
-显式运行 `window_layout::tests::native_initial_window_stays_inside_current_work_area`：1/1 通过。真实隐藏 Tauri/WebView 窗口在当前主屏 scale 1.0、工作区 1600×852 下，客户区为 900×560，外框 916×599，位置 `(342,127)`，没有超出工作区。隔离 WebView2 profile 位于 `E:\tmp\jev-window-single-current-20260926`；此测试不启动 daemon/托盘、不访问用户数据，也不为窗口截图。
+显式运行 `window_layout::tests::native_initial_window_stays_inside_current_work_area`：1/1 通过。真实隐藏 Tauri/WebView 窗口在当前主屏 scale 1.0、工作区 1600×852 下，客户区为 900×560，外框 916×599，位置 `(342,127)`，没有超出工作区。隔离 WebView2 profile 位于 `本机临时目录\jev-window-single-current-20260926`；此测试不启动 daemon/托盘、不访问用户数据，也不为窗口截图。
 
 截至此检查点，四个默认忽略的原生集成项均已各自显式实跑：已有 daemon 复用、当前 sidecar 启动/退出、单屏首窗几何、多屏几何。它们分别有独立证据；仍没有正式安装包四页 WebView视觉、托盘菜单操作、保存/重启窗口几何的证据。
 
@@ -976,15 +976,15 @@ Providers 页显示两项启用的接入配置、添加/ TOML 导入/编辑操�
 
 正式 AppData `%APPDATA%\jev-switch\jev-switch.db` 的 `call_logs` 共有 17 行，最新公开入口记录为 `jev-16`（Laya `laya-english`，HTTP 200，46/0 tokens，196 ms）和 `jev-17`（Vercel `typesafe-ai/jev`，HTTP 200，304/21 tokens，1341 ms）；两条均含持久 route trace。早前对旧安装 daemon 的一次直连 Laya 请求返回 HTTP 200，但响应没有 `x-jev-request-id` / JSON `request_id` / `route_trace`，DB 没有新增行。旧 daemon SHA-256 `8A39D2E8A766C142C9046449CF7C7C51F17760EE954945BDB337C83023E362FE` 中没有直连持久追踪代码标记。由此定位到制品时间差：此前核对的是包与当时 sidecar 输入哈希一致，并非与后来新增的直连追踪源码一致。
 
-当前源码 release daemon 重建成功，SHA-256 `E6E84FCBB796294261409927B3E5E0B0E260A6B5522E84BD76E53DDC7C8279DD`；`endpoints_runtime` 集成测试 7/7，UI 21/21，UI lint 和 Tauri 生产 build hook 均通过。修复 `src-tauri/tauri.conf.json` 的 `beforeBuildCommand` 为 `npm run build --prefix ui` 后，MSI build 成功。MSI SHA-256 `E47DACAEB5DE023A98295A9F5A47E48CFA70DB5B2605E215F083ED5673FED75E`，ProductCode `{11966F72-9DED-420E-9BCE-3AD090800994}`，UpgradeCode `{989320D3-86BE-51E7-84B6-DD8BDB4F0C42}`。WiX `main.wxs` 将 shell 指向本次 `src-tauri/target/release/jev-switch.exe`，daemon 指向 `E:\tmp\jev-switch-daemon.exe`，后者与 release Rust daemon / Tauri sidecar hash 同为 `E6E84FCB…`；UI 文件源指向本次 `ui/dist` 的 index/JS/CSS。当前 MSI 未安装。
+当前源码 release daemon 重建成功，SHA-256 `E6E84FCBB796294261409927B3E5E0B0E260A6B5522E84BD76E53DDC7C8279DD`；`endpoints_runtime` 集成测试 7/7，UI 21/21，UI lint 和 Tauri 生产 build hook 均通过。修复 `src-tauri/tauri.conf.json` 的 `beforeBuildCommand` 为 `npm run build --prefix ui` 后，MSI build 成功。MSI SHA-256 `E47DACAEB5DE023A98295A9F5A47E48CFA70DB5B2605E215F083ED5673FED75E`，ProductCode `{11966F72-9DED-420E-9BCE-3AD090800994}`，UpgradeCode `{989320D3-86BE-51E7-84B6-DD8BDB4F0C42}`。WiX `main.wxs` 将 shell 指向本次 `src-tauri/target/release/jev-switch.exe`，daemon 指向 `本机临时目录\jev-switch-daemon.exe`，后者与 release Rust daemon / Tauri sidecar hash 同为 `E6E84FCB…`；UI 文件源指向本次 `ui/dist` 的 index/JS/CSS。当前 MSI 未安装。
 
-新加的 `scripts/package-portable.ps1 -Destination <new directory>` 在本机成功运行，生成 `E:\tmp\jev-switch-portable-20260926-verified`。portable `jev-switch.exe` SHA-256 `6078248DC7FAB50D3EA755B413A3D6DCF85CC419C0F34E0D90B6FF2C77B92B63`；`build-manifest.json` 比对 sidecar/daemon 与静态资源 hash；目录包含壳、sidecar、`resources/ui/dist`、sibling `ui/dist` 和运行说明。便携目录与 MSI 清单引用同一组 build outputs；它是文件夹式运行时，不是自包含单文件 exe。
+新加的 `scripts/package-portable.ps1 -Destination <new directory>` 在本机成功运行，生成 `本机临时目录\jev-switch-portable-20260926-verified`。portable `jev-switch.exe` SHA-256 `6078248DC7FAB50D3EA755B413A3D6DCF85CC419C0F34E0D90B6FF2C77B92B63`；`build-manifest.json` 比对 sidecar/daemon 与静态资源 hash；目录包含壳、sidecar、`resources/ui/dist`、sibling `ui/dist` 和运行说明。便携目录与 MSI 清单引用同一组 build outputs；它是文件夹式运行时，不是自包含单文件 exe。
 
-为给便携实例让出 `127.0.0.1:11435`，停止了本轮此前启动的旧安装 Tauri PID 51424 与 daemon PID 46508；AppData 配置/DB 保留、历史仍 17 行，Laya `127.0.0.1:18767` PID 79984 仍运行，`5173`/`11435` 无监听。启动便携 `jev-switch.exe` 的系统自动审批返回 `blocked by policy`，故本轮没有启动新程序或发出新的 Laya 请求，也没有换用其他执行方式。Tauri MCP 不在本会话工具中，CUA 原生应用清单为空。该记录当时提及的便携运行说明和 `jev-switch.exe` 路径为 `E:/tmp/jev-switch-portable-20260926-verified/RUN-PORTABLE.txt` 与 `E:/tmp/jev-switch-portable-20260926-verified/jev-switch.exe`；它们是本机临时产物路径，不是仓库文件链接。启动后待验 health、加载资源、真实直连 request ID 与 Dashboard/SQLite 关联、原生窗口和托盘。P5/P6 未完成。
+为给便携实例让出 `127.0.0.1:11435`，停止了本轮此前启动的旧安装 Tauri PID 51424 与 daemon PID 46508；AppData 配置/DB 保留、历史仍 17 行，Laya `127.0.0.1:18767` PID 79984 仍运行，`5173`/`11435` 无监听。启动便携 `jev-switch.exe` 的系统自动审批返回 `blocked by policy`，故本轮没有启动新程序或发出新的 Laya 请求，也没有换用其他执行方式。Tauri MCP 不在本会话工具中，CUA 原生应用清单为空。该记录当时提及的便携运行说明和 `jev-switch.exe` 路径为 `本机临时目录/jev-switch-portable-20260926-verified/RUN-PORTABLE.txt` 与 `本机临时目录/jev-switch-portable-20260926-verified/jev-switch.exe`；它们是本机临时产物路径，不是仓库文件链接。启动后待验 health、加载资源、真实直连 request ID 与 Dashboard/SQLite 关联、原生窗口和托盘。P5/P6 未完成。
 
 ## 2026-09-26 12:33：用户启动便携版、Laya/Vercel 路由与 Docker cloud 回归
 
-用户手动启动 `E:/tmp/jev-switch-wix-verified-20260926-114045-417/jev-switch.exe` 后，Tauri shell PID 38364 与其 daemon PID 85628 均从该便携目录运行；11435 health 返回 `status=ok`、`product=jev-switch`、`api_revision=1`。Windows 进程信息显示 `Jev-Switch` 窗口存在且响应。该实例使用 11:40 shell（SHA-256 `B6D0538D…0CF3AB9`），其 daemon 与 UI 资源 hash 和自身 manifest 一致，并与 11:50 候选中的 daemon/UI 相同；11:50 shell SHA-256 为 `7B75629E…6E088BE`，尚未在本机运行，故本段不把 11:40 壳验证写成最新壳验证。
+用户手动启动 `本机临时目录/jev-switch-wix-verified-20260926-114045-417/jev-switch.exe` 后，Tauri shell PID 38364 与其 daemon PID 85628 均从该便携目录运行；11435 health 返回 `status=ok`、`product=jev-switch`、`api_revision=1`。Windows 进程信息显示 `Jev-Switch` 窗口存在且响应。该实例使用 11:40 shell（SHA-256 `B6D0538D…0CF3AB9`），其 daemon 与 UI 资源 hash 和自身 manifest 一致，并与 11:50 候选中的 daemon/UI 相同；11:50 shell SHA-256 为 `7B75629E…6E088BE`，尚未在本机运行，故本段不把 11:40 壳验证写成最新壳验证。
 
 ### 本地路由与 Vercel 上游
 

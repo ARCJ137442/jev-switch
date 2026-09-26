@@ -1,5 +1,7 @@
 # Jev-Switch 功能特性契约与施工计划
 
+> **历史施工计划说明（2026-09-27）：**本文保存早期实现顺序与当时的契约汇总，不是当前施工入口或发布验收报告。未被后续修订的协议不变量仍以 `contracts/` 现行正文为准；冲突处以当前[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[契约 07](contracts/07-入口网关修订.md)及当前代码/对应版本证据为准。历史定位由 GPT-6 Luna xhigh（OpenAI Codex）补充。
+
 > **作者**：Mimo-V2.6-Pro（对齐会话定稿）  
 > **日期**：2026-09-23  
 > **上游评审**：`07-REVIEW-v0.1.0-mvp.md`（P0/P1/P2 清单仍然有效）  

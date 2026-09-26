@@ -11,7 +11,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 ## 特性
 
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
-- **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与 [范围基线](docs/12-路线收缩与三线作战计划.md)。
+- **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与[当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
 - **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。
 - **当前上游覆盖范围**：内置适配器为 Vercel 与 Laya。TypeSafe 官方服务与 OpenRouter 尚未接入，已列为 [最高优先级路线图事项](ROADMAP.md)；这两项暂不属于 v0.1.0 能力。
 - **可编辑调用路由 DAG**：支持对外入口、路由节点和提供商模型端口之间的多跳与分支，并配置候选优先级和失败处理；简单直连只是 DAG 的一种形式。
@@ -101,7 +101,7 @@ docker compose up -d
 
 ## 文档
 
-从 [当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md) 和 [目标重评](docs/OPUS5-GOAL-REASSESSMENT.md) 开始，再按需查看 [ROADMAP.md](ROADMAP.md)、[文档索引](docs/README.md)、[契约目录](docs/contracts/00-INDEX.md)、[发版手册](docs/RELEASE.md) 与[最新联调记录](docs/verification/2026-09-24-entry-gateway-integration.md)。历史计划和验收仅证明各自版本与覆盖范围，不代表当前整版验收。
+从 [当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md) 和 [目标重评](docs/OPUS5-GOAL-REASSESSMENT.md) 开始，再按需查看 [ROADMAP.md](ROADMAP.md)、[文档索引](docs/README.md)、[契约目录](docs/contracts/00-INDEX.md)、[发版手册](docs/RELEASE.md)、[09-24 联调历史记录](docs/verification/2026-09-24-entry-gateway-integration.md)、[09-26 便携运行验收](docs/verification/portable-runtime-acceptance-2026-09-26.md)与[Tauri 截图证据](docs/verification/tauri-screenshot-evidence-2026-09-26.md)。历史计划和验收仅证明各自版本与覆盖范围，不代表当前整版验收。
 
 ## 开发说明
 
