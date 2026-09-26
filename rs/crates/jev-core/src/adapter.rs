@@ -30,8 +30,8 @@ use jev_protocol::{JevRequest, JevResponse};
 use std::collections::{BTreeSet, HashMap};
 
 /* ══════════════════════════════════════════════════════════════════
-   冻结 trait 1 · ProtocolAdapter（contracts/02 §2 原文）
-   ══════════════════════════════════════════════════════════════════ */
+冻结 trait 1 · ProtocolAdapter（contracts/02 §2 原文）
+══════════════════════════════════════════════════════════════════ */
 
 /// 入站归一化上下文。
 ///
@@ -60,8 +60,8 @@ pub trait ProtocolAdapter: Send + Sync {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   冻结 trait 2 · UpstreamAdapter（contracts/02 §2 原文）
-   ══════════════════════════════════════════════════════════════════ */
+冻结 trait 2 · UpstreamAdapter（contracts/02 §2 原文）
+══════════════════════════════════════════════════════════════════ */
 
 /// 上游适配 —— 签名**冻结**（`async_trait` 保证 dyn-compatible）。
 ///
@@ -75,8 +75,8 @@ pub trait UpstreamAdapter: Send + Sync {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   RetryPolicy（A6 · 07 P1-3 / contracts/02 §3 分层允许项）
-   ══════════════════════════════════════════════════════════════════ */
+RetryPolicy（A6 · 07 P1-3 / contracts/02 §3 分层允许项）
+══════════════════════════════════════════════════════════════════ */
 
 /// 同候选内重试策略。
 ///
@@ -128,8 +128,8 @@ impl Default for RetryPolicy {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   Registry（contracts/02 §2：register / invoke 传参永久冻结）
-   ══════════════════════════════════════════════════════════════════ */
+Registry（contracts/02 §2：register / invoke 传参永久冻结）
+══════════════════════════════════════════════════════════════════ */
 
 /// 上游注册表 + 调度入口。
 ///
@@ -139,6 +139,76 @@ impl Default for RetryPolicy {
 pub struct Registry {
     router: Router,
     retry: RetryPolicy,
+}
+
+/// Per-endpoint runtime policy. The frozen `invoke(req, ctx)` entry remains failover;
+/// the daemon opts into this additive scheduler API when an endpoint config asks for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RoutingStrategy {
+    Failover,
+    Race { timeout_ms: u64 },
+    LoadBalance { weight_mode: String },
+    Shadow { shadow_target: String },
+}
+
+/// Error returned by the additive traced invocation API. The existing `invoke`
+/// signatures continue returning `JevError`; callers that need diagnostics can
+/// retain this sanitized route trace without persisting upstream error bodies.
+#[derive(Debug)]
+pub struct InvocationFailure {
+    pub error: JevError,
+    pub route_trace: serde_json::Value,
+}
+
+impl InvocationFailure {
+    fn new(
+        requested_model: &str,
+        attempts: Vec<serde_json::Value>,
+        upstream_calls: u32,
+        error: JevError,
+    ) -> Self {
+        let route_trace = serde_json::json!({
+            "requested_model": requested_model,
+            "outcome": "failed",
+            "upstream_calls": upstream_calls,
+            "attempts": attempts,
+            "failure": {
+                "kind": error_kind(&error),
+                "http_status": error.http_status(),
+                "retryable": error.retryable(),
+                "upstream_status": match &error {
+                    JevError::Upstream { status, .. } => Some(*status),
+                    _ => None,
+                }
+            }
+        });
+        Self { error, route_trace }
+    }
+}
+
+fn error_kind(error: &JevError) -> &'static str {
+    match error {
+        JevError::Upstream { .. } => "upstream_http",
+        JevError::Timeout { .. } => "timeout",
+        JevError::Network { .. } => "network",
+        JevError::Capability { .. } => "capability_mismatch",
+        JevError::BadResponse { .. } => "bad_upstream_response",
+        JevError::Config { .. } => "routing_config",
+        JevError::UnknownModel(_) => "unknown_model",
+        JevError::UnknownUpstream(_) => "unknown_upstream",
+    }
+}
+
+fn annotate_attempt_failure(attempt: &mut serde_json::Value, error: &JevError, decision: &str) {
+    if let Some(fields) = attempt.as_object_mut() {
+        fields.insert("outcome".into(), serde_json::json!("failed"));
+        fields.insert("error_kind".into(), serde_json::json!(error_kind(error)));
+        fields.insert("retryable".into(), serde_json::json!(error.retryable()));
+        fields.insert("retry_decision".into(), serde_json::json!(decision));
+        if let JevError::Upstream { status, .. } = error {
+            fields.insert("upstream_status".into(), serde_json::json!(status));
+        }
+    }
 }
 
 impl Registry {
@@ -159,6 +229,12 @@ impl Registry {
     /// 注册上游 —— 传参永不因新厂商而改（冻结）。
     pub fn register(&mut self, up: Box<dyn UpstreamAdapter>) {
         self.router.register(up);
+    }
+
+    /// Replace the configured providers after an admin config write without changing
+    /// the frozen `register`/`invoke` signatures or restarting the daemon.
+    pub fn replace_upstreams(&self, upstreams: Vec<Box<dyn UpstreamAdapter>>) {
+        self.router.replace_upstreams(upstreams);
     }
 
     /// 路由引擎视图（`/v1/models` 等只读装配用）。
@@ -187,24 +263,130 @@ impl Registry {
     ///   退避重试，耗尽 → 下一候选；不可重试错误 → 即返
     /// - 全败 → 返回最后错误（调用方按 `http_status()` 映射）
     /// - 成功 → `upstream_calls = 实发次数`
-    pub async fn invoke(
+    pub async fn invoke(&self, req: JevRequest, ctx: RouteCtx) -> Result<JevResponse, JevError> {
+        self.invoke_with_strategy(req, ctx, RoutingStrategy::Failover)
+            .await
+    }
+
+    pub async fn invoke_with_strategy(
         &self,
         req: JevRequest,
         ctx: RouteCtx,
+        strategy: RoutingStrategy,
     ) -> Result<JevResponse, JevError> {
+        self.invoke_with_strategy_traced(req, ctx, strategy)
+            .await
+            .map_err(|failure| failure.error)
+    }
+
+    /// Invoke with a safe route trace retained on both success and failure.
+    /// Trace entries contain route metadata and error classifications only;
+    /// upstream response bodies and request content are never copied into it.
+    pub async fn invoke_with_strategy_traced(
+        &self,
+        req: JevRequest,
+        ctx: RouteCtx,
+        strategy: RoutingStrategy,
+    ) -> Result<JevResponse, InvocationFailure> {
+        let name = match &strategy {
+            RoutingStrategy::Failover => "failover",
+            RoutingStrategy::Race { .. } => "race",
+            RoutingStrategy::LoadBalance { .. } => "load_balance",
+            RoutingStrategy::Shadow { .. } => "shadow",
+        };
+        let result = match strategy {
+            RoutingStrategy::Failover => self.invoke_failover_traced(req, ctx).await,
+            RoutingStrategy::Race { timeout_ms } => {
+                self.invoke_race_traced(req, ctx, timeout_ms).await
+            }
+            RoutingStrategy::LoadBalance { weight_mode } => {
+                self.invoke_load_balance_traced(req, ctx, &weight_mode)
+                    .await
+            }
+            RoutingStrategy::Shadow { shadow_target } => {
+                self.invoke_shadow_traced(req, ctx, &shadow_target).await
+            }
+        };
+        match result {
+            Ok(mut response) => {
+                if let Some(trace) = response
+                    .extra
+                    .get_mut("route_trace")
+                    .and_then(serde_json::Value::as_object_mut)
+                {
+                    trace
+                        .entry("strategy")
+                        .or_insert_with(|| serde_json::Value::String(name.into()));
+                    trace.insert(
+                        "accounting".into(),
+                        serde_json::json!({
+                            "usage_cost_scope":"selected_upstream_response_only",
+                            "provider_latency_scope":"selected_upstream_response_only",
+                            "additional_attempt_usage_cost":"not_aggregated"
+                        }),
+                    );
+                }
+                Ok(response)
+            }
+            Err(mut failure) => {
+                if let Some(trace) = failure.route_trace.as_object_mut() {
+                    trace.insert("strategy".into(), serde_json::json!(name));
+                    trace.insert(
+                        "accounting".into(),
+                        serde_json::json!({
+                            "usage_cost_scope":"selected_upstream_response_only",
+                            "provider_latency_scope":"selected_upstream_response_only",
+                            "additional_attempt_usage_cost":"not_aggregated"
+                        }),
+                    );
+                }
+                Err(failure)
+            }
+        }
+    }
+
+    async fn invoke_failover_traced(
+        &self,
+        req: JevRequest,
+        ctx: RouteCtx,
+    ) -> Result<JevResponse, InvocationFailure> {
         let plan = match self.router.plan(&req.model, &ctx) {
             Ok(p) if p.is_empty() => {
                 // 命中边但候选全被 exclude 过滤 → 无可用上游（404）
-                return Err(JevError::UnknownModel(req.model.clone()));
+                return Err(InvocationFailure::new(
+                    &req.model,
+                    Vec::new(),
+                    0,
+                    JevError::UnknownModel(req.model.clone()),
+                ));
             }
             Ok(p) => p,
-            Err(RouterError::UnknownModel(m)) => return Err(JevError::UnknownModel(m)),
-            Err(RouterError::UnknownUpstream(u)) => return Err(JevError::UnknownUpstream(u)),
+            Err(RouterError::UnknownModel(m)) => {
+                return Err(InvocationFailure::new(
+                    &req.model,
+                    Vec::new(),
+                    0,
+                    JevError::UnknownModel(m),
+                ))
+            }
+            Err(RouterError::UnknownUpstream(u)) => {
+                return Err(InvocationFailure::new(
+                    &req.model,
+                    Vec::new(),
+                    0,
+                    JevError::UnknownUpstream(u),
+                ))
+            }
             Err(RouterError::Cycle(c)) => {
-                return Err(JevError::Config {
-                    upstream_id: req.model.clone(),
-                    message: c,
-                })
+                return Err(InvocationFailure::new(
+                    &req.model,
+                    Vec::new(),
+                    0,
+                    JevError::Config {
+                        upstream_id: req.model.clone(),
+                        message: c,
+                    },
+                ));
             }
         };
 
@@ -213,9 +395,18 @@ impl Registry {
         let mut upstream_calls: u32 = 0;
         let mut last_err: Option<JevError> = None;
         let mut cap_skip: Option<JevError> = None;
+        let mut route_attempts = Vec::<serde_json::Value>::new();
 
         for item in &plan {
             let Some(upstream) = self.router.upstream(&item.candidate.upstream_id) else {
+                route_attempts.push(serde_json::json!({
+                    "provider_id": item.candidate.upstream_id,
+                    "upstream_model": item.candidate.upstream_model,
+                    "hops": item.candidate.hops,
+                    "priority": item.candidate.priority,
+                    "outcome": "skipped",
+                    "reason": "upstream_unavailable"
+                }));
                 last_err = Some(JevError::Config {
                     upstream_id: item.candidate.upstream_id.clone(),
                     message: "upstream disappeared after select".into(),
@@ -224,7 +415,19 @@ impl Registry {
             };
 
             // capability：不匹配 = 跳过（不实发、不计失败语义）
-            if let Some(qt) = qts.iter().find(|qt| !upstream.capabilities().supports(**qt)) {
+            if let Some(qt) = qts
+                .iter()
+                .find(|qt| !upstream.capabilities().supports(**qt))
+            {
+                route_attempts.push(serde_json::json!({
+                    "provider_id": item.candidate.upstream_id,
+                    "upstream_model": item.candidate.upstream_model,
+                    "hops": item.candidate.hops,
+                    "priority": item.candidate.priority,
+                    "outcome": "skipped",
+                    "reason": "capability_mismatch",
+                    "required_question_type": qt.as_str()
+                }));
                 if cap_skip.is_none() {
                     cap_skip = Some(JevError::Capability {
                         upstream_id: upstream.id().to_string(),
@@ -248,15 +451,55 @@ impl Registry {
             loop {
                 attempt += 1;
                 upstream_calls += 1; // 实发计数（capability 跳过不计）
+                route_attempts.push(serde_json::json!({
+                    "provider_id": item.candidate.upstream_id.clone(),
+                    "upstream_model": item.candidate.upstream_model.clone(),
+                    "hops": item.candidate.hops.clone(),
+                    "priority": item.candidate.priority,
+                    "attempt": attempt,
+                    "outcome": "in_flight"
+                }));
                 match upstream.evaluate(attempt_req.clone()).await {
                     Ok(mut resp) => {
+                        route_attempts.last_mut().expect("attempt was recorded")["outcome"] =
+                            serde_json::json!("succeeded");
                         resp.upstream_calls = Some(upstream_calls); // 如实 = 实发次数
+                        resp.extra.insert(
+                            "route_trace".into(),
+                            serde_json::json!({
+                                "requested_model": req.model.clone(),
+                                "selected_provider": item.candidate.upstream_id.clone(),
+                                "selected_model": item.candidate.upstream_model.clone(),
+                                "selected_hops": item.candidate.hops.clone(),
+                                "attempts": route_attempts,
+                                "upstream_calls": upstream_calls
+                            }),
+                        );
                         return Ok(resp);
                     }
                     Err(e) => {
+                        let retry_decision = if item.on_error == OnError::Fail {
+                            "stop_by_candidate_policy"
+                        } else if e.retryable() && attempt < self.retry.max_attempts {
+                            "retry_same_candidate"
+                        } else if e.retryable() {
+                            "next_candidate"
+                        } else {
+                            "stop_non_retryable"
+                        };
+                        annotate_attempt_failure(
+                            route_attempts.last_mut().expect("attempt was recorded"),
+                            &e,
+                            retry_decision,
+                        );
                         // on_error=fail：第一次错误即返回（不同候选也不换、同候选也不重试）
                         if item.on_error == OnError::Fail {
-                            return Err(e);
+                            return Err(InvocationFailure::new(
+                                &req.model,
+                                route_attempts,
+                                upstream_calls,
+                                e,
+                            ));
                         }
                         // 可重试 && 同候选还有预算 → 退避后再试**同一**候选
                         if e.retryable() && attempt < self.retry.max_attempts {
@@ -271,25 +514,437 @@ impl Registry {
                             last_err = Some(e);
                             break; // on_error=next → 下一候选（跨候选 failover）
                         }
-                        return Err(e); // 不可重试 → 即返（400/422/BadResponse…）
+                        return Err(InvocationFailure::new(
+                            &req.model,
+                            route_attempts,
+                            upstream_calls,
+                            e,
+                        )); // 不可重试 → 即返
                     }
                 }
             }
         }
 
         if let Some(e) = last_err {
-            return Err(e);
+            return Err(InvocationFailure::new(
+                &req.model,
+                route_attempts,
+                upstream_calls,
+                e,
+            ));
         }
         if let Some(e) = cap_skip {
-            return Err(e); // 全部 capability 跳过 → 422
+            return Err(InvocationFailure::new(
+                &req.model,
+                route_attempts,
+                upstream_calls,
+                e,
+            )); // 全部 capability 跳过 → 422
         }
-        Err(JevError::UnknownModel(req.model.clone()))
+        Err(InvocationFailure::new(
+            &req.model,
+            route_attempts,
+            upstream_calls,
+            JevError::UnknownModel(req.model.clone()),
+        ))
+    }
+
+    fn plan_for(
+        &self,
+        model: &str,
+        ctx: &RouteCtx,
+    ) -> Result<Vec<crate::router::PlanItem>, JevError> {
+        match self.router.plan(model, ctx) {
+            Ok(plan) if !plan.is_empty() => Ok(plan),
+            Ok(_) => Err(JevError::UnknownModel(model.into())),
+            Err(RouterError::UnknownModel(model)) => Err(JevError::UnknownModel(model)),
+            Err(RouterError::UnknownUpstream(upstream)) => Err(JevError::UnknownUpstream(upstream)),
+            Err(RouterError::Cycle(cycle)) => Err(JevError::Config {
+                upstream_id: model.into(),
+                message: cycle,
+            }),
+        }
+    }
+
+    async fn invoke_load_balance_traced(
+        &self,
+        req: JevRequest,
+        ctx: RouteCtx,
+        mode: &str,
+    ) -> Result<JevResponse, InvocationFailure> {
+        let plan = self
+            .plan_for(&req.model, &ctx)
+            .map_err(|error| InvocationFailure::new(&req.model, Vec::new(), 0, error))?;
+        let qts: Vec<_> = req.questions.values().map(|q| q.question_type()).collect();
+        let capable: Vec<_> = plan
+            .into_iter()
+            .filter(|item| {
+                self.router
+                    .upstream(&item.candidate.upstream_id)
+                    .is_some_and(|up| qts.iter().all(|qt| up.capabilities().supports(*qt)))
+            })
+            .collect();
+        if capable.is_empty() {
+            return self.invoke_failover_traced(req, ctx).await;
+        }
+        let selected = weighted_index(&capable, mode).ok_or_else(|| {
+            InvocationFailure::new(
+                &req.model,
+                Vec::new(),
+                0,
+                JevError::Config {
+                    upstream_id: req.model.clone(),
+                    message: format!("unsupported load_balance weight_mode '{mode}'"),
+                },
+            )
+        })?;
+        let item = capable[selected].clone();
+        self.invoke_selected_traced(req, item).await
+    }
+
+    async fn invoke_selected_traced(
+        &self,
+        req: JevRequest,
+        item: crate::router::PlanItem,
+    ) -> Result<JevResponse, InvocationFailure> {
+        let upstream = self
+            .router
+            .upstream(&item.candidate.upstream_id)
+            .ok_or_else(|| {
+                InvocationFailure::new(
+                    &req.model,
+                    Vec::new(),
+                    0,
+                    JevError::UnknownUpstream(item.candidate.upstream_id.clone()),
+                )
+            })?;
+        let mut upstream_req = req.clone();
+        upstream_req.model = item.candidate.upstream_model.clone();
+        let mut attempts = Vec::new();
+        let mut upstream_calls = 0;
+        for attempt in 1..=self.retry.max_attempts.max(1) {
+            upstream_calls += 1;
+            attempts.push(serde_json::json!({"provider_id":item.candidate.upstream_id,"upstream_model":item.candidate.upstream_model,"hops":item.candidate.hops,"priority":item.candidate.priority,"attempt":attempt,"outcome":"in_flight"}));
+            match upstream.evaluate(upstream_req.clone()).await {
+                Ok(mut response) => {
+                    attempts.last_mut().expect("attempt was recorded")["outcome"] =
+                        serde_json::json!("succeeded");
+                    response.upstream_calls = Some(upstream_calls);
+                    response.extra.insert("route_trace".into(), serde_json::json!({"requested_model":req.model,"selected_provider":item.candidate.upstream_id,"selected_model":item.candidate.upstream_model,"selected_hops":item.candidate.hops,"attempts":attempts,"upstream_calls":upstream_calls}));
+                    return Ok(response);
+                }
+                Err(error) if error.retryable() && attempt < self.retry.max_attempts => {
+                    annotate_attempt_failure(
+                        attempts.last_mut().expect("attempt was recorded"),
+                        &error,
+                        "retry_same_candidate",
+                    );
+                    let delay = self.retry.backoff_after(attempt);
+                    if !delay.is_zero() {
+                        tokio::time::sleep(delay).await;
+                    }
+                }
+                Err(error) => {
+                    annotate_attempt_failure(
+                        attempts.last_mut().expect("attempt was recorded"),
+                        &error,
+                        "stop",
+                    );
+                    return Err(InvocationFailure::new(
+                        &req.model,
+                        attempts,
+                        upstream_calls,
+                        error,
+                    ));
+                }
+            }
+        }
+        Err(InvocationFailure::new(
+            &req.model,
+            attempts,
+            upstream_calls,
+            JevError::UnknownModel(req.model.clone()),
+        ))
+    }
+
+    async fn invoke_race_traced(
+        &self,
+        req: JevRequest,
+        ctx: RouteCtx,
+        timeout_ms: u64,
+    ) -> Result<JevResponse, InvocationFailure> {
+        let plan = self
+            .plan_for(&req.model, &ctx)
+            .map_err(|error| InvocationFailure::new(&req.model, Vec::new(), 0, error))?;
+        let qts: Vec<_> = req.questions.values().map(|q| q.question_type()).collect();
+        let mut tasks = tokio::task::JoinSet::new();
+        let started_calls = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let attempts = std::sync::Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let mut skipped = None;
+        for item in plan {
+            let Some(upstream) = self.router.upstream(&item.candidate.upstream_id) else {
+                attempts
+                    .lock()
+                    .expect("race attempt log lock")
+                    .push(serde_json::json!({
+                        "provider_id": item.candidate.upstream_id,
+                        "upstream_model": item.candidate.upstream_model,
+                        "hops": item.candidate.hops,
+                        "priority": item.candidate.priority,
+                        "outcome": "skipped",
+                        "reason": "upstream_unavailable"
+                    }));
+                continue;
+            };
+            if let Some(qt) = qts
+                .iter()
+                .find(|qt| !upstream.capabilities().supports(**qt))
+            {
+                skipped.get_or_insert_with(|| JevError::Capability {
+                    upstream_id: upstream.id().into(),
+                    detail: format!(
+                        "model '{}' requires unsupported question type '{}'",
+                        req.model,
+                        qt.as_str()
+                    ),
+                });
+                attempts
+                    .lock()
+                    .expect("race attempt log lock")
+                    .push(serde_json::json!({
+                        "provider_id": item.candidate.upstream_id,
+                        "upstream_model": item.candidate.upstream_model,
+                        "hops": item.candidate.hops,
+                        "priority": item.candidate.priority,
+                        "outcome": "skipped",
+                        "reason": "capability_mismatch",
+                        "required_question_type": qt.as_str()
+                    }));
+                continue;
+            }
+            let mut upstream_req = req.clone();
+            upstream_req.model = item.candidate.upstream_model.clone();
+            let dispatched = started_calls.clone();
+            let attempt_log = attempts.clone();
+            tasks.spawn(async move {
+                let attempt_id = dispatched.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                attempt_log
+                    .lock()
+                    .expect("race attempt log lock")
+                    .push(serde_json::json!({
+                        "provider_id":item.candidate.upstream_id,
+                        "upstream_model":item.candidate.upstream_model,
+                        "hops":item.candidate.hops,
+                        "priority":item.candidate.priority,
+                        "attempt":attempt_id,
+                        "outcome":"in_flight"
+                    }));
+                let result = upstream.evaluate(upstream_req).await;
+                if let Some(entry) = attempt_log
+                    .lock()
+                    .expect("race attempt log lock")
+                    .iter_mut()
+                    .find(|entry| {
+                        entry.get("attempt").and_then(serde_json::Value::as_u64)
+                            == Some(u64::from(attempt_id))
+                    })
+                {
+                    match &result {
+                        Ok(_) => entry["outcome"] = serde_json::json!("succeeded"),
+                        Err(error) => {
+                            annotate_attempt_failure(entry, error, "race_candidate_failed")
+                        }
+                    }
+                }
+                (item, result)
+            });
+        }
+        if tasks.is_empty() {
+            let attempts = attempts.lock().expect("race attempt log lock").clone();
+            return Err(InvocationFailure::new(
+                &req.model,
+                attempts,
+                0,
+                skipped.unwrap_or_else(|| JevError::UnknownModel(req.model.clone())),
+            ));
+        }
+        let duration = std::time::Duration::from_millis(timeout_ms.max(1));
+        let raced = tokio::time::timeout(duration, async {
+            let mut last_error = None;
+            while let Some(joined) = tasks.join_next().await {
+                let Ok((item, result)) = joined else { continue };
+                match result {
+                    Ok(response) => {
+                        return Ok((response, item));
+                    }
+                    Err(error) => last_error = Some(error),
+                }
+            }
+            Err(last_error
+                .or(skipped)
+                .unwrap_or_else(|| JevError::UnknownModel(req.model.clone())))
+        })
+        .await;
+        tasks.abort_all();
+        let mut attempts = attempts.lock().expect("race attempt log lock").clone();
+        for attempt in &mut attempts {
+            if attempt.get("outcome").and_then(serde_json::Value::as_str) == Some("in_flight") {
+                attempt["outcome"] = serde_json::json!("cancelled");
+                attempt["reason"] = serde_json::json!("race_ended_before_completion");
+            }
+        }
+        attempts.sort_by_key(|attempt| {
+            attempt
+                .get("attempt")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(u64::MAX)
+        });
+        let calls = started_calls.load(std::sync::atomic::Ordering::SeqCst);
+        match raced {
+            Ok(Ok((mut response, item))) => {
+                response.upstream_calls = Some(calls);
+                response.extra.insert(
+                    "route_trace".into(),
+                    serde_json::json!({
+                        "requested_model":req.model,
+                        "selected_provider":item.candidate.upstream_id,
+                        "selected_model":item.candidate.upstream_model,
+                        "selected_hops":item.candidate.hops,
+                        "attempts":attempts,
+                        "upstream_calls":calls,
+                        "strategy":"race"
+                    }),
+                );
+                Ok(response)
+            }
+            Ok(Err(error)) => Err(InvocationFailure::new(&req.model, attempts, calls, error)),
+            Err(_) => Err(InvocationFailure::new(
+                &req.model,
+                attempts,
+                calls,
+                JevError::Timeout {
+                    upstream_id: req.model.clone(),
+                },
+            )),
+        }
+    }
+
+    async fn invoke_shadow_traced(
+        &self,
+        req: JevRequest,
+        ctx: RouteCtx,
+        target: &str,
+    ) -> Result<JevResponse, InvocationFailure> {
+        let target_item = if let Some(upstream) = self.router.upstream(target) {
+            Some((upstream, req.model.clone(), vec![target.to_owned()]))
+        } else {
+            self.router
+                .plan(target, &RouteCtx::default())
+                .ok()
+                .and_then(|plan| plan.into_iter().next())
+                .and_then(|item| {
+                    self.router
+                        .upstream(&item.candidate.upstream_id)
+                        .map(|upstream| {
+                            (upstream, item.candidate.upstream_model, item.candidate.hops)
+                        })
+                })
+        };
+        if let Some((upstream, model, hops)) = target_item {
+            let mut shadow_req = req.clone();
+            shadow_req.model = model.clone();
+            // Do not claim an extra call until the detached task has entered its
+            // evaluate future. It continues polling that future immediately after
+            // acknowledging the start.
+            let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+            tokio::spawn(async move {
+                let future = upstream.evaluate(shadow_req);
+                let _ = started_tx.send(());
+                let _ = future.await;
+            });
+            let _ = started_rx.await;
+            let mut primary = match self.invoke_failover_traced(req.clone(), ctx).await {
+                Ok(response) => response,
+                Err(mut failure) => {
+                    if let Some(trace) = failure.route_trace.as_object_mut() {
+                        trace.insert("shadow".into(), serde_json::json!({"target":target,"model":model,"hops":hops,"dispatched":true,"usage_cost":"not_collected"}));
+                        let calls = trace
+                            .get("upstream_calls")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0)
+                            .saturating_add(1);
+                        trace.insert("upstream_calls".into(), serde_json::json!(calls));
+                    }
+                    return Err(failure);
+                }
+            };
+            let previous = primary.upstream_calls.unwrap_or(1);
+            primary.upstream_calls = Some(previous.saturating_add(1));
+            if let Some(trace) = primary
+                .extra
+                .get_mut("route_trace")
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                trace.insert("shadow".into(), serde_json::json!({"target":target,"model":model,"hops":hops,"dispatched":true,"usage_cost":"not_collected"}));
+                trace.insert(
+                    "upstream_calls".into(),
+                    serde_json::json!(previous.saturating_add(1)),
+                );
+            }
+            Ok(primary)
+        } else {
+            Err(InvocationFailure::new(
+                &req.model,
+                Vec::new(),
+                0,
+                JevError::Config {
+                    upstream_id: req.model.clone(),
+                    message: format!("shadow target '{target}' is not routable"),
+                },
+            ))
+        }
     }
 }
 
+fn weighted_index(plan: &[crate::router::PlanItem], mode: &str) -> Option<usize> {
+    if plan.is_empty() {
+        return None;
+    }
+    let weights: Vec<u64> = match mode {
+        "equal" => vec![1; plan.len()],
+        "priority" => {
+            let max = plan
+                .iter()
+                .map(|item| item.candidate.priority as i64)
+                .max()?;
+            plan.iter()
+                .map(|item| (max - item.candidate.priority as i64 + 1).max(1) as u64)
+                .collect()
+        }
+        _ => return None,
+    };
+    let total: u64 = weights.iter().copied().sum();
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+    );
+    let mut pick = hasher.finish() % total.max(1);
+    for (index, weight) in weights.into_iter().enumerate() {
+        if pick < weight {
+            return Some(index);
+        }
+        pick -= weight;
+    }
+    Some(0)
+}
+
 /* ══════════════════════════════════════════════════════════════════
-   内部小工具（failover 中的 exclude 收集等）
-   ══════════════════════════════════════════════════════════════════ */
+内部小工具（failover 中的 exclude 收集等）
+══════════════════════════════════════════════════════════════════ */
 
 /// 便捷构造：空 `exclude` + 无 sticky 的调用上下文（HTTP 层当前入口）。
 pub fn plain_ctx() -> RouteCtx {
@@ -496,19 +1151,190 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("failover ok");
+        let resp = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .expect("failover ok");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         assert_eq!(h2.calls.load(Ordering::SeqCst), 1);
         assert_eq!(resp.upstream_calls, Some(2)); // 实发 2 次
-        // upstream_model 改写
+                                                  // upstream_model 改写
         assert_eq!(h1.seen.lock().unwrap().as_slice(), &["typesafe-ai/jev"]);
         assert_eq!(h2.seen.lock().unwrap().as_slice(), &["laya-english"]);
     }
 
     #[tokio::test]
+    async fn load_balance_dispatches_to_selected_route_only() {
+        let mut registry = Registry::with_retry(
+            vec![edge("jev", "a", 10), edge("jev", "b", 20)],
+            RetryPolicy::no_retry(),
+        );
+        let (a, ah) = fake("a", &[QuestionType::Noul], Mode::Ok);
+        let (b, bh) = fake("b", &[QuestionType::Noul], Mode::Ok);
+        registry.register(a);
+        registry.register(b);
+        for _ in 0..100 {
+            registry
+                .invoke_with_strategy(
+                    noul_request("jev"),
+                    plain_ctx(),
+                    RoutingStrategy::LoadBalance {
+                        weight_mode: "equal".into(),
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        let a_calls = ah.calls.load(Ordering::SeqCst);
+        let b_calls = bh.calls.load(Ordering::SeqCst);
+        assert_eq!(a_calls + b_calls, 100);
+        assert!(
+            a_calls > 0 && b_calls > 0,
+            "both equally weighted candidates should be selected over 100 randomized calls"
+        );
+    }
+
+    #[tokio::test]
+    async fn race_reports_strategy_and_dispatches_candidate_set() {
+        let mut registry = Registry::with_retry(
+            vec![edge("jev", "a", 10), edge("jev", "b", 20)],
+            RetryPolicy::no_retry(),
+        );
+        let (a, ah) = fake("a", &[QuestionType::Noul], Mode::Ok);
+        let (b, bh) = fake("b", &[QuestionType::Noul], Mode::Ok);
+        registry.register(a);
+        registry.register(b);
+        let response = registry
+            .invoke_with_strategy(
+                noul_request("jev"),
+                plain_ctx(),
+                RoutingStrategy::Race { timeout_ms: 1_000 },
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.extra["route_trace"]["strategy"], "race");
+        assert_eq!(response.upstream_calls, Some(2));
+        assert_eq!(
+            ah.calls.load(Ordering::SeqCst) + bh.calls.load(Ordering::SeqCst),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn race_cancels_losing_in_flight_candidate_and_counts_dispatched_calls() {
+        struct Slow {
+            started: std::sync::Arc<AtomicU32>,
+            completed: std::sync::Arc<AtomicU32>,
+        }
+        #[async_trait::async_trait]
+        impl UpstreamAdapter for Slow {
+            fn id(&self) -> &str {
+                "slow"
+            }
+            fn capabilities(&self) -> Capabilities {
+                Capabilities {
+                    question_types: &[QuestionType::Noul],
+                    has_confidence: false,
+                    has_usage: false,
+                    noul_via_boolean: false,
+                    retryable_status: &[],
+                }
+            }
+            async fn evaluate(&self, _req: JevRequest) -> Result<JevResponse, JevError> {
+                self.started.fetch_add(1, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                self.completed.fetch_add(1, Ordering::SeqCst);
+                unreachable!("the race winner should cancel this candidate")
+            }
+        }
+
+        let started = std::sync::Arc::new(AtomicU32::new(0));
+        let completed = std::sync::Arc::new(AtomicU32::new(0));
+        let mut registry = Registry::with_retry(
+            vec![edge("jev", "slow", 0), edge("jev", "fast", 1)],
+            RetryPolicy::no_retry(),
+        );
+        registry.register(Box::new(Slow {
+            started: started.clone(),
+            completed: completed.clone(),
+        }));
+        let (fast, fast_handle) = fake("fast", &[QuestionType::Noul], Mode::Ok);
+        registry.register(fast);
+
+        let response = registry
+            .invoke_with_strategy(
+                noul_request("jev"),
+                plain_ctx(),
+                RoutingStrategy::Race { timeout_ms: 1_000 },
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.extra["route_trace"]["selected_provider"], "fast");
+        assert_eq!(
+            response.upstream_calls,
+            Some(2),
+            "both evaluate futures were dispatched before the fast candidate won"
+        );
+        assert_eq!(
+            response.extra["route_trace"]["attempts"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            started.load(Ordering::SeqCst),
+            1,
+            "slow candidate entered its upstream future"
+        );
+        assert_eq!(
+            completed.load(Ordering::SeqCst),
+            0,
+            "race aborts the losing upstream future"
+        );
+        assert_eq!(fast_handle.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn shadow_runs_target_without_changing_primary_response() {
+        let mut registry =
+            Registry::with_retry(vec![edge("jev", "primary", 10)], RetryPolicy::no_retry());
+        let (primary, ph) = fake("primary", &[QuestionType::Noul], Mode::Ok);
+        let (shadow, sh) = fake("shadow", &[QuestionType::Noul], Mode::Ok);
+        registry.register(primary);
+        registry.register(shadow);
+        let response = registry
+            .invoke_with_strategy(
+                noul_request("jev"),
+                plain_ctx(),
+                RoutingStrategy::Shadow {
+                    shadow_target: "shadow".into(),
+                },
+            )
+            .await
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        assert_eq!(ph.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(sh.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(response.upstream_calls, Some(2));
+        assert_eq!(
+            response.extra["route_trace"]["selected_provider"],
+            "primary"
+        );
+        assert_eq!(response.extra["route_trace"]["shadow"]["dispatched"], true);
+        assert_eq!(
+            response.extra["route_trace"]["shadow"]["usage_cost"],
+            "not_collected"
+        );
+    }
+
+    #[tokio::test]
     async fn unknown_model_is_404_semantics() {
         let reg = Registry::new(vec![]);
-        let err = reg.invoke(noul_request("nope"), plain_ctx()).await.unwrap_err();
+        let err = reg
+            .invoke(noul_request("nope"), plain_ctx())
+            .await
+            .unwrap_err();
         assert_eq!(err.http_status(), 404);
         assert!(!err.retryable());
         assert!(err.to_string().contains("nope"));
@@ -532,7 +1358,10 @@ mod tests {
         let mut reg = Registry::new(vec![edge("jev", "vercel", 10)]);
         let (v1, h1) = fake("vercel", &[QuestionType::Choice], Mode::Ok);
         reg.register(v1);
-        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
+        let err = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .unwrap_err();
         assert_eq!(err.http_status(), 422);
         assert_eq!(h1.calls.load(Ordering::SeqCst), 0);
     }
@@ -550,10 +1379,53 @@ mod tests {
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Mode::Ok);
         reg.register(v1);
         reg.register(v2);
-        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
+        let err = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .unwrap_err();
         assert_eq!(err.http_status(), 503);
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "fail 不试下一候选");
+    }
+
+    #[tokio::test]
+    async fn traced_failure_keeps_retry_and_failover_path_without_error_body() {
+        let mut reg = Registry::with_retry(
+            vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)],
+            RetryPolicy::no_retry(),
+        );
+        let (first, first_handle) = fake("vercel", &[QuestionType::Noul], Mode::Err429);
+        let (second, second_handle) = fake("laya", &[QuestionType::Noul], Mode::LocalErr429);
+        reg.register(first);
+        reg.register(second);
+
+        let failure = reg
+            .invoke_with_strategy_traced(
+                noul_request("jev"),
+                plain_ctx(),
+                RoutingStrategy::Failover,
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(failure.error.http_status(), 429);
+        assert_eq!(first_handle.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(second_handle.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(failure.route_trace["outcome"], "failed");
+        assert_eq!(failure.route_trace["upstream_calls"], 2);
+        assert_eq!(failure.route_trace["attempts"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            failure.route_trace["attempts"][0]["retry_decision"],
+            "next_candidate"
+        );
+        assert_eq!(failure.route_trace["attempts"][0]["upstream_status"], 429);
+        assert_eq!(failure.route_trace["attempts"][1]["provider_id"], "laya");
+        assert_eq!(
+            failure.route_trace["attempts"][1]["retry_decision"],
+            "stop_non_retryable"
+        );
+        assert_eq!(failure.route_trace["failure"]["http_status"], 429);
+        assert!(!failure.route_trace.to_string().contains("rate limited"));
     }
 
     #[tokio::test]
@@ -563,7 +1435,10 @@ mod tests {
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Mode::Ok);
         reg.register(v1);
         reg.register(v2);
-        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
+        let err = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .unwrap_err();
         assert_eq!(err.http_status(), 400);
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
@@ -576,7 +1451,10 @@ mod tests {
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Mode::Ok);
         reg.register(v1);
         reg.register(v2);
-        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
+        let err = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .unwrap_err();
         assert_eq!(err.http_status(), 502);
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
@@ -632,8 +1510,8 @@ mod tests {
     }
 
     /* ════════════════════════════════════════════════════════
-       A6 · RetryPolicy（同候选退避 → 耗尽再跨候选）
-       ════════════════════════════════════════════════════════ */
+    A6 · RetryPolicy（同候选退避 → 耗尽再跨候选）
+    ════════════════════════════════════════════════════════ */
 
     #[test]
     fn retry_policy_backoff_formula() {
@@ -642,7 +1520,10 @@ mod tests {
         assert_eq!(p.backoff_after(2), std::time::Duration::from_millis(200));
         assert_eq!(p.backoff_after(3), std::time::Duration::from_millis(400));
         // max_attempts 下限 1；no_retry 零退避
-        assert_eq!(RetryPolicy::new(0, std::time::Duration::ZERO).max_attempts, 1);
+        assert_eq!(
+            RetryPolicy::new(0, std::time::Duration::ZERO).max_attempts,
+            1
+        );
         assert_eq!(RetryPolicy::no_retry().max_attempts, 1);
         // 指数封顶防溢出
         let big = RetryPolicy::new(100, std::time::Duration::from_secs(1));
@@ -661,8 +1542,15 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("retry then ok");
-        assert_eq!(h1.calls.load(Ordering::SeqCst), 2, "同候选：429 后重试 1 次成功");
+        let resp = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .expect("retry then ok");
+        assert_eq!(
+            h1.calls.load(Ordering::SeqCst),
+            2,
+            "同候选：429 后重试 1 次成功"
+        );
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "未耗尽 → 不跨候选");
         assert_eq!(resp.upstream_calls, Some(2), "如实 = 实发 2 次");
     }
@@ -681,8 +1569,15 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("failover after retry");
-        assert_eq!(h1.calls.load(Ordering::SeqCst), 2, "同候选重试至耗尽（预算 2）");
+        let resp = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .expect("failover after retry");
+        assert_eq!(
+            h1.calls.load(Ordering::SeqCst),
+            2,
+            "同候选重试至耗尽（预算 2）"
+        );
         assert_eq!(h2.calls.load(Ordering::SeqCst), 1, "耗尽后才跨候选");
         assert_eq!(resp.upstream_calls, Some(3), "2 同候选 + 1 跨候选实发");
     }
@@ -691,15 +1586,15 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn backoff_uses_virtual_time_exponential_schedule() {
         let base = std::time::Duration::from_secs(10);
-        let mut reg = Registry::with_retry(
-            vec![edge("jev", "a", 10)],
-            RetryPolicy::new(3, base),
-        );
+        let mut reg = Registry::with_retry(vec![edge("jev", "a", 10)], RetryPolicy::new(3, base));
         let (v1, h1) = fake("a", &[QuestionType::Boolean], Mode::Err429TwiceThenOk);
         reg.register(v1);
 
         let t0 = tokio::time::Instant::now();
-        let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("3rd attempt ok");
+        let resp = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .expect("3rd attempt ok");
         let elapsed = t0.elapsed();
         assert_eq!(h1.calls.load(Ordering::SeqCst), 3);
         assert_eq!(resp.upstream_calls, Some(3));
@@ -723,10 +1618,21 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
+        let err = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .unwrap_err();
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "本地不重试");
-        assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "retryable=false 也不 failover");
-        assert_eq!(err.http_status(), 429, "非 retryable → 透传上游码（非 503）");
+        assert_eq!(
+            h2.calls.load(Ordering::SeqCst),
+            0,
+            "retryable=false 也不 failover"
+        );
+        assert_eq!(
+            err.http_status(),
+            429,
+            "非 retryable → 透传上游码（非 503）"
+        );
         assert!(!err.retryable());
     }
 
@@ -748,8 +1654,15 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let err = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap_err();
-        assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "fail：第一次错误即返回，零重试");
+        let err = reg
+            .invoke(noul_request("jev"), plain_ctx())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            h1.calls.load(Ordering::SeqCst),
+            1,
+            "fail：第一次错误即返回，零重试"
+        );
         assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
         assert_eq!(err.http_status(), 503);
     }

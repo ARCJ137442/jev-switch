@@ -1,44 +1,23 @@
-//! Vercel 方言 `ProtocolAdapter`（A5 · 原 jev-core `translate.rs` 重组落位）
+//! Vercel AI Gateway TypeSafe Jev response normalization.
 //!
-//! 参考 03-上游类别与协议兼容矩阵 §2.4 + contracts/01 §4/§6：
-//! - 出站（[`normalize_request_for_vercel`]）：Jev `type: noul` → Vercel `type: boolean`
-//!   （仅改写 type 键，criteria/instructions 保持）
-//! - 入站（[`VercelProtocol::incoming`] / [`build_jev_response_from_vercel`]）是**唯一**
-//!   出口翻译路径：
-//!   - 概率兜底链（§4 冻结）：`probability > noul > probabilities["true"] >
-//!     boolean→{0.95,0.05}` —— 仅作最后回退；双缺 → 键缺省（`noul_probability`
-//!     返回 0.0 = 未验到）
-//!   - 布尔族归一为 `Answer::Noul`（kind=Noul，§1 语义层只有 noul），`probability`
-//!     原样保留（双键并存，§6 禁止吞掉）
-//!   - choice / score：三字段必填（缺 → Err → 502，禁 best-effort）
-//!   - 未知 type → Err（§6 禁止平移）
-//!
-//! # 契约偏差备案（contracts/01 §1/§6 vs contracts/02 §2）
-//!
-//! contracts/01 说「`boolean` 只在 `ProtocolAdapter::outgoing 后出现」「需要
-//! boolean 时在 outgoing 转换」，但 contracts/02 §2 **冻结** `outgoing` 签名为
-//! `JevRequest -> JevRequest`，而 [`Question`](jev_protocol::Question) 三变体无法
-//! 表达 `boolean`。按最贴近字面实现：
-//! - trait 签名逐字保留，`VercelProtocol::outgoing` 保持默认恒等；
-//! - wire 级 noul→boolean 留在本方言的**出站 body 构造**
-//!   （[`normalize_request_for_vercel`]，由 `VercelUpstream::evaluate` 组 HTTP body
-//!   时调用）—— 行为与 A4 完全一致，测试不减。
+//! The active transport sends Jev requests unchanged to the TypeSafe-compatible API.
+//! Response normalization accepts the documented TypeSafe shape and legacy boolean
+//! answers, while preserving probability fields and rejecting incomplete variants.
 
 use crate::vercel_dto::VercelResponse;
 use jev_core::adapter::{IncomingCtx, ProtocolAdapter};
 use jev_core::upstream::JevError;
-use jev_protocol::{
-    Answer, JevRequest, JevResponse, NoulAnswer, NoulKind, Usage,
-};
+use jev_protocol::{Answer, JevRequest, JevResponse, NoulAnswer, NoulKind, Usage};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-/// Vercel 方言 id（contracts/02 §2 示例值 `vercel_boolean`）。
-pub const VERCEL_DIALECT: &str = "vercel_boolean";
+/// Vercel gateway adapter using the TypeSafe Jev request/response dialect.
+pub const VERCEL_DIALECT: &str = "typesafe_jev";
 /// 上游逻辑 id（错误体 `upstream` 字段用；adapter crate 允许厂商字面量）。
 pub const VERCEL_UPSTREAM_ID: &str = "vercel";
 
-/// 把 Jev 请求翻译成 Vercel 形态 JSON（出站 wire 级方言化）。
+/// Legacy helper for the previous Evaluation API request format; active TypeSafe calls
+/// serialize `JevRequest` directly and do not use this conversion.
 ///
 /// - `type: "noul"` → `type: "boolean"`（仅布尔族；choice/score 不碰）
 /// - 其余键原样保留；返回完整请求 Value（daemon body 取 `state`/`questions`，
@@ -68,7 +47,11 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
                     let final_prob: Option<f64> = va
                         .probability
                         .or(va.noul)
-                        .or_else(|| va.probabilities.as_ref().and_then(|p| p.get("true").copied()))
+                        .or_else(|| {
+                            va.probabilities
+                                .as_ref()
+                                .and_then(|p| p.get("true").copied())
+                        })
                         .or_else(|| va.boolean.map(|b| if b { 0.95 } else { 0.05 }))
                         .map(|p| p.clamp(0.0, 1.0));
                     Answer::Noul(NoulAnswer {
@@ -79,26 +62,29 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
                     })
                 }
                 Some("choice") => Answer::Choice {
-                    choice: va.choice.clone().ok_or_else(|| {
-                        format!("answer '{qid}': missing field `choice`")
-                    })?,
-                    probabilities: va.probabilities.clone().ok_or_else(|| {
-                        format!("answer '{qid}': missing field `probabilities`")
-                    })?,
-                    confidence: va.confidence.ok_or_else(|| {
-                        format!("answer '{qid}': missing field `confidence`")
-                    })?,
+                    choice: va
+                        .choice
+                        .clone()
+                        .ok_or_else(|| format!("answer '{qid}': missing field `choice`"))?,
+                    probabilities: va
+                        .probabilities
+                        .clone()
+                        .ok_or_else(|| format!("answer '{qid}': missing field `probabilities`"))?,
+                    confidence: va
+                        .confidence
+                        .ok_or_else(|| format!("answer '{qid}': missing field `confidence`"))?,
                 },
                 Some("score") => Answer::Score {
                     score: va
                         .score
                         .ok_or_else(|| format!("answer '{qid}': missing field `score`"))?,
-                    probabilities: va.probabilities.clone().ok_or_else(|| {
-                        format!("answer '{qid}': missing field `probabilities`")
-                    })?,
-                    confidence: va.confidence.ok_or_else(|| {
-                        format!("answer '{qid}': missing field `confidence`")
-                    })?,
+                    probabilities: va
+                        .probabilities
+                        .clone()
+                        .ok_or_else(|| format!("answer '{qid}': missing field `probabilities`"))?,
+                    confidence: va
+                        .confidence
+                        .ok_or_else(|| format!("answer '{qid}': missing field `confidence`"))?,
                 },
                 Some(other) => {
                     return Err(format!(
@@ -117,17 +103,30 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
     let usage = raw
         .usage
         .as_ref()
-        .map(|u| {
-            serde_json::from_value::<Usage>(u.clone()).map_err(|e| format!("usage: {e}"))
-        })
+        .map(|u| serde_json::from_value::<Usage>(u.clone()).map_err(|e| format!("usage: {e}")))
         .transpose()?;
 
     // providerMetadata + 顶层余量 → flatten extra
     let mut extra = raw.extra.clone();
     if let Some(pm) = &raw.provider_metadata {
-        extra.entry("providerMetadata".to_string())
+        extra
+            .entry("providerMetadata".to_string())
             .or_insert_with(|| pm.clone());
     }
+
+    // Vercel reports the caller-facing amount as a decimal string. Preserve the
+    // metadata above and expose only this explicit field; never estimate from usage.
+    let cost_usd = raw
+        .provider_metadata
+        .as_ref()
+        .and_then(|metadata| metadata.pointer("/gateway/gatewayCost"))
+        .and_then(|value| {
+            value
+                .as_str()
+                .and_then(|raw| raw.parse::<f64>().ok())
+                .or_else(|| value.as_f64())
+        })
+        .filter(|cost| cost.is_finite() && *cost >= 0.0);
 
     Ok(JevResponse {
         model: raw.model.clone(),
@@ -136,7 +135,7 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
         // 单次上游实发；failover/重试实发次数由 Registry::invoke 如实覆写
         upstream_calls: Some(1),
         latency_ms: None,
-        cost_usd: None, // 未知 → null（§5）
+        cost_usd, // only explicit provider-reported gatewayCost; absent/invalid → unknown
         extra,
     })
 }
@@ -170,8 +169,8 @@ impl ProtocolAdapter for VercelProtocol {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   测试（原 jev-core translate.rs 全量随迁 —— 行为不变，测试不减）
-   ══════════════════════════════════════════════════════════════════ */
+测试（原 jev-core translate.rs 全量随迁 —— 行为不变，测试不减）
+══════════════════════════════════════════════════════════════════ */
 
 #[cfg(test)]
 mod tests {
@@ -261,11 +260,8 @@ mod tests {
     #[test]
     fn vercel_boolean_true_to_noul() {
         // 生产路径：build_jev_response_from_vercel
-        let resp = build_jev_response_from_vercel(&make_vercel_response(
-            "q",
-            boolean_answer(true),
-        ))
-        .unwrap();
+        let resp = build_jev_response_from_vercel(&make_vercel_response("q", boolean_answer(true)))
+            .unwrap();
         let n = noul_of(&resp, "q");
         assert_eq!(n.kind, NoulKind::Noul);
         assert_eq!(n.noul, Some(0.95));
@@ -279,11 +275,9 @@ mod tests {
 
     #[test]
     fn vercel_boolean_false_to_noul() {
-        let resp = build_jev_response_from_vercel(&make_vercel_response(
-            "q",
-            boolean_answer(false),
-        ))
-        .unwrap();
+        let resp =
+            build_jev_response_from_vercel(&make_vercel_response("q", boolean_answer(false)))
+                .unwrap();
         let n = noul_of(&resp, "q");
         assert_eq!(n.noul, Some(0.05));
         assert_eq!(noul_probability(n), 0.05);
@@ -330,9 +324,8 @@ mod tests {
         let req: JevRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.questions["b"].question_type_str(), "noul");
 
-        let resp =
-            build_jev_response_from_vercel(&make_vercel_response("b", boolean_answer(true)))
-                .unwrap();
+        let resp = build_jev_response_from_vercel(&make_vercel_response("b", boolean_answer(true)))
+            .unwrap();
         let n = noul_of(&resp, "b");
         assert_eq!(n.kind, NoulKind::Noul);
         assert_eq!(n.noul, Some(0.95));
@@ -348,10 +341,7 @@ mod tests {
             "c".to_string(),
             Question::Choice {
                 instructions: "pick".into(),
-                criteria: Criteria::Map(BTreeMap::from([(
-                    "A".into(),
-                    "alpha".into(),
-                )])),
+                criteria: Criteria::Map(BTreeMap::from([("A".into(), "alpha".into())])),
             },
         );
         let req = JevRequest {
@@ -384,15 +374,58 @@ mod tests {
     }
 
     #[test]
+    fn typesafe_choice_and_score_keep_upstream_confidence() {
+        let raw = br#"{
+            "model":"typesafe-ai/jev",
+            "answers":{
+                "route":{"type":"choice","choice":"billing","probabilities":{"billing":1.0,"shipping":0.0},"confidence":1.0},
+                "quality":{"type":"score","score":1.98,"probabilities":{"1":0.02,"2":0.98},"confidence":0.97}
+            },
+            "usage":{"input_tokens":418,"output_tokens":51}
+        }"#;
+        let request = make_noul_request();
+        let ctx = IncomingCtx {
+            request: &request,
+            original: &request,
+            status: 200,
+        };
+        let response = VercelProtocol.incoming(raw, &ctx).unwrap();
+
+        match &response.answers["route"] {
+            Answer::Choice {
+                choice, confidence, ..
+            } => {
+                assert_eq!(choice, "billing");
+                assert_eq!(*confidence, 1.0);
+            }
+            other => panic!("unexpected choice answer: {other:?}"),
+        }
+        match &response.answers["quality"] {
+            Answer::Score {
+                score, confidence, ..
+            } => {
+                assert_eq!(*score, 1.98);
+                assert_eq!(*confidence, 0.97);
+            }
+            other => panic!("unexpected score answer: {other:?}"),
+        }
+        let usage = response.usage.as_ref().unwrap();
+        assert_eq!(usage.input_tokens, Some(418));
+        assert_eq!(usage.output_tokens, Some(51));
+    }
+
+    #[test]
     fn unknown_answer_type_rejected() {
         // §6：未知 type → Err（禁 best-effort 平移）→ 上游映射 502
         let va = VercelAnswer {
             r#type: Some("mystery".into()),
             ..Default::default()
         };
-        let err =
-            build_jev_response_from_vercel(&make_vercel_response("q", va)).unwrap_err();
-        assert!(err.contains("unknown variant `mystery`"), "unexpected: {err}");
+        let err = build_jev_response_from_vercel(&make_vercel_response("q", va)).unwrap_err();
+        assert!(
+            err.contains("unknown variant `mystery`"),
+            "unexpected: {err}"
+        );
     }
 
     #[test]
@@ -405,9 +438,11 @@ mod tests {
             confidence: None,
             ..Default::default()
         };
-        let err =
-            build_jev_response_from_vercel(&make_vercel_response("c", va)).unwrap_err();
-        assert!(err.contains("missing field `confidence`"), "unexpected: {err}");
+        let err = build_jev_response_from_vercel(&make_vercel_response("c", va)).unwrap_err();
+        assert!(
+            err.contains("missing field `confidence`"),
+            "unexpected: {err}"
+        );
     }
 
     #[test]
@@ -443,11 +478,59 @@ mod tests {
     }
 
     #[test]
+    fn provider_reported_gateway_cost_is_exposed_without_estimation() {
+        let mut raw = make_vercel_response("q", boolean_answer(true));
+        raw.provider_metadata = Some(serde_json::json!({
+            "gateway": { "gatewayCost": "0.000017556", "marketCost": "0.000017556" }
+        }));
+        let response = build_jev_response_from_vercel(&raw).unwrap();
+        assert_eq!(response.cost_usd, Some(0.000017556));
+        assert_eq!(
+            response.extra["providerMetadata"]["gateway"]["gatewayCost"],
+            "0.000017556"
+        );
+    }
+
+    #[test]
+    fn documented_snake_case_typesafe_response_preserves_usage_and_gateway_cost() {
+        // Vercel's TypeSafe API docs use `provider_metadata` and snake_case usage.
+        let raw = br#"{
+            "model":"typesafe-ai/jev",
+            "answers":{"q":{"type":"noul","noul":0.98}},
+            "usage":{"input_tokens":275,"output_tokens":20},
+            "provider_metadata":{"gateway":{
+                "routing":{"finalProvider":"typesafe-ai"},
+                "cost":"0.00001155",
+                "marketCost":"0.00001155",
+                "surchargeCost":"0",
+                "gatewayCost":"0.00001155",
+                "generationId":"gen_fixture"
+            }}
+        }"#;
+        let request = make_noul_request();
+        let ctx = IncomingCtx {
+            request: &request,
+            original: &request,
+            status: 200,
+        };
+
+        let response = VercelProtocol.incoming(raw, &ctx).unwrap();
+
+        assert_eq!(response.model.as_deref(), Some("typesafe-ai/jev"));
+        assert_eq!(response.usage.as_ref().unwrap().input_tokens, Some(275));
+        assert_eq!(response.usage.as_ref().unwrap().output_tokens, Some(20));
+        assert_eq!(response.cost_usd, Some(0.00001155));
+        assert_eq!(
+            response.extra["providerMetadata"]["gateway"]["generationId"],
+            "gen_fixture"
+        );
+    }
+
+    #[test]
     fn upstream_calls_count_built_responses() {
         // build 路径单发上游 = 1（Registry::invoke 覆写为如实实发次数）
-        let resp =
-            build_jev_response_from_vercel(&make_vercel_response("q", boolean_answer(true)))
-                .unwrap();
+        let resp = build_jev_response_from_vercel(&make_vercel_response("q", boolean_answer(true)))
+            .unwrap();
         assert_eq!(resp.upstream_calls, Some(1));
     }
 
@@ -457,7 +540,7 @@ mod tests {
     fn vercel_protocol_incoming_bytes_path() {
         // incoming(raw bytes) = 唯一出口路径的 trait 入口
         let p = VercelProtocol;
-        assert_eq!(p.dialect(), "vercel_boolean");
+        assert_eq!(p.dialect(), "typesafe_jev");
         let raw = br#"{"answers":{"q":{"type":"boolean","probability":0.69,"boolean":true}}}"#;
         let req = make_noul_request();
         let ctx = IncomingCtx {

@@ -5,10 +5,10 @@
 //!
 //! 全程随机端口（wiremock Server 自分配）——不占 11435，B 线可并行 curl。
 
+use jev_adapters::upstream_vercel::VercelUpstream;
 use jev_core::adapter::{plain_ctx, Registry, RetryPolicy, UpstreamAdapter};
 use jev_core::router::{MatchMode, RouteEdge};
 use jev_core::upstream::{Capabilities, JevError, QuestionType};
-use jev_adapters::upstream_vercel::VercelUpstream;
 use jev_protocol::{Criteria, JevRequest, JevResponse, Question};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -141,9 +141,15 @@ async fn wiremock_429_then_200_client_200_upstream_calls_2() {
         }],
         RetryPolicy::new(3, Duration::from_millis(1)), // 极短基数防 flake
     );
-    reg.register(Box::new(vercel_upstream_at(format!("{}/evaluate", server.uri()))));
+    reg.register(Box::new(vercel_upstream_at(format!(
+        "{}/evaluate",
+        server.uri()
+    ))));
 
-    let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("P1-3 客户端 200");
+    let resp = reg
+        .invoke(noul_request("jev"), plain_ctx())
+        .await
+        .expect("P1-3 客户端 200");
 
     // 客户端拿到 200 + 标准 JevResponse（probability 0.73 归一）
     assert_eq!(resp.upstream_calls, Some(2), "upstream_calls == 2");
@@ -183,13 +189,19 @@ async fn retry_exhausted_then_failover_to_next_candidate() {
         ],
         RetryPolicy::new(2, Duration::from_millis(1)), // 同候选预算 2
     );
-    reg.register(Box::new(vercel_upstream_at(format!("{}/evaluate", server.uri()))));
+    reg.register(Box::new(vercel_upstream_at(format!(
+        "{}/evaluate",
+        server.uri()
+    ))));
     let laya_calls = Arc::new(AtomicU32::new(0));
     reg.register(Box::new(OkLaya {
         calls: laya_calls.clone(),
     }));
 
-    let resp = reg.invoke(noul_request("jev"), plain_ctx()).await.expect("failover ok");
+    let resp = reg
+        .invoke(noul_request("jev"), plain_ctx())
+        .await
+        .expect("failover ok");
 
     // 同候选 2 发（耗尽）+ 跨候选 1 发 = 3
     let received = server.received_requests().await.expect("recorded");

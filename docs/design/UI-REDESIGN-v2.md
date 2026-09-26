@@ -3,6 +3,8 @@
 **作者**: Claude Opus 4.8  
 **性质**: 推翻重来的完整设计方案（Architecture + Visual + Interaction）
 
+> **历史方案接续说明（2026-09-24）：**以 [入口网关认知对齐与实施计划](ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md) 作为当前施工入口。下文 Control/Logs 三页与 Playground 浮层属于旧草图，不应据此重新合并导航；演练场保留独立页并支持两类入口横比。落实 Routing“入口”配置、对外入口卡片到提供商复合卡片的交互 DAG，以及可扩展语言选择；旧中英 toggle 不再是目标交互。
+
 ---
 
 ## §0 设计理念（一句话）

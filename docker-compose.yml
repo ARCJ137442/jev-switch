@@ -1,14 +1,15 @@
 # Jev-Switch 单命令云部署（任务 #43 · docs/12 §四线1）
 #
 # 用法：
-#   1.（首次）准备 .env —— **cloud 态两个凭据必填**（缺失 = fail-closed 全 401）：
-#        JEV_AUTH_TOKENS=tok-…        # /v1 调用 token（逗号可列多个）
+#   1.（首次）准备 .env —— cloud 管理须配置管理员密码，公开调用须有调用 Token：
+#        JEV_AUTH_TOKENS=tok-…        # 可选：首次导入 readonly Token（逗号可列多个）
 #        JEV_ADMIN_PASSWORD=…         # admin 登录密码
 #        AI_GATEWAY_API_KEY=sk-…      # 可选：Vercel 上游 key（providers.toml 用）
 #   2. docker compose up -d
 #   3. curl http://127.0.0.1:11435/health
 #
-# 配置真值：./data/providers.toml（宿主 bind mount；首启自动从 example 播种）。
+# 持久目录：./data；SQLite 保存当前配置、入口、调用 token 与记录。
+# providers.toml 首启自动从 example 播种；后续手动编辑通过控制台显式导入。
 # 用目录挂载而非单文件 —— 宿主文件不存在时 docker 会误建**同名目录**的经典坑。
 # .env 已在 .gitignore（密钥不进仓库）；providers.toml 里的明文 key 同理勿提交。
 
@@ -23,9 +24,9 @@ services:
       # 容器内 mode=cloud 绑 0.0.0.0:11435（部署形态偏差，见 docs/deployment.md）
       - "11435:11435"
     environment:
-      # 默认 cloud（本文件就是云部署线）；要本机免鉴权体验可 .env 设 JEV_SWITCH_MODE=local
+      # 默认 cloud；local 的回环来源限制仍生效，不能直接等同于容器端口发布。
       JEV_SWITCH_MODE: ${JEV_SWITCH_MODE:-cloud}
-      # 非空 env 完全覆盖 providers.toml 内 auth_tokens（env 注入，值不进镜像/日志）
+      # 首次导入时非空 env 优先于 TOML；之后以数据库中的启停/撤销状态为准。
       JEV_AUTH_TOKENS: ${JEV_AUTH_TOKENS:-}
       # env 优先于 providers.toml 内 admin_password
       JEV_ADMIN_PASSWORD: ${JEV_ADMIN_PASSWORD:-}
@@ -33,6 +34,8 @@ services:
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
-      # 配置真值源（contracts/04 §1）：./data/providers.toml —— 0600 由 daemon 写回时收紧
+      # 挂整个持久目录，重建容器后保留 SQLite 数据与 TOML 同步文件。
       - ./data:/data
+    # 内核最多用 10 秒排空连接，额外留出容器退出时间。
+    stop_grace_period: 15s
     restart: unless-stopped

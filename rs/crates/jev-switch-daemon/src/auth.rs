@@ -4,13 +4,14 @@
 //!   **非 loopback peer → 403**（`local mode: loopback only`，三键错误体 ——
 //!   显式 bind=0.0.0.0 场景的应用层兜底；非显式默认绑 127.0.0.1 内核级已挡）。
 //! - **cloud**：
-//!   - `/v1/systemone`、`/v1/models` → `Authorization: Bearer <调用 token>`
-//!     （token 来自配置 `auth_tokens` 两种写法 / env `JEV_AUTH_TOKENS`；
-//!     单账号语义，**不做 token 管理体系**）。缺失/错值 → **401** 统一错误体
+//!   - `/v1/systemone`、`/v1/models` → `Authorization: Bearer <调用 token>`。
+//!     旧配置 `auth_tokens` / env `JEV_AUTH_TOKENS` 首次导入为哈希存储的只读托管 Token；
+//!     后续角色、启停与撤销以 SQLite Token 清单为准。缺失/错值 → **401** 统一错误体
 //!     `{error, upstream:null, retryable:false}`（经 redact，contracts/05 §3 形状）。
 //!   - `/health` **放行**（容器/探针探活，任务书字面）。
-//!   - `/v1/admin/*` → 独立管理密码：`POST /v1/admin/login {password}` 换**短时会话
-//!     token**（内存态、不落盘、过期即废）→ 后续 admin 请求带
+//!   - `/v1/admin/*` → **admin 角色托管 Token 或管理员会话**。
+//!     `POST /v1/admin/login {password}` 用独立管理密码换**短时会话 token**
+//!     （内存态、不落盘、过期即废）→ 后续 admin 请求带
 //!     `Authorization: Bearer <会话 token>`。密码来源：配置 `admin_password`
 //!     （明文 toml —— Q4=b 哲学）/ env `JEV_ADMIN_PASSWORD` 优先 /
 //!     运行时热更 `PUT /v1/admin/{mode,password}`（统一 `admin::set_admin_password`）。
@@ -50,8 +51,8 @@ use std::time::{Duration, Instant};
 pub const ADMIN_SESSION_TTL: Duration = Duration::from_secs(2 * 60 * 60);
 
 /* ══════════════════════════════════════════════════════════════════
-   AuthState（挂在 AppState.auth —— Arc 共享，逐请求克隆只碰指针）
-   ══════════════════════════════════════════════════════════════════ */
+AuthState（挂在 AppState.auth —— Arc 共享，逐请求克隆只碰指针）
+══════════════════════════════════════════════════════════════════ */
 
 /// 双态鉴权运行态（**不 derive Clone** —— 内含 `RwLock`；共享靠 `AppState.auth`
 /// 的 `Arc<AuthState>`，克隆只碰指针）。
@@ -61,6 +62,9 @@ pub struct AuthState {
     pub mode: RwLock<crate::config::RunMode>,
     /// cloud `/v1` 调用 token 列表（local 态忽略）。
     pub auth_tokens: Vec<String>,
+    /// Production build_state migrates legacy config tokens to the managed hashed
+    /// token table. Unit/legacy direct AppState fixtures keep the old list fallback.
+    pub managed_tokens_only: AtomicBool,
     /// cloud admin 登录密码（明文 —— 仅存在内存；None = fail-closed）。
     /// 运行时可经统一入口 `admin::set_admin_password` 热更（持久化+会话作废）。
     pub admin_password: RwLock<Option<String>>,
@@ -86,6 +90,7 @@ impl Default for AuthState {
         AuthState {
             mode: RwLock::new(crate::config::RunMode::Local),
             auth_tokens: Vec::new(),
+            managed_tokens_only: AtomicBool::new(false),
             admin_password: RwLock::new(None),
             sessions: RwLock::new(HashMap::new()),
             env_mode_override: AtomicBool::new(false),
@@ -96,7 +101,7 @@ impl Default for AuthState {
 }
 
 impl AuthState {
-    /// 从配置（已含 env 覆盖解析）构造；cloud 态缺 token/密码时 fail-closed 并告警。
+    /// 从配置（已含 env 覆盖解析）构造；托管 Token 的可用数量由 build_state 汇报。
     pub fn from_config(cfg: &crate::config::Config) -> Self {
         let mode = match cfg.effective_mode() {
             Ok(m) => m,
@@ -110,8 +115,8 @@ impl AuthState {
         let admin_password = cfg.effective_admin_password();
         if mode == crate::config::RunMode::Cloud {
             if auth_tokens.is_empty() {
-                tracing::warn!(
-                    "cloud mode: auth_tokens empty — all /v1 calls will be rejected (401, fail-closed)"
+                tracing::debug!(
+                    "no legacy config call tokens; managed token availability is reported during runtime initialization"
                 );
             }
             if admin_password.is_none() {
@@ -121,10 +126,16 @@ impl AuthState {
             }
         }
         // 注意：只记数量，**绝不打印 token/密码值**。
-        tracing::info!(?mode, call_tokens = auth_tokens.len(), admin_password_set = admin_password.is_some(), "auth initialized");
+        tracing::info!(
+            ?mode,
+            legacy_config_tokens = auth_tokens.len(),
+            admin_password_set = admin_password.is_some(),
+            "auth initialized"
+        );
         AuthState {
             mode: RwLock::new(mode),
             auth_tokens,
+            managed_tokens_only: AtomicBool::new(false),
             admin_password: RwLock::new(admin_password),
             sessions: RwLock::new(HashMap::new()),
             env_mode_override: AtomicBool::new(env_nonempty("JEV_SWITCH_MODE")),
@@ -143,15 +154,18 @@ fn env_nonempty(key: &str) -> bool {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   内部工具
-   ══════════════════════════════════════════════════════════════════ */
+内部工具
+══════════════════════════════════════════════════════════════════ */
 
 /// 常数时间字节比较（长度不等直接 false —— 长度侧信道可接受）。
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 /// 提取 `Authorization: Bearer <token>`（scheme 大小写不敏感；缺失/怪形 → None）。
@@ -219,41 +233,76 @@ pub(crate) fn has_valid_session(state: &AppState, token: Option<&str>) -> bool {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   中间件（local 直通 + peer 兜底 / cloud 校验 —— 每请求读锁取 mode）
-   ══════════════════════════════════════════════════════════════════ */
+中间件（local 直通 + peer 兜底 / cloud 校验 —— 每请求读锁取 mode）
+══════════════════════════════════════════════════════════════════ */
 
 /// `/v1/systemone`、`/v1/models` 的调用 token 门。
 pub async fn require_call_token(
     State(state): State<AppState>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
+    let identity = call_identity(&state, &req);
     if current_mode(&state) == crate::config::RunMode::Local {
         // local：loopback 全放行（现状语义）；非 loopback → 403 应用层兜底
         // （显式 bind=0.0.0.0 时 LAN 可达的残留保护；非显式默认已绑 127.0.0.1）
         if !peer_is_loopback(&req) {
             return forbidden(&state, "local mode: loopback only");
         }
+        if let Some(identity) = identity.clone() {
+            req.extensions_mut().insert(identity);
+        }
         return next.run(req).await;
     }
     match bearer_token(req.headers()) {
         Some(tok)
-            if state
-                .auth
-                .auth_tokens
-                .iter()
-                .any(|t| ct_eq(t.as_bytes(), tok.as_bytes())) =>
+            if state.auth.auth_tokens.iter().any(|t| {
+                !state.auth.managed_tokens_only.load(Ordering::SeqCst)
+                    && ct_eq(t.as_bytes(), tok.as_bytes())
+            }) =>
         {
+            if let Some(identity) = identity.clone() {
+                req.extensions_mut().insert(identity);
+            }
+            next.run(req).await
+        }
+        Some(_) if identity.is_some() => {
+            req.extensions_mut().insert(identity.unwrap());
             next.run(req).await
         }
         _ => unauthorized(&state, "missing or invalid bearer token"),
     }
 }
 
+fn call_identity(state: &AppState, req: &Request) -> Option<crate::tokens::CallerIdentity> {
+    let secret = bearer_token(req.headers())?;
+    let conn = state.db_conn.lock().ok()?;
+    let identity = crate::tokens::lookup_secret(&conn, secret).ok().flatten()?;
+    let _ = crate::tokens::update_last_used(&conn, &identity.id);
+    Some(identity)
+}
+
+/// Protect caller-owned data endpoints. Only managed call tokens are accepted here;
+/// legacy config tokens have no stable identity and therefore cannot read stats/logs.
+pub async fn require_managed_caller(
+    State(state): State<AppState>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    if current_mode(&state) == crate::config::RunMode::Local && !peer_is_loopback(&req) {
+        return forbidden(&state, "local mode: loopback only");
+    }
+    let Some(identity) = call_identity(&state, &req) else {
+        return unauthorized(&state, "missing or invalid managed bearer token");
+    };
+    req.extensions_mut().insert(identity);
+    next.run(req).await
+}
+
 /// `/v1/admin/*` 的会话门（login/password 端点本身不走此门 —— build_app 挂在门外）。
 pub async fn require_admin_session(
     State(state): State<AppState>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
     if current_mode(&state) == crate::config::RunMode::Local {
@@ -264,7 +313,14 @@ pub async fn require_admin_session(
     }
     // 锁作用域在 has_valid_session 内完成 prune + 查验 —— `RwLockWriteGuard` 是
     // !Send，绝不跨越 `next.run(...).await`（否则整个 middleware future 非 Send）。
-    if has_valid_session(&state, bearer_token(req.headers())) {
+    let caller = call_identity(&state, &req);
+    let caller_is_admin = caller
+        .as_ref()
+        .is_some_and(|identity| identity.role == crate::tokens::TokenRole::Admin);
+    if has_valid_session(&state, bearer_token(req.headers())) || caller_is_admin {
+        if let Some(identity) = caller {
+            req.extensions_mut().insert(identity);
+        }
         next.run(req).await
     } else {
         unauthorized(&state, "admin session required (POST /v1/admin/login)")
@@ -279,8 +335,8 @@ fn prune_expired(sessions: &mut HashMap<String, Instant>) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   POST /v1/admin/login
-   ══════════════════════════════════════════════════════════════════ */
+POST /v1/admin/login
+══════════════════════════════════════════════════════════════════ */
 
 /// login 请求体（**只 Deserialize** —— 密码永不进任何序列化面，同 ProviderInput 纪律）。
 #[derive(Debug, Deserialize)]
@@ -360,7 +416,12 @@ pub async fn admin_login(State(state): State<AppState>, body: Bytes) -> Response
     };
 
     // 读锁拷贝密码（RwLock guard 不跨后续逻辑；值不进日志）
-    let configured = state.auth.admin_password.read().expect("password lock").clone();
+    let configured = state
+        .auth
+        .admin_password
+        .read()
+        .expect("password lock")
+        .clone();
     let Some(configured) = configured else {
         // fail-closed：无密码配置 → 拒绝一切登录（不回显配置细节）。
         tracing::warn!("admin login attempt rejected: admin_password not configured");
@@ -374,11 +435,7 @@ pub async fn admin_login(State(state): State<AppState>, body: Bytes) -> Response
 
     let token = new_session_token();
     {
-        let mut sessions = state
-            .auth
-            .sessions
-            .write()
-            .expect("admin sessions lock");
+        let mut sessions = state.auth.sessions.write().expect("admin sessions lock");
         prune_expired(&mut sessions);
         sessions.insert(token.clone(), Instant::now() + ADMIN_SESSION_TTL);
     }
@@ -408,12 +465,8 @@ mod tests {
         // 另一个正在 load 的文件 —— 本模块初版实测 4 测同名互踩全红）。
         static N: AtomicU64 = AtomicU64::new(0);
         let seq = N.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "jev-auth-{}-{}-{}",
-            name,
-            std::process::id(),
-            seq
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("jev-auth-{}-{}-{}", name, std::process::id(), seq));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("providers.toml");
         std::fs::write(&path, content).unwrap();
@@ -574,7 +627,10 @@ enabled = true
         )
         .await;
         assert_eq!(s, 401, "{b}");
-        assert!(!b.contains("pw-test-wrong"), "错误回显不得含提交的密码: {b}");
+        assert!(
+            !b.contains("pw-test-wrong"),
+            "错误回显不得含提交的密码: {b}"
+        );
 
         // ③ login 密码缺字段 → 400
         let (s, _) = send(
@@ -618,7 +674,14 @@ enabled = true
         assert!(!b.contains(&session), "admin GET 泄露会话 token: {b}");
 
         // ⑥ **分池**：调用 token 拒于 admin 门外
-        let (s, b) = send(app.clone(), "GET", "/v1/admin/providers", None, Some(FAKE_TOK)).await;
+        let (s, b) = send(
+            app.clone(),
+            "GET",
+            "/v1/admin/providers",
+            None,
+            Some(FAKE_TOK),
+        )
+        .await;
         assert_eq!(s, 401, "调用 token 不得当 admin 会话用: {b}");
 
         // ⑦ 分池反向：会话 token 拒于 /v1 门外
@@ -674,7 +737,14 @@ auth_tokens = ["tok-test-call-bbbb"]
             .insert("deadbeefdeadbeef".into(), expired);
         let app = build_app(state.clone());
 
-        let (s, b) = send(app, "GET", "/v1/admin/providers", None, Some("deadbeefdeadbeef")).await;
+        let (s, b) = send(
+            app,
+            "GET",
+            "/v1/admin/providers",
+            None,
+            Some("deadbeefdeadbeef"),
+        )
+        .await;
         assert_eq!(s, 401, "过期会话必须 401: {b}");
         // 惰性清理：过期条目已被 prune 掉
         assert!(state.auth.sessions.write().unwrap().is_empty());
@@ -712,8 +782,8 @@ auth_tokens = ["tok-test-call-bbbb"]
     }
 
     /* ════════════════════════════════════════════════════════════
-       mode 热切 / 激活设密 / env 警示（oneshot —— None peer = loopback 信任）
-       ════════════════════════════════════════════════════════════ */
+    mode 热切 / 激活设密 / env 警示（oneshot —— None peer = loopback 信任）
+    ════════════════════════════════════════════════════════════ */
 
     /// 带 state 句柄的装配（需要拨 env 警示原子位 / 查 RwLock）。
     fn app_state_of(content: &str) -> (axum::Router, crate::AppState, std::path::PathBuf) {
@@ -756,15 +826,17 @@ enabled = true
         .await;
         assert_eq!(s, 400, "{b}");
         assert!(
-            b.contains("admin password required to activate cloud")
-                && b.contains("admin_password"),
+            b.contains("admin password required to activate cloud") && b.contains("admin_password"),
             "400 文案须含指引: {b}"
         );
         // 拒绝后：仍是 local（/v1/models 免 token 200），文件未写 mode
         let (s, b) = send(app.clone(), "GET", "/v1/models", None, None).await;
         assert_eq!(s, 200, "拒绝激活后模式不得翻转: {b}");
         let on_disk = std::fs::read_to_string(&path).unwrap();
-        assert!(!on_disk.contains("mode = \"cloud\""), "400 不得落盘: {on_disk}");
+        assert!(
+            !on_disk.contains("mode = \"cloud\""),
+            "400 不得落盘: {on_disk}"
+        );
 
         // 非法 mode 字面 → 400（带病不上线）
         let (s, b) = send(
@@ -816,7 +888,10 @@ enabled = true
         // 落盘核对
         let on_disk = std::fs::read_to_string(&path).unwrap();
         assert!(on_disk.contains("mode = \"cloud\""), "{on_disk}");
-        assert!(on_disk.contains("admin_password = \"pw-test-boot-1\""), "{on_disk}");
+        assert!(
+            on_disk.contains("admin_password = \"pw-test-boot-1\""),
+            "{on_disk}"
+        );
 
         // 立即生效：/v1 现在要 token；login 用新密码拿会话
         let (s, b) = send(app.clone(), "GET", "/v1/models", None, None).await;
@@ -858,14 +933,7 @@ enabled = true
         assert_eq!(s, 401, "cloud status 无会话 401（三键）: {b}");
         let obj: serde_json::Value = serde_json::from_str(&b).unwrap();
         assert_eq!(obj.as_object().unwrap().len(), 3, "{b}");
-        let (s, b) = send(
-            app.clone(),
-            "GET",
-            "/v1/admin/status",
-            None,
-            Some(&session),
-        )
-        .await;
+        let (s, b) = send(app.clone(), "GET", "/v1/admin/status", None, Some(&session)).await;
         assert_eq!(s, 200, "{b}");
         let v: serde_json::Value = serde_json::from_str(&b).unwrap();
         assert_eq!(v["mode"], "cloud", "{b}");
@@ -1040,7 +1108,9 @@ enabled = true
         let v: serde_json::Value = serde_json::from_str(&b).unwrap();
         assert_eq!(v["mode"], "cloud");
         assert_eq!(v["persisted"], true);
-        assert!(std::fs::read_to_string(&path).unwrap().contains("mode = \"cloud\""));
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("mode = \"cloud\""));
 
         // 同请求即时翻转：无 token → 401；带 token → 200
         let (s, b) = send(app.clone(), "GET", "/v1/models", None, None).await;
@@ -1082,7 +1152,9 @@ enabled = true
         )
         .await;
         assert_eq!(s, 200, "{b}");
-        assert!(std::fs::read_to_string(&path).unwrap().contains("mode = \"local\""));
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("mode = \"local\""));
 
         // 切回：无 token 又 200（铁证链闭环）
         let (s, b) = send(app, "GET", "/v1/models", None, None).await;
@@ -1123,10 +1195,7 @@ enabled = true
         assert_eq!(v["env_override_active"], false, "{b}");
 
         // 拨位模拟「JEV_SWITCH_MODE 活跃」→ 下一次 mode 写响应警示 true
-        state
-            .auth
-            .env_mode_override
-            .store(true, Ordering::SeqCst);
+        state.auth.env_mode_override.store(true, Ordering::SeqCst);
         let (s, b) = send(
             app.clone(),
             "PUT",
@@ -1139,10 +1208,7 @@ enabled = true
         let v: serde_json::Value = serde_json::from_str(&b).unwrap();
         assert_eq!(v["env_override_active"], true, "env mode 活跃须警示: {b}");
         // 复位，隔离下一断言只看密码位
-        state
-            .auth
-            .env_mode_override
-            .store(false, Ordering::SeqCst);
+        state.auth.env_mode_override.store(false, Ordering::SeqCst);
 
         // 密码端点：拨 env_password_override → 响应警示 true
         state

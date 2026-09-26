@@ -1,4 +1,5 @@
 import { edgeKey, type Route } from '../../api/admin';
+import { routeIdentity } from './dag';
 import { useI18n } from '../../i18n';
 
 interface Props {
@@ -38,7 +39,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
   const { t } = useI18n();
   const pairCount = new Map<string, number>();
   for (const r of routes) {
-    const k = edgeKey(r.left, r.right);
+    const k = routeIdentity(r);
     pairCount.set(k, (pairCount.get(k) ?? 0) + 1);
   }
 
@@ -50,7 +51,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
       }}
-      aria-label="routes table editor"
+      aria-label={t('rt.tableEditor')}
     >
       <header
         className="flex items-center justify-between px-4 py-2"
@@ -83,14 +84,14 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
         <table className="w-full border-collapse text-left">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              <th style={thStyle}>left</th>
-              <th style={{ ...thStyle, padding: '0.5rem' }}>match</th>
-              <th style={thStyle}>right</th>
-              <th style={thStyle}>upstream_model</th>
-              <th style={thStyle}>priority</th>
-              <th style={{ ...thStyle, padding: '0.5rem' }}>sticky</th>
-              <th style={{ ...thStyle, padding: '0.5rem' }}>on_error</th>
-              <th style={{ ...thStyle, padding: '0.5rem' }} aria-label="actions" />
+              <th scope="col" style={thStyle}>{t('rt.left')}</th>
+              <th scope="col" style={{ ...thStyle, padding: '0.5rem' }}>{t('rt.match')}</th>
+              <th scope="col" style={thStyle}>{t('rt.right')}</th>
+              <th scope="col" style={thStyle}>{t('rt.upstreamModel')}</th>
+              <th scope="col" style={thStyle}>{t('rt.priority')}</th>
+              <th scope="col" style={{ ...thStyle, padding: '0.5rem' }}>{t('rt.sticky')}</th>
+              <th scope="col" style={{ ...thStyle, padding: '0.5rem' }}>{t('rt.onError')}</th>
+              <th scope="col" style={{ ...thStyle, padding: '0.5rem' }}>{t('rt.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -108,13 +109,13 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
             {routes.map((r, i) => {
               const key = edgeKey(r.left, r.right);
               const isErr = errorEdges.has(key);
-              const dup = (pairCount.get(key) ?? 0) > 1;
+              const dup = (pairCount.get(routeIdentity(r)) ?? 0) > 1;
               const dupCell: React.CSSProperties = dup
                 ? { ...cellStyle, borderColor: 'var(--danger)' }
                 : cellStyle;
               return (
                 <tr
-                  key={`${key}#${i}`}
+                  key={i}
                   style={{
                     borderBottom: '1px solid var(--border)',
                     background: isErr ? 'var(--danger-bg)' : undefined,
@@ -136,7 +137,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                         value={r.left}
                         onChange={(e) => onPatchAt(i, { left: e.target.value })}
                         style={dupCell}
-                        aria-label={`row ${i + 1} left`}
+                        aria-label={t('rt.rowField', { row: i + 1, field: t('rt.left') })}
                         spellCheck={false}
                       />
                     </div>
@@ -146,10 +147,10 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       value={r.match}
                       onChange={(e) => onPatchAt(i, { match: e.target.value as 'exact' | 'prefix' })}
                       style={{ ...cellStyle, fontFamily: 'var(--font-sans)' }}
-                      aria-label={`row ${i + 1} match`}
+                      aria-label={t('rt.rowField', { row: i + 1, field: t('rt.match') })}
                     >
-                      <option value="exact">exact</option>
-                      <option value="prefix">prefix</option>
+                      <option value="exact">{t('rt.exact')}</option>
+                      <option value="prefix">{t('rt.prefix')}</option>
                     </select>
                   </td>
                   <td className="px-2 py-1">
@@ -157,7 +158,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       value={r.right}
                       onChange={(e) => onPatchAt(i, { right: e.target.value })}
                       style={dupCell}
-                      aria-label={`row ${i + 1} right`}
+                      aria-label={t('rt.rowField', { row: i + 1, field: t('rt.right') })}
                       spellCheck={false}
                     />
                   </td>
@@ -174,7 +175,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       }
                       placeholder="—"
                       style={cellStyle}
-                      aria-label={`row ${i + 1} upstream model`}
+                      aria-label={t('rt.rowField', { row: i + 1, field: t('rt.upstreamModel') })}
                       spellCheck={false}
                     />
                   </td>
@@ -188,7 +189,7 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       }}
                       className="tabular"
                       style={{ ...cellStyle, width: '5rem' }}
-                      aria-label={`row ${i + 1} priority`}
+                      aria-label={t('rt.rowField', { row: i + 1, field: t('rt.priority') })}
                     />
                   </td>
                   <td className="px-1 py-1">
@@ -196,10 +197,10 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       value={r.sticky ?? 'none'}
                       onChange={(e) => onPatchAt(i, { sticky: e.target.value as 'none' | 'session' })}
                       style={{ ...cellStyle, fontFamily: 'var(--font-sans)' }}
-                      aria-label={`row ${i + 1} sticky`}
+                      aria-label={t('rt.rowField', { row: i + 1, field: t('rt.sticky') })}
                     >
-                      <option value="none">none</option>
-                      <option value="session">session</option>
+                      <option value="none">{t('rt.noSticky')}</option>
+                      <option value="session">{t('rt.sessionSticky')}</option>
                     </select>
                   </td>
                   <td className="px-1 py-1">
@@ -207,17 +208,17 @@ export function RouteTableForm({ routes, errorEdges, onPatchAt, onDeleteAt, onAd
                       value={r.on_error ?? 'next'}
                       onChange={(e) => onPatchAt(i, { on_error: e.target.value as 'next' | 'fail' })}
                       style={{ ...cellStyle, fontFamily: 'var(--font-sans)' }}
-                      aria-label={`row ${i + 1} on error`}
+                      aria-label={t('rt.rowField', { row: i + 1, field: t('rt.onError') })}
                     >
-                      <option value="next">next</option>
-                      <option value="fail">fail</option>
+                      <option value="next">{t('rt.tryNext')}</option>
+                      <option value="fail">{t('rt.returnError')}</option>
                     </select>
                   </td>
                   <td className="px-2 py-1 text-right">
                     <button
                       type="button"
                       onClick={() => onDeleteAt(i)}
-                      aria-label={`delete row ${i + 1}`}
+                      aria-label={t('rt.deleteRow', { row: i + 1 })}
                       style={{
                         height: '2rem',
                         padding: '0 0.375rem',

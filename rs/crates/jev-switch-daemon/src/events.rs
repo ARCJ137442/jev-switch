@@ -16,13 +16,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 )]
 pub struct Event {
     /// 自增序号（用于 polling since 参数）
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub id: u64,
     /// Unix 时间戳（毫秒）
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub timestamp: u64,
     /// 事件类型：request | probe | config_change | error
     pub kind: String,
     /// 事件详情
     pub detail: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
+    pub token_id: Option<String>,
 }
 
 /// 事件总线（环形缓冲区，最多保留 N 条）
@@ -50,10 +54,45 @@ impl EventBus {
 
     /// 推送新事件
     pub fn push(&self, kind: impl Into<String>, detail: impl Into<String>) {
+        self.push_for_token(kind, detail, None);
+    }
+
+    pub fn push_for_token(
+        &self,
+        kind: impl Into<String>,
+        detail: impl Into<String>,
+        token_id: Option<String>,
+    ) {
         let mut inner = self.inner.lock().unwrap();
         let id = inner.next_id;
         inner.next_id += 1;
 
+        Self::push_locked(&mut inner, id, kind.into(), detail.into(), token_id);
+    }
+
+    /// Publish a durable event using the owning call-log row's ID. The admin
+    /// polling API reads the same IDs from SQLite, so SSE and refresh cursors
+    /// remain aligned across daemon restarts.
+    pub fn push_for_token_with_id(
+        &self,
+        id: u64,
+        kind: impl Into<String>,
+        detail: impl Into<String>,
+        token_id: Option<String>,
+    ) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.next_id = inner.next_id.max(id.saturating_add(1));
+        inner.events.retain(|event| event.id != id);
+        Self::push_locked(&mut inner, id, kind.into(), detail.into(), token_id);
+    }
+
+    fn push_locked(
+        inner: &mut EventBusInner,
+        id: u64,
+        kind: String,
+        detail: String,
+        token_id: Option<String>,
+    ) {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -62,11 +101,13 @@ impl EventBus {
         let event = Event {
             id,
             timestamp,
-            kind: kind.into(),
-            detail: detail.into(),
+            kind,
+            detail,
+            token_id,
         };
 
         inner.events.push(event);
+        inner.events.sort_by_key(|event| event.id);
 
         // 环形缓冲：超出容量时移除最旧的
         if inner.events.len() > inner.capacity {
@@ -81,6 +122,22 @@ impl EventBus {
             .events
             .iter()
             .filter(|e| e.id > since_id)
+            .cloned()
+            .collect()
+    }
+
+    pub fn page(&self, since_id: u64, limit: usize, token_id: Option<&str>) -> Vec<Event> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .events
+            .iter()
+            .filter(|event| {
+                event.id > since_id
+                    && token_id
+                        .map(|id| event.token_id.as_deref() == Some(id))
+                        .unwrap_or(true)
+            })
+            .take(limit.clamp(1, 500))
             .cloned()
             .collect()
     }
@@ -128,5 +185,22 @@ mod tests {
         assert_eq!(new_events.len(), 2);
         assert_eq!(new_events[0].detail, "event2");
         assert_eq!(new_events[1].detail, "event3");
+    }
+
+    #[test]
+    fn durable_ids_keep_event_order_and_advance_the_live_cursor() {
+        let bus = EventBus::new(10);
+        bus.push_for_token_with_id(41, "request", "older", None);
+        bus.push_for_token_with_id(43, "request", "newer", None);
+        bus.push_for_token_with_id(42, "request", "middle", None);
+
+        let events = bus.since(41);
+        assert_eq!(
+            events.iter().map(|event| event.id).collect::<Vec<_>>(),
+            vec![42, 43]
+        );
+
+        bus.push("request", "next");
+        assert_eq!(bus.recent(1)[0].id, 44);
     }
 }

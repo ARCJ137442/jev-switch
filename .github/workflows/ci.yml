@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # release.yml 以 workflow_call 复用本测试门禁 —— 测试只在 ubuntu 跑一处。
+  # Windows 上 cargo test 与 cargo build 抢同一 target-dir 会撞文件锁
+  # （实测：error: failed to remove file jev-switch.exe / 拒绝访问 os error 5）。
+  workflow_call:
 
 jobs:
   backend:
@@ -14,12 +18,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: cargo test — 默认 features
-        run: cargo test --manifest-path rs/Cargo.toml --workspace
+        run: cargo test --manifest-path rs/Cargo.toml --workspace --locked
       - name: cargo test — ts-rs features + 生成物 diff 门禁
         run: |
-          cargo test --manifest-path rs/Cargo.toml --workspace --features ts-rs
+          cargo test --manifest-path rs/Cargo.toml --workspace --features ts-rs --locked
           git diff --exit-code -- ui/src/generated rs/crates/jev-protocol/bindings \
             || { echo "::error::ts-rs 生成物与提交不一致 — 请跑 cargo test --features ts-rs 后提交 ui/src/generated"; exit 1; }
+          untracked=$(git ls-files --others --exclude-standard -- ui/src/generated rs/crates/jev-protocol/bindings)
+          if [ -n "$untracked" ]; then
+            echo "::error::ts-rs 在受控生成目录产生了未跟踪文件 — 请将生成物加入版本控制："
+            printf '%s\n' "$untracked"
+            exit 1
+          fi
 
   frontend:
     name: npm lint + build
@@ -29,9 +39,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: npm install
-        run: npm install --prefix ui
+      - name: npm ci
+        run: npm ci --prefix ui
       - name: tsc --noEmit
         run: npm run lint --prefix ui
+      - name: routing and comparison regressions
+        run: npm test --prefix ui
       - name: vite build
         run: npm run build --prefix ui

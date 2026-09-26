@@ -49,7 +49,7 @@ use crate::{error_response, known_keys_snapshot, AppState};
 use axum::{
     body::Bytes,
     extract::{Path as AxumPath, State},
-    http::StatusCode,
+    http::{HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -57,16 +57,17 @@ use jev_core::{
     redact::{mask_key, redact},
     router::{check_acyclic, MatchMode, RouterError},
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 /* ══════════════════════════════════════════════════════════════════
-   DTO（ts-rs 导出 → ui/src/generated/；RouteEdge 来自 jev-core 一份真值）
-   ══════════════════════════════════════════════════════════════════ */
+DTO（ts-rs 导出 → ui/src/generated/；RouteEdge 来自 jev-core 一份真值）
+══════════════════════════════════════════════════════════════════ */
 
 /// GET/PUT 响应视图 —— **字段集即红线 2 字面**：无 `api_key`。
+/// `api_key_masked` 仅返回 `sk-****a1b2` 一类掩码；没有有效 key 时返回空串，需结合 `api_key_set` 判断。
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(
     feature = "ts-rs",
@@ -75,10 +76,15 @@ use std::time::{Duration, Instant};
 )]
 pub struct ProviderView {
     pub id: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
+    pub name: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
+    pub account: Option<String>,
     pub kind: String,
     pub base: String,
+    pub models: Vec<String>,
     pub enabled: bool,
-    /// 掩码形态 `sk-****a1b2`；无有效 key 时为 `""`（配 `api_key_set=false` 看）。
+    // 掩码形态 `sk-****a1b2`；无有效 key 时为 `""`（配 `api_key_set=false` 看）。
     pub api_key_masked: String,
     pub api_key_set: bool,
 }
@@ -96,6 +102,7 @@ pub struct ProvidersDoc {
 
 /// `PUT /v1/admin/providers` 单项入参（**仅写入用，永不作响应**）。
 /// 不 derive `Serialize` —— 从结构上杜绝「明文 key 被序列化出去」的路径。
+/// `api_key` 省略时保留原 key，空串表示清除并回退 `api_key_env`；`api_key_env` 省略时保留已有值。
 #[derive(Debug, Clone, serde::Deserialize)]
 #[cfg_attr(
     feature = "ts-rs",
@@ -104,13 +111,21 @@ pub struct ProvidersDoc {
 )]
 pub struct ProviderInput {
     pub id: String,
+    #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
+    #[serde(default)]
+    pub name: Option<String>,
+    #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
+    #[serde(default)]
+    pub account: Option<String>,
     pub kind: String,
     pub base: String,
     pub enabled: bool,
-    /// 新明文 key；**省略 = 保留原 key**；`""` = 清除（回退 `api_key_env`）。
+    #[serde(default)]
+    pub models: Vec<String>,
+    // 新明文 key；省略表示保留原 key，空串表示清除并回退到环境变量。
     #[serde(default)]
     pub api_key: Option<String>,
-    /// env 名（可选；省略 = 保留已有）。
+    // 环境变量名可选；省略表示保留已有配置。
     #[serde(default)]
     pub api_key_env: Option<String>,
 }
@@ -155,8 +170,8 @@ pub struct ProbeResult {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   内部工具
-   ══════════════════════════════════════════════════════════════════ */
+内部工具
+══════════════════════════════════════════════════════════════════ */
 
 /// 无 state 上下文时的兜底错误体（空已知集 = 只跑通用 redact 模式）。
 fn err_plain(status: StatusCode, msg: impl Into<String>) -> Response {
@@ -169,8 +184,29 @@ fn err(state: &AppState, status: StatusCode, msg: impl Into<String>) -> Response
 }
 
 fn load_config(state: &AppState) -> Result<Config, Response> {
-    Config::load(&state.config_path)
-        .map_err(|e| err_plain(StatusCode::INTERNAL_SERVER_ERROR, format!("config load failed: {e}")))
+    let mut config = Config::load(&state.config_path).map_err(|e| {
+        err_plain(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("config load failed: {e}"),
+        )
+    })?;
+    let conn = state.db_conn.lock().map_err(|e| {
+        err(
+            state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("database lock failed: {e}"),
+        )
+    })?;
+    crate::db::restore_or_seed_runtime_config(&conn, &mut config, &state.config_path).map_err(
+        |e| {
+            err(
+                state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("runtime snapshot load failed: {e}"),
+            )
+        },
+    )?;
+    Ok(config)
 }
 
 /// 刷新已知密钥集（GET/PUT providers 后调用 —— 外部手改的 key 也纳入 redact）。
@@ -196,9 +232,12 @@ fn provider_view(id: &str, p: &ProviderConfig, keys: &[String]) -> ProviderView 
     };
     ProviderView {
         id: id.to_string(),
+        name: p.name.clone(),
+        account: p.account.clone(),
         kind: p.kind.clone(),
         // 防御性再过一遍 redact（正常 URL 不含 key；防 base 被人为贴 key 的边角）
         base: redact(&p.base, keys),
+        models: p.models.clone(),
         enabled: p.enabled,
         api_key_masked,
         api_key_set,
@@ -219,10 +258,16 @@ fn providers_doc(cfg: &Config, keys: &[String]) -> ProvidersDoc {
 /// 读配置文件为 `toml::Value`（读改写用 —— 其余段原样保真；注释不保留）。
 pub(crate) fn read_value(path: &Path) -> Result<toml::Value, Response> {
     let raw = std::fs::read_to_string(path).map_err(|e| {
-        err_plain(StatusCode::INTERNAL_SERVER_ERROR, format!("config read failed: {e}"))
+        err_plain(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("config read failed: {e}"),
+        )
     })?;
     raw.parse::<toml::Value>().map_err(|e| {
-        err_plain(StatusCode::INTERNAL_SERVER_ERROR, format!("config parse failed: {e}"))
+        err_plain(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("config parse failed: {e}"),
+        )
     })
 }
 
@@ -230,10 +275,16 @@ pub(crate) fn read_value(path: &Path) -> Result<toml::Value, Response> {
 /// `JEV_SWITCH_CONFIG` 可能指向仓库内示例，不乱 chmod 其父目录）。
 pub(crate) fn write_value(path: &Path, value: &toml::Value) -> Result<(), Response> {
     let s = toml::to_string(value).map_err(|e| {
-        err_plain(StatusCode::INTERNAL_SERVER_ERROR, format!("config encode failed: {e}"))
+        err_plain(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("config encode failed: {e}"),
+        )
     })?;
     std::fs::write(path, s).map_err(|e| {
-        err_plain(StatusCode::INTERNAL_SERVER_ERROR, format!("config write failed: {e}"))
+        err_plain(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("config write failed: {e}"),
+        )
     })?;
     enforce_config_perms(path);
     if let Some(parent) = path.parent() {
@@ -245,8 +296,8 @@ pub(crate) fn write_value(path: &Path, value: &toml::Value) -> Result<(), Respon
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   GET / PUT · providers
-   ══════════════════════════════════════════════════════════════════ */
+GET / PUT · providers
+══════════════════════════════════════════════════════════════════ */
 
 /// contracts/05 §2：只回 masked —— 序列化面无 `api_key`（红线 2/3）。
 pub async fn get_providers(State(state): State<AppState>) -> Response {
@@ -266,7 +317,13 @@ pub async fn get_providers(State(state): State<AppState>) -> Response {
 pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Response {
     let input: PutProvidersBody = match serde_json::from_slice(&body) {
         Ok(v) => v,
-        Err(e) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid body: {e}")),
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid body: {e}"),
+            )
+        }
     };
 
     // 字段校验
@@ -303,13 +360,13 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
         Err(r) => return r,
     };
 
-    // 组装新 providers 表（其余段不动）
-    let mut prov_table = toml::Table::new();
+    let mut cfg = existing.clone();
+    let mut providers = HashMap::new();
     for p in &input.providers {
         let old = existing.providers.get(&p.id);
         let api_key: Option<String> = match &p.api_key {
-            Some(s) if s.is_empty() => None,           // 显式空 = 清除
-            Some(s) => Some(s.clone()),                // 新值
+            Some(s) if s.is_empty() => None,             // 显式空 = 清除
+            Some(s) => Some(s.clone()),                  // 新值
             None => old.and_then(|o| o.api_key.clone()), // 省略 = 保留原 key
         };
         let api_key_env: Option<String> = p
@@ -317,162 +374,439 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
             .clone()
             .or_else(|| old.and_then(|o| o.api_key_env.clone()));
 
-        let mut t = toml::Table::new();
-        t.insert("kind".into(), toml::Value::String(p.kind.clone()));
-        t.insert("base".into(), toml::Value::String(p.base.clone()));
-        t.insert("enabled".into(), toml::Value::Boolean(p.enabled));
-        if let Some(k) = api_key {
-            t.insert("api_key".into(), toml::Value::String(k));
-        }
-        if let Some(e) = api_key_env {
-            t.insert("api_key_env".into(), toml::Value::String(e));
-        }
-        prov_table.insert(p.id.clone(), toml::Value::Table(t));
+        let name = p
+            .name
+            .clone()
+            .or_else(|| old.and_then(|o| o.name.clone()))
+            .filter(|v| !v.trim().is_empty());
+        let account = p
+            .account
+            .clone()
+            .or_else(|| old.and_then(|o| o.account.clone()))
+            .filter(|v| !v.trim().is_empty());
+        let models = p
+            .models
+            .iter()
+            .map(|m| m.trim())
+            .filter(|m| !m.is_empty())
+            .map(String::from)
+            .collect();
+        providers.insert(
+            p.id.clone(),
+            ProviderConfig {
+                kind: p.kind.clone(),
+                base: p.base.clone(),
+                name,
+                account,
+                models,
+                api_key,
+                api_key_env,
+                enabled: p.enabled,
+            },
+        );
     }
-
-    let mut value = match read_value(&state.config_path) {
-        Ok(v) => v,
-        Err(r) => return r,
-    };
-    match value.as_table_mut() {
-        Some(table) => {
-            table.insert("providers".into(), toml::Value::Table(prov_table));
-        }
-        None => {
+    cfg.providers = providers;
+    cfg.router.clear();
+    cfg.routes = existing.route_edges();
+    if let Err(message) = validate_route_graph(&cfg.routes, &cfg.providers) {
+        return err(&state, StatusCode::BAD_REQUEST, format!("provider update rejected: {message}; update the referencing routes before removing this provider"));
+    }
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(e) => {
             return err(
                 &state,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "config root is not a table",
+                format!("database lock failed: {e}"),
             )
         }
+    };
+    if let Err(e) = crate::db::persist_runtime_config(&conn, &cfg, &state.config_path) {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("save provider snapshot failed: {e}"),
+        );
     }
-    if let Err(r) = write_value(&state.config_path, &value) {
-        return r;
-    }
-
-    // 回读落盘结果构造响应（掩码视图）+ 刷新 redact 密钥集
-    match load_config(&state) {
-        Ok(cfg) => {
-            refresh_known_keys(&state, &cfg);
-            let keys = known_keys_snapshot(&state);
-            Json(providers_doc(&cfg, &keys)).into_response()
-        }
-        Err(r) => r,
-    }
+    drop(conn);
+    refresh_known_keys(&state, &cfg);
+    state
+        .registry
+        .replace_upstreams(crate::build_upstreams(&cfg));
+    let keys = known_keys_snapshot(&state);
+    Json(providers_doc(&cfg, &keys)).into_response()
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   GET / PUT · routes
-   ══════════════════════════════════════════════════════════════════ */
+GET / PUT · routes
+══════════════════════════════════════════════════════════════════ */
 
 /// 运行时边表（含旧 `[router]` 合并结果 —— config 载入边集合作为真值）。
-pub async fn get_routes(State(state): State<AppState>) -> Json<RoutesDoc> {
-    Json(RoutesDoc {
-        routes: state.registry.router().edges(),
-    })
-}
-
-/// 整表替换（contracts/05 §2）：校验 → 落盘 → 热替换（无重启）。
-///
-/// 校验顺序（任务书字面）：字段 → **检环 400**（文案含 环/cycle）→ right 引用。
-pub async fn put_routes(State(state): State<AppState>, body: Bytes) -> Response {
-    let doc: RoutesDoc = match serde_json::from_slice(&body) {
-        Ok(v) => v,
-        Err(e) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid body: {e}")),
-    };
-
-    // 1. 字段校验（serde 已拦类型/枚举值；这里补非空）
-    for e in &doc.routes {
-        if e.left.trim().is_empty() || e.right.trim().is_empty() {
+pub async fn get_routes(State(state): State<AppState>) -> Response {
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(e) => {
             return err(
                 &state,
-                StatusCode::BAD_REQUEST,
-                "route field invalid: left/right 不得为空",
-            );
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {e}"),
+            )
+        }
+    };
+    match crate::db::load_runtime_snapshot(&conn) {
+        Ok(Some(snapshot)) => Json(RoutesDoc {
+            routes: snapshot.routes,
+        })
+        .into_response(),
+        Ok(None) => err(
+            &state,
+            StatusCode::CONFLICT,
+            "runtime config snapshot is missing",
+        ),
+        Err(e) => err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("route snapshot read failed: {e}"),
+        ),
+    }
+}
+
+/// Every route write validates the complete resulting graph before committing it.
+/// Disabled providers remain valid configuration references; execution checks their state.
+/// Validation order: fields, cycles, then references.
+pub(crate) fn validate_route_graph(
+    routes: &[jev_core::router::RouteEdge],
+    providers: &HashMap<String, ProviderConfig>,
+) -> Result<(), String> {
+    for e in routes {
+        if e.left.trim().is_empty() || e.right.trim().is_empty() {
+            return Err("route field invalid: left/right 不得为空".into());
         }
     }
-
-    // 2. 检环（DAG 约束）→ 400，文案含「环」与 cycle
-    if let Err(e) = check_acyclic(&doc.routes) {
-        let msg = match &e {
+    if let Err(e) = check_acyclic(routes) {
+        return Err(match &e {
             RouterError::Cycle(path) => format!("路由配置存在环 (cycle): {path}"),
             other => other.to_string(),
-        };
-        return err(&state, StatusCode::BAD_REQUEST, msg);
+        });
     }
-
-    // 3. right 引用：已注册 provider（配置 providers 表）∪ 新表 exact 边的 left（别名节点）。
-    //    注：`Config::load` 本体不拒悬空 right（仅检环）—— PUT 侧按任务书字面更严，
-    //    备案见 A7 报告。
-    let existing = match load_config(&state) {
-        Ok(c) => c,
-        Err(r) => return r,
-    };
-    let alias_lefts: BTreeSet<&str> = doc
-        .routes
+    let alias_lefts: BTreeSet<&str> = routes
         .iter()
         .filter(|e| e.r#match == MatchMode::Exact)
         .map(|e| e.left.as_str())
         .collect();
-    for e in &doc.routes {
-        if existing.providers.contains_key(&e.right) || alias_lefts.contains(e.right.as_str()) {
+    for e in routes {
+        if providers.contains_key(&e.right) || alias_lefts.contains(e.right.as_str()) {
             continue;
         }
-        return err(
-            &state,
-            StatusCode::BAD_REQUEST,
-            format!(
-                "route invalid: 边 '{}' 的 right '{}' 既不是已注册 provider，也不是新表中的别名节点",
-                e.left, e.right
-            ),
-        );
+        return Err(format!(
+            "route invalid: 边 '{}' 的 right '{}' 既不是已注册 provider，也不是新表中的别名节点",
+            e.left, e.right
+        ));
     }
+    Ok(())
+}
 
-    // 4. 落盘：写 [[routes]] + 移除整个旧 [router]（整表替换语义，见模块文档注释）
-    let mut value = match read_value(&state.config_path) {
+/// 整表替换（contracts/05 §2）：校验 → 落盘 → 热替换（无重启）。
+pub async fn put_routes(State(state): State<AppState>, body: Bytes) -> Response {
+    let doc: RoutesDoc = match serde_json::from_slice(&body) {
         Ok(v) => v,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid body: {e}"),
+            )
+        }
+    };
+    let existing = match load_config(&state) {
+        Ok(c) => c,
         Err(r) => return r,
     };
-    let mut routes_arr = toml::value::Array::new();
-    for e in &doc.routes {
-        match toml::Value::try_from(e) {
-            Ok(v) => routes_arr.push(v),
+    if let Err(message) = validate_route_graph(&doc.routes, &existing.providers) {
+        return err(&state, StatusCode::BAD_REQUEST, message);
+    }
+
+    // SQLite snapshot is the single runtime source. Legacy TOML is changed only through
+    // the explicit export endpoint so an external hand edit remains detectable.
+    let mut cfg = existing;
+    cfg.router.clear();
+    cfg.routes = doc.routes.clone();
+    {
+        let conn = match state.db_conn.lock() {
+            Ok(conn) => conn,
             Err(e) => {
                 return err(
                     &state,
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("route encode: {e}"),
+                    format!("database lock failed: {e}"),
                 )
             }
-        }
-    }
-    match value.as_table_mut() {
-        Some(table) => {
-            table.remove("router"); // 以新表为准：旧扁平映射全部视为被覆盖
-            table.insert("routes".into(), toml::Value::Array(routes_arr));
-        }
-        None => {
+        };
+        if let Err(e) = crate::db::persist_runtime_config(&conn, &cfg, &state.config_path) {
             return err(
                 &state,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "config root is not a table",
-            )
+                format!("save route snapshot failed: {e}"),
+            );
         }
     }
-    if let Err(r) = write_value(&state.config_path, &value) {
-        return r;
-    }
 
-    // 5. 运行时热替换（边表整换；上游注册不动；sticky 记忆随之清空）
+    // 5. Runtime update follows the durable snapshot commit.
     state.registry.replace_edges(doc.routes.clone());
+    if let Err(e) = crate::admin::endpoints::refresh_endpoint_routes(&state, &[]) {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("refresh merged route graph failed: {e}"),
+        );
+    }
 
     Json(doc).into_response()
 }
 
+/// Report whether the legacy editable TOML differs from the imported SQLite source baseline.
+pub async fn runtime_config_status(State(state): State<AppState>) -> Response {
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {e}"),
+            )
+        }
+    };
+    let snapshot = match crate::db::load_runtime_snapshot(&conn) {
+        Ok(Some(snapshot)) => snapshot,
+        Ok(None) => {
+            return err(
+                &state,
+                StatusCode::CONFLICT,
+                "runtime snapshot has not been initialized",
+            )
+        }
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("snapshot read failed: {e}"),
+            )
+        }
+    };
+    let current = crate::db::config_fingerprint(&state.config_path);
+    Json(serde_json::json!({
+        "authority": "sqlite",
+        "toml_path": state.config_path,
+        "toml_drifted": snapshot.source_toml_fingerprint != current,
+        "source_fingerprint": snapshot.source_toml_fingerprint,
+        "current_fingerprint": current,
+        "explicit_import_endpoint": "/v1/admin/config/import-toml",
+        "explicit_export_endpoint": "/v1/admin/config/export-toml"
+    }))
+    .into_response()
+}
+
+/// Explicitly import the current providers/routes from TOML into SQLite. The confirmation
+/// body makes this distinct from normal reads or routine provider/route writes.
+pub async fn import_runtime_config(State(state): State<AppState>, body: Bytes) -> Response {
+    let request: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid confirmation: {e}"),
+            )
+        }
+    };
+    if request.get("confirm").and_then(serde_json::Value::as_bool) != Some(true) {
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "explicit import requires {\"confirm\":true}",
+        );
+    }
+    let config = match Config::load(&state.config_path) {
+        Ok(config) => config,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("TOML import rejected: {e}"),
+            )
+        }
+    };
+    let routes = config.route_edges();
+    if let Err(message) = validate_route_graph(&routes, &config.providers) {
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            format!("TOML import rejected: {message}"),
+        );
+    }
+    // Construct adapters before changing the canonical snapshot. A provider that
+    // cannot be registered must not yield a successful import with stale runtime.
+    let adapters = crate::build_upstreams(&config);
+    let adapter_ids: BTreeSet<&str> = adapters.iter().map(|adapter| adapter.id()).collect();
+    for (id, provider) in &config.providers {
+        if provider.enabled && !adapter_ids.contains(id.as_str()) {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "TOML import rejected: enabled provider '{id}' could not initialize an adapter"
+                ),
+            );
+        }
+    }
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {e}"),
+            )
+        }
+    };
+    let endpoints = match crate::db::endpoints::load_all(&conn) {
+        Ok(endpoints) => endpoints,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("load endpoints before import failed: {e}"),
+            )
+        }
+    };
+    let endpoint_ids: std::collections::HashSet<String> = endpoints
+        .iter()
+        .map(|endpoint| endpoint.id.clone())
+        .collect();
+    let enabled: std::collections::HashSet<String> = endpoints
+        .into_iter()
+        .filter(|endpoint| endpoint.enabled)
+        .map(|endpoint| endpoint.id)
+        .collect();
+    let runtime_edges: Vec<_> = routes
+        .iter()
+        .filter(|edge| !endpoint_ids.contains(&edge.left) || enabled.contains(&edge.left))
+        .cloned()
+        .collect();
+    let snapshot = crate::db::RuntimeConfigSnapshot {
+        providers: config.providers.clone(),
+        routes,
+        source_toml_fingerprint: crate::db::config_fingerprint(&state.config_path),
+    };
+    if let Err(e) = crate::db::save_runtime_snapshot(&conn, &snapshot) {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("import snapshot failed: {e}"),
+        );
+    }
+    drop(conn);
+    refresh_known_keys(&state, &config);
+    state.registry.replace_upstreams(adapters);
+    state.registry.replace_edges(runtime_edges);
+    Json(serde_json::json!({"imported":true,"fingerprint":crate::db::config_fingerprint(&state.config_path)})).into_response()
+}
+
+/// Export the current SQLite provider/route runtime snapshot to the legacy TOML file.
+pub async fn export_runtime_config(State(state): State<AppState>) -> Response {
+    let config = match load_config(&state) {
+        Ok(config) => config,
+        Err(response) => return response,
+    };
+    let mut value = match read_value(&state.config_path) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let Some(table) = value.as_table_mut() else {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "config root is not a table",
+        );
+    };
+    let mut providers = toml::Table::new();
+    for (id, provider) in &config.providers {
+        match toml::Value::try_from(provider) {
+            Ok(value) => {
+                providers.insert(id.clone(), value);
+            }
+            Err(e) => {
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("provider export failed: {e}"),
+                )
+            }
+        }
+    }
+    let mut routes = toml::value::Array::new();
+    for edge in config.route_edges() {
+        match toml::Value::try_from(edge) {
+            Ok(value) => routes.push(value),
+            Err(e) => {
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("route export failed: {e}"),
+                )
+            }
+        }
+    }
+    table.insert("providers".into(), toml::Value::Table(providers));
+    table.remove("router");
+    table.insert("routes".into(), toml::Value::Array(routes));
+    let original_file = match std::fs::read(&state.config_path) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("config backup failed before export: {e}"),
+            )
+        }
+    };
+    let mut exported = config;
+    exported.router.clear();
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {e}"),
+            )
+        }
+    };
+    if let Err(response) = write_value(&state.config_path, &value) {
+        if let Err(restore_error) = std::fs::write(&state.config_path, &original_file) {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!(
+                    "export write failed and original TOML restore also failed: {restore_error}"
+                ),
+            );
+        }
+        return response;
+    }
+    if let Err(e) = crate::db::accept_toml_baseline(&conn, &exported, &state.config_path) {
+        return match std::fs::write(&state.config_path, &original_file) {
+            Ok(()) => err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("record export baseline failed; original TOML restored: {e}")),
+            Err(restore_error) => err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("record export baseline failed ({e}) and original TOML restore failed ({restore_error})")),
+        };
+    }
+    Json(serde_json::json!({"exported":true,"fingerprint":crate::db::config_fingerprint(&state.config_path)})).into_response()
+}
+
 /* ══════════════════════════════════════════════════════════════════
-   PUT /v1/admin/mode · PUT|GET /v1/admin/listen · PUT /v1/admin/password
-   （mode 热切 / listen 热 Rebind / 密码热更 —— 零进程重启）
-   ══════════════════════════════════════════════════════════════════ */
+PUT /v1/admin/mode · PUT|GET /v1/admin/listen · PUT /v1/admin/password
+（mode 热切 / listen 热 Rebind / 密码热更 —— 零进程重启）
+══════════════════════════════════════════════════════════════════ */
 
 /// `PUT /v1/admin/mode` 请求体。`admin_password` 可选：
 /// - cloud 激活且**从未配置过密码** → **必带**（400 指引文案，fail-closed 不破）；
@@ -618,10 +952,7 @@ pub async fn get_status(State(state): State<AppState>) -> Response {
             .expect("password lock")
             .is_some(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_s: PROCESS_START
-            .get_or_init(Instant::now)
-            .elapsed()
-            .as_secs(),
+        uptime_s: PROCESS_START.get_or_init(Instant::now).elapsed().as_secs(),
     })
     .into_response()
 }
@@ -677,11 +1008,7 @@ pub(crate) fn set_admin_password(state: &AppState, new_password: &str) -> Result
     }
     write_value(&state.config_path, &value)?;
     // 运行时生效（读锁先释放再写 —— std RwLock 不可重入）
-    *state
-        .auth
-        .admin_password
-        .write()
-        .expect("password lock") = Some(new_password.to_string());
+    *state.auth.admin_password.write().expect("password lock") = Some(new_password.to_string());
     // 会话代际作废：清空 + 计数器 +1（旧 token 即刻 401）
     state
         .auth
@@ -717,7 +1044,13 @@ pub async fn put_mode(State(state): State<AppState>, body: Bytes) -> Response {
     // 1. 解析
     let req: PutModeBody = match serde_json::from_slice(&body) {
         Ok(v) => v,
-        Err(e) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid mode body: {e}")),
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid mode body: {e}"),
+            )
+        }
     };
     let new_mode = match crate::config::RunMode::parse(&req.mode) {
         Ok(m) => m,
@@ -725,7 +1058,11 @@ pub async fn put_mode(State(state): State<AppState>, body: Bytes) -> Response {
     };
     if let Some(pw) = &req.admin_password {
         if pw.trim().is_empty() {
-            return err(&state, StatusCode::BAD_REQUEST, "admin_password must not be empty");
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                "admin_password must not be empty",
+            );
         }
     }
 
@@ -741,11 +1078,7 @@ pub async fn put_mode(State(state): State<AppState>, body: Bytes) -> Response {
     if need_password_sync {
         if let Ok(file_cfg) = Config::load(&state.config_path) {
             if let Some(eff) = file_cfg.effective_admin_password() {
-                *state
-                    .auth
-                    .admin_password
-                    .write()
-                    .expect("password lock") = Some(eff);
+                *state.auth.admin_password.write().expect("password lock") = Some(eff);
             }
         }
     }
@@ -851,16 +1184,28 @@ pub async fn put_mode(State(state): State<AppState>, body: Bytes) -> Response {
 pub async fn put_listen(State(state): State<AppState>, body: Bytes) -> Response {
     let req: PutListenBody = match serde_json::from_slice(&body) {
         Ok(v) => v,
-        Err(e) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid listen body: {e}")),
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid listen body: {e}"),
+            )
+        }
     };
     let Some(handle) = state.listen.get() else {
-        return err(&state, StatusCode::SERVICE_UNAVAILABLE, "listen supervisor unavailable");
+        return err(
+            &state,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "listen supervisor unavailable",
+        );
     };
 
     // 目标地址：auto → 当前 mode 成对默认；否则解析显式值
     let (target, explicit_after) = if req.addr.trim().eq_ignore_ascii_case("auto") {
         (
-            handle.defaults().for_mode(crate::auth::current_mode(&state)),
+            handle
+                .defaults()
+                .for_mode(crate::auth::current_mode(&state)),
             false,
         )
     } else {
@@ -870,7 +1215,10 @@ pub async fn put_listen(State(state): State<AppState>, body: Bytes) -> Response 
                 return err(
                     &state,
                     StatusCode::BAD_REQUEST,
-                    format!("invalid bind addr '{}' (expected ip:port, or \"auto\")", req.addr),
+                    format!(
+                        "invalid bind addr '{}' (expected ip:port, or \"auto\")",
+                        req.addr
+                    ),
                 )
             }
         }
@@ -878,7 +1226,11 @@ pub async fn put_listen(State(state): State<AppState>, body: Bytes) -> Response 
 
     // Rebind（失败 → 旧监听未动 / 已恢复；不写文件）
     if let Err(e) = handle.rebind(target).await {
-        return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("rebind failed: {e}"));
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("rebind failed: {e}"),
+        );
     }
 
     // 持久化 bind 键（显式化 / auto 移除）
@@ -911,7 +1263,11 @@ pub async fn put_listen(State(state): State<AppState>, body: Bytes) -> Response 
     Json(PutListenResponse {
         addr: target.to_string(),
         rebound: true,
-        reason: if explicit_after { None } else { Some("auto".into()) },
+        reason: if explicit_after {
+            None
+        } else {
+            Some("auto".into())
+        },
     })
     .into_response()
 }
@@ -966,11 +1322,19 @@ pub async fn put_password(
     let req: PutPasswordBody = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => {
-            return err(&state, StatusCode::BAD_REQUEST, format!("invalid password body: {e}"))
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid password body: {e}"),
+            )
         }
     };
     if req.password.trim().is_empty() {
-        return err(&state, StatusCode::BAD_REQUEST, "password must not be empty");
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "password must not be empty",
+        );
     }
     if let Err(r) = set_admin_password(&state, &req.password) {
         return r;
@@ -983,8 +1347,8 @@ pub async fn put_password(
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   POST · providers/{id}/probe
-   ══════════════════════════════════════════════════════════════════ */
+POST · providers/{id}/probe
+══════════════════════════════════════════════════════════════════ */
 
 /// 轻量真实探测 —— **方案：HTTP 连通探测（GET base，无 auth、无 body、5s 超时）**。
 ///
@@ -1043,9 +1407,219 @@ pub async fn probe_provider(
     Json(result).into_response()
 }
 
+/// Direct upstream invocation for comparison/testing. The path selects an existing
+/// daemon-side provider config; the request never carries a provider URL or credential.
+pub async fn invoke_provider(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    body: Bytes,
+) -> Response {
+    let req: jev_protocol::JevRequest = match serde_json::from_slice(&body) {
+        Ok(req) => req,
+        Err(e) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid JevRequest: {e}"),
+            )
+        }
+    };
+    let config = match load_config(&state) {
+        Ok(config) => config,
+        Err(response) => return response,
+    };
+    let Some(provider) = config.providers.get(&id) else {
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider not found: {id}"),
+        );
+    };
+    if !provider.enabled {
+        return err(
+            &state,
+            StatusCode::FORBIDDEN,
+            format!("provider is disabled: {id}"),
+        );
+    }
+    if !provider.models.is_empty() && !provider.models.iter().any(|model| model == &req.model) {
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "requested model is not listed for this provider",
+        );
+    }
+    let Some(upstream) = state.registry.router().upstream(&id) else {
+        return err(
+            &state,
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("provider adapter is unavailable: {id}"),
+        );
+    };
+    for question in req.questions.values() {
+        if !upstream.capabilities().supports(question.question_type()) {
+            return err(
+                &state,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                format!(
+                    "provider '{}' does not support question type '{}'",
+                    id,
+                    question.question_type().as_str()
+                ),
+            );
+        }
+    }
+    let selected_model = req.model.clone();
+    let started = Instant::now();
+    let mut result = upstream.evaluate(req).await;
+    let elapsed = started.elapsed();
+    let request_id =
+        record_direct_provider_call(&state, &id, &selected_model, &mut result, elapsed);
+    let mut response = match result {
+        Ok(response) => Json(response).into_response(),
+        Err(error) => {
+            let status =
+                StatusCode::from_u16(error.http_status()).unwrap_or(StatusCode::BAD_GATEWAY);
+            let keys = known_keys_snapshot(&state);
+            error_response(
+                status,
+                error.to_string(),
+                Some(id),
+                error.retryable(),
+                &keys,
+            )
+        }
+    };
+    if let Some(request_id) = request_id {
+        if let Ok(value) = HeaderValue::from_str(&request_id) {
+            response.headers_mut().insert("x-jev-request-id", value);
+        }
+    }
+    response
+}
+
+/// Persist a direct comparison attempt with the same durable cursor and safe metadata
+/// used by public-entry calls. Request and response bodies are deliberately omitted.
+fn record_direct_provider_call(
+    state: &AppState,
+    provider_id: &str,
+    upstream_model: &str,
+    result: &mut Result<jev_protocol::JevResponse, jev_core::upstream::JevError>,
+    elapsed: Duration,
+) -> Option<String> {
+    let (success, status, cost_usd, upstream_calls, usage) = match result {
+        Ok(response) => (
+            true,
+            200_u16,
+            response.cost_usd,
+            response.upstream_calls.unwrap_or(1),
+            response.usage.clone(),
+        ),
+        Err(error) => (false, error.http_status(), None, 1, None),
+    };
+    let latency_ms = elapsed.as_millis().min(i64::MAX as u128) as i64;
+    let endpoint_id = format!("direct:{provider_id}:{upstream_model}");
+    let route_key = format!("{provider_id}→{upstream_model}");
+    let mut route_trace = serde_json::json!({
+        "kind": "direct_upstream",
+        "provider_config_id": provider_id,
+        "selected_provider": provider_id,
+        "selected_model": upstream_model,
+        "selected_hops": [provider_id, upstream_model],
+        "strategy": "direct",
+        "upstream_calls": upstream_calls,
+        "gateway_latency_ms": latency_ms,
+    });
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let usage_json = usage
+        .as_ref()
+        .and_then(|value| serde_json::to_string(value).ok());
+
+    let Ok(mut conn) = state.db_conn.lock() else {
+        tracing::warn!("failed to lock direct-call history database");
+        return None;
+    };
+    let Ok(tx) = conn.transaction() else {
+        tracing::warn!("failed to begin direct-call history transaction");
+        return None;
+    };
+    if let Err(error) = tx.execute(
+        "INSERT INTO call_logs (timestamp, endpoint_id, route_key, upstream_provider, upstream_model, success, latency_ms, error_message, token_id, cost_usd, upstream_calls, usage_json, http_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)",
+        rusqlite::params![
+            now,
+            endpoint_id,
+            route_key,
+            provider_id,
+            upstream_model,
+            if success { 1 } else { 0 },
+            latency_ms,
+            if success { None::<String> } else { Some(format!("HTTP {status}")) },
+            cost_usd,
+            i64::from(upstream_calls),
+            usage_json,
+            i64::from(status),
+        ],
+    ) {
+        tracing::warn!(error = %error, "failed to persist direct-call statistics");
+        return None;
+    }
+    let log_id = tx.last_insert_rowid();
+    let request_id = format!("jev-{log_id}");
+    if let Some(trace) = route_trace.as_object_mut() {
+        trace.insert(
+            "request_id".into(),
+            serde_json::Value::String(request_id.clone()),
+        );
+    }
+    let route_trace_json = serde_json::to_string(&route_trace).ok();
+    if let Err(error) = tx.execute(
+        "UPDATE call_logs SET request_id=?, route_trace_json=? WHERE id=?",
+        rusqlite::params![request_id, route_trace_json, log_id],
+    ) {
+        tracing::warn!(error = %error, "failed to persist direct-call trace");
+        return None;
+    }
+    if let Err(error) = tx.commit() {
+        tracing::warn!(error = %error, "failed to commit direct-call history");
+        return None;
+    }
+
+    if let Ok(response) = result {
+        response.extra.insert(
+            "request_id".into(),
+            serde_json::Value::String(request_id.clone()),
+        );
+        response
+            .extra
+            .insert("route_trace".into(), route_trace.clone());
+    }
+    let detail = serde_json::json!({
+        "endpoint_id": endpoint_id,
+        "success": success,
+        "status": status,
+        "provider": provider_id,
+        "upstream_model": upstream_model,
+        "latency_ms": latency_ms,
+        "upstream_calls": upstream_calls,
+        "usage": usage,
+        "cost_usd": cost_usd,
+        "request_id": request_id,
+        "route_trace": route_trace,
+    })
+    .to_string();
+    state
+        .events
+        .push_for_token_with_id(log_id as u64, "request", detail, None);
+    Some(request_id)
+}
+
 /* ══════════════════════════════════════════════════════════════════
-   测试（A7 必须单测 ①③④⑤⑥⑦；② redact 在 jev-core::redact）
-   ══════════════════════════════════════════════════════════════════ */
+测试（A7 必须单测 ①③④⑤⑥⑦；② redact 在 jev-core::redact）
+══════════════════════════════════════════════════════════════════ */
 
 #[cfg(test)]
 mod tests {
@@ -1076,8 +1650,16 @@ mod tests {
         (app, state)
     }
 
-    async fn send(app: axum::Router, method: &str, uri: &str, body: Option<String>) -> (u16, String) {
-        let builder = Request::builder().method(method).uri(uri).header("content-type", "application/json");
+    async fn send(
+        app: axum::Router,
+        method: &str,
+        uri: &str,
+        body: Option<String>,
+    ) -> (u16, String) {
+        let builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json");
         let req = match body {
             Some(b) => builder.body(Body::from(b)).unwrap(),
             None => builder.body(Body::empty()).unwrap(),
@@ -1127,7 +1709,7 @@ priority = 10
         // 裸 api_key 字段（非 masked/set）不得出现
         assert!(!body.contains(r#""api_key":"#), "出现明文字段名: {body}");
 
-        // 结构级：ProviderView 序列化键集 = 6 键且无 api_key
+        // 结构级：ProviderView 带账号/模型元数据，但无 api_key
         let doc: serde_json::Value = serde_json::from_str(&body).unwrap();
         let vercel = doc["providers"]
             .as_array()
@@ -1136,7 +1718,7 @@ priority = 10
             .find(|p| p["id"] == "vercel")
             .expect("vercel in list");
         let obj = vercel.as_object().unwrap();
-        assert_eq!(obj.len(), 6);
+        assert_eq!(obj.len(), 9);
         assert!(obj.get("api_key").is_none(), "键集不得含 api_key");
         // laya 无 key → set=false + 空掩码
         let laya = doc["providers"]
@@ -1224,11 +1806,17 @@ enabled = true
         ]}"#;
         let (status, resp) = send(app, "PUT", "/v1/admin/routes", Some(body.into())).await;
         assert_eq!(status, 400, "resp={resp}");
-        assert!(resp.contains("环") || resp.contains("cycle"), "文案须含 环/cycle: {resp}");
+        assert!(
+            resp.contains("环") || resp.contains("cycle"),
+            "文案须含 环/cycle: {resp}"
+        );
 
         // 文件未被污染（检环在落盘前）
         let on_disk = std::fs::read_to_string(&path).unwrap();
-        assert!(!on_disk.contains("left = \"a\""), "环配置不得落盘: {on_disk}");
+        assert!(
+            !on_disk.contains("left = \"a\""),
+            "环配置不得落盘: {on_disk}"
+        );
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -1273,8 +1861,14 @@ enabled = true
         assert!(!grest.contains(r#""left":"jev""#), "{grest}");
 
         let on_disk = std::fs::read_to_string(&path).unwrap();
-        assert!(on_disk.contains("new-model"), "{on_disk}");
-        assert!(!on_disk.contains("[router]"), "旧 [router] 应被整表替换移除: {on_disk}");
+        assert!(
+            !on_disk.contains("new-model"),
+            "routine route writes must stay in the SQLite runtime snapshot: {on_disk}"
+        );
+        let storage = crate::db::load_runtime_snapshot(&state.db_conn.lock().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(storage.routes.iter().any(|edge| edge.left == "new-model"));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
@@ -1431,7 +2025,9 @@ enabled = true
                                     .lines()
                                     .map(|l| l.trim())
                                     .filter(|l| !l.starts_with("//") && !l.starts_with('#'))
-                                    .any(|l| l.starts_with("api_key:") || l.starts_with("pub api_key:"));
+                                    .any(|l| {
+                                        l.starts_with("api_key:") || l.starts_with("pub api_key:")
+                                    });
                                 assert!(
                                     !has_plain,
                                     "Serialize struct `{name}` ({}) 声明了裸 api_key 字段 —— 违反红线 3（无读回明文）",
@@ -1446,7 +2042,10 @@ enabled = true
                 i += 1;
             }
         }
-        assert!(scanned >= 8, "至少应扫到 8 个 Serialize struct，实际 {scanned}");
+        assert!(
+            scanned >= 8,
+            "至少应扫到 8 个 Serialize struct，实际 {scanned}"
+        );
     }
 
     /* ── PUT providers：省略 api_key = 保留原 key（H3 备注①） ──── */
@@ -1454,7 +2053,7 @@ enabled = true
     #[tokio::test]
     async fn put_providers_omitted_api_key_preserves_existing() {
         let path = temp_config("put-keep", CFG_WITH_KEY);
-        let (app, _state) = app_at(path.clone());
+        let (app, state) = app_at(path.clone());
 
         // 只翻 enabled、不带 api_key → 原 key 保留
         let body = r#"{"providers":[
@@ -1476,17 +2075,22 @@ enabled = true
         assert_eq!(vercel["enabled"], false);
         assert_eq!(vercel["api_key_set"], true);
 
-        // 落盘核对：api_key 原文保留、enabled 翻转
+        // SQLite runtime snapshot is authoritative; legacy TOML stays untouched until explicit export.
         let on_disk = std::fs::read_to_string(&path).unwrap();
-        assert!(on_disk.contains(FAKE_KEY), "省略 api_key 应保留原 key: {on_disk}");
-        assert!(on_disk.contains("enabled = false"), "{on_disk}");
-        // 0600（Unix assert；Windows 分支 warning 的 cfg 测在 config.rs）
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-            assert_eq!(mode, 0o600, "PUT 写回后必须 0600");
-        }
+        assert!(
+            on_disk.contains(FAKE_KEY),
+            "省略 api_key 应保留原 key: {on_disk}"
+        );
+        assert!(
+            on_disk.contains("enabled = true"),
+            "routine provider writes must not mutate legacy TOML: {on_disk}"
+        );
+        let snapshot = crate::db::load_runtime_snapshot(&state.db_conn.lock().unwrap())
+            .unwrap()
+            .unwrap();
+        let vercel_cfg = snapshot.providers.get("vercel").unwrap();
+        assert_eq!(vercel_cfg.api_key.as_deref(), Some(FAKE_KEY));
+        assert!(!vercel_cfg.enabled);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

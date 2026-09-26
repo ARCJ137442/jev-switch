@@ -1,7 +1,23 @@
 import type { en } from './en';
+import { routingZh } from './routing';
+import { playgroundZh } from './playground';
+import { providersZh } from './providers';
+import { languageZh } from './language';
+import { dashboardZh } from './dashboard';
+import { questionEditorZh } from './questionEditor';
+import { accessZh } from './access';
+import { configFileZh } from './configFile';
 
 /** 中文词典 — 键集必须与 en 完全一致（类型强制）。 */
 export const zh: Record<keyof typeof en, string> = {
+  ...routingZh,
+  ...playgroundZh,
+  ...providersZh,
+  ...languageZh,
+  ...dashboardZh,
+  ...questionEditorZh,
+  ...accessZh,
+  ...configFileZh,
   /* common */
   'common.reload': '重载',
   'common.overwrite': '覆盖',
@@ -25,8 +41,8 @@ export const zh: Record<keyof typeof en, string> = {
   'shell.daemonOk': 'daemon 正常',
   'shell.daemonUnreachable': 'daemon 不可达',
   'shell.connecting': '连接中…',
-  'shell.themeToDark': 'Switch to dark theme (currently: light)',
-  'shell.themeToLight': 'Switch to light theme (currently: dark)',
+  'shell.themeToDark': '切换到深色主题（当前为浅色）',
+  'shell.themeToLight': '切换到浅色主题（当前为深色）',
   'shell.langToZh': '切换到中文',
   'shell.langToEn': 'Switch to English',
 
@@ -130,6 +146,7 @@ export const zh: Record<keyof typeof en, string> = {
   'canvas.noEndpoint': 'no endpoint — 拖线到此卡片建同名端点',
   'canvas.pinTitle': '钉死端点：({id}) {model} — 地址×模型×token 三固定',
   'canvas.passTitle': '透传端点：模型 = 调用方入参（local/* → local/qwen…）',
+  'canvas.inputModel': '* 输入模型',
 
   /* playground page */
   'pg.heroLead':
@@ -148,7 +165,10 @@ export const zh: Record<keyof typeof en, string> = {
   'tp.output': '输出',
   'tp.model': '模型',
   'tp.fromServer': '来自服务器',
-  'tp.idle': '空闲',
+  'tp.statusIdle': '空闲',
+  'tp.statusLoading': '加载中',
+  'tp.statusOk': '成功',
+  'tp.statusError': '错误',
   'tp.questionsCount': '{n} 题',
   'tp.questionsUnknown': '? 题',
   'tp.running': '运行中…',
@@ -196,8 +216,8 @@ export const zh: Record<keyof typeof en, string> = {
   'qf.falseMeaning': 'false 时的含义',
   'qf.choiceLabel': '选项描述',
   'qf.levelLabel': '档位描述',
-  'qf.choicesHint': 'Choices · key = 概率分布键 / 描述 = 展示文案',
-  'qf.levelsHint': 'Levels · 有序档位（低 → 高）',
+  'qf.choicesHint': '选项 · key 为概率分布键，描述为展示文案',
+  'qf.levelsHint': '有序档位（低 → 高）',
   'qf.addQuestion': '+ 添加题目',
   'qf.addChoice': '+ 添加选项',
   'qf.addChoiceMax': '+ 添加选项（最多 10）',
@@ -221,6 +241,7 @@ export const zh: Record<keyof typeof en, string> = {
   'dash.uptimePrefix': '运行时长',
   'dash.localMode': 'local 模式',
   'dash.cloudMode': 'cloud 模式',
+  'dash.modeLabel': '{mode} 模式',
   'dash.switchTo': '切换到 {mode}',
   'dash.switching': '切换中…',
   'dash.switchBtn': '切换 →',

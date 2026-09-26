@@ -12,13 +12,17 @@ import { useConfigConflict } from '../hooks/useConfigConflict';
 import { useToast } from '../app/feedback';
 import { ProviderCard } from '../components/providers/ProviderCard';
 import { AddProviderPanel } from '../components/providers/AddProviderPanel';
-import { useI18n } from '../i18n';
+import { ConfigFileSync } from '../components/providers/ConfigFileSync';
+import { useI18n, type MessageKey } from '../i18n';
 
 const toWrite = (p: AdminProvider): AdminProviderWrite => ({
   id: p.id,
+  name: p.name,
+  account: p.account,
   kind: p.kind,
   base: p.base,
   enabled: p.enabled,
+  models: p.models ? [...p.models] : undefined,
 });
 
 /**
@@ -115,6 +119,46 @@ export function ProvidersPage() {
     }
   };
 
+  const onClearKey = async (p: AdminProvider) => {
+    setBusyId(p.id);
+    try {
+      const writes = providersRef.current.map((x) => {
+        const w = toWrite(x);
+        if (x.id === p.id) w.api_key = '';
+        return w;
+      });
+      await commit(writes);
+      toast('ok', t('providers.keyCleared' as MessageKey));
+    } catch {
+      toast('danger', t('providers.keyClearFailed' as MessageKey));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onUpdate = async (p: AdminProvider, fields: {
+    name: string | null;
+    account: string | null;
+    kind: string;
+    base: string;
+    models: string[];
+  }) => {
+    setBusyId(p.id);
+    try {
+      const writes = providersRef.current.map((x) => ({
+        ...toWrite(x),
+        ...(x.id === p.id ? fields : {}),
+      }));
+      await commit(writes);
+      toast('ok', t('providers.configSaved' as MessageKey));
+    } catch (e) {
+      toast('danger', t('providers.configSaveFailed' as MessageKey));
+      throw e;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   /* 删除 — 乐观移除，失败回滚 */
   const onDelete = async (p: AdminProvider) => {
     const prev = providersRef.current;
@@ -173,7 +217,7 @@ export function ProvidersPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="page-container">
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
           {t('prov.title')}
@@ -211,7 +255,7 @@ export function ProvidersPage() {
         )}
 
         {loading ? (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2" aria-busy="true">
+          <div className="provider-grid" aria-busy="true">
             <div className="h-48 animate-pulse" style={card} />
             <div className="h-48 animate-pulse" style={card} />
           </div>
@@ -250,7 +294,7 @@ export function ProvidersPage() {
             </div>
           </section>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="provider-grid">
             {providers.map((p) => (
               <ProviderCard
                 key={p.id}
@@ -258,12 +302,15 @@ export function ProvidersPage() {
                 busy={busyId === p.id}
                 onToggle={(prov, en) => void onToggle(prov, en)}
                 onReplaceKey={onReplaceKey}
+                onClearKey={(prov) => void onClearKey(prov)}
+                onUpdate={onUpdate}
                 onDelete={(prov) => void onDelete(prov)}
               />
             ))}
           </div>
         )}
       </div>
+      <ConfigFileSync disabled={busyId !== null || showAdd} onImported={load} />
     </div>
   );
 }

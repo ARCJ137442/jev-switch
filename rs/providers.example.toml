@@ -44,7 +44,7 @@
 
 [providers.vercel]
 kind = "vercel"
-base = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model"
+base = "https://ai-gateway.vercel.sh/typesafe/v1/systemone"
 # 明文 key（优先）示意：api_key = "sk-…"   ← 不写真实值；或改用下方 env
 api_key_env = "AI_GATEWAY_API_KEY"
 enabled = true

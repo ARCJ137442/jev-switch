@@ -1,0 +1,43 @@
+.dag-workbench { position: relative; margin-top: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.dag-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); }
+.dag-tools button,.dag-context button { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-hover); color: var(--text); }
+.dag-tools button:disabled { opacity: .45; cursor: default; }
+.dag-help { flex: 1; min-width: 180px; color: var(--text-muted); }
+.dag-tool-group { display: flex; align-items: center; gap: 8px; }
+.dag-tool-group output { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+.dag-insert { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.dag-insert input { width: 190px; max-width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--radius); }
+.dag-viewport { position: relative; width: 100%; height: clamp(240px, 60dvh, 900px); overflow: auto; overscroll-behavior: contain; touch-action: none; background: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
+.dag-world { position: relative; transform-origin: 0 0; user-select: none; }
+.dag-wires { position: absolute; inset: 0; overflow: visible; }
+.dag-wire { fill: none; stroke: var(--text-subtle); stroke-width: 2; opacity: .7; }
+.dag-hit { fill: none; stroke: transparent; stroke-width: 18; cursor: pointer; }
+.dag-priority { fill: var(--text-muted); font-size: 12px; font-family: var(--font-mono); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.dag-edge:hover .dag-wire,.dag-edge.selected .dag-wire { stroke: var(--accent); stroke-width: 3; opacity: 1; }
+.dag-edge.invalid .dag-wire { stroke: var(--danger); }
+.dag-preview { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }
+.dag-preview.snapped { stroke-width: 4; stroke-dasharray: none; }
+.dag-node { position: absolute; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--text); }
+.dag-entry { border-left: 3px solid var(--accent); }
+.dag-alias { border-style: dashed; }
+.dag-provider { border-top: 3px solid var(--accent); }
+.dag-node.disabled { opacity: .55; }
+.dag-node-header { padding: 10px 15px; cursor: grab; height: 88px; overflow: hidden; }
+.dag-node-header:active { cursor: grabbing; }
+.dag-kind { display: block; color: var(--text-subtle); font-size: 12px; letter-spacing: .02em; margin-bottom: 4px; }
+.dag-node-header strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.dag-node-header small { display: block; color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 5px; }
+.dag-models > div { position: absolute; left: 0; right: 0; height: 30px; line-height: 30px; padding: 0 15px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dag-models em { font-family: var(--font-sans); font-style: normal; color: var(--text-subtle); }
+.dag-port { position: absolute; z-index: 3; width: 15px; height: 15px; padding: 0; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); cursor: crosshair; }
+.dag-port:hover,.dag-port.snapped,.dag-port:focus-visible { background: var(--accent); outline: 5px solid color-mix(in srgb, var(--accent) 20%, transparent); }
+.dag-reconnect { position: absolute; z-index: 5; width: 23px; height: 23px; transform: translate(-50%,-50%); color: white; background: var(--accent); border: 2px solid var(--surface); border-radius: 50%; font-size: 13px; cursor: crosshair; }
+.dag-context { position: absolute; z-index: 8; min-width: 160px; padding: 6px; display: grid; gap: 5px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
+.dag-context button { text-align: left; }
+.dag-inspector { padding: 12px; border-top: 1px solid var(--border); }
+.dag-inspector > div > .space-y-2\.5 { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
+.dag-inspector > div > .space-y-2\.5 > * { margin-top: 0; }
+.dag-empty { position: absolute; top: 45%; left: 10%; right: 10%; text-align: center; color: var(--text-muted); pointer-events: none; }
+@media (max-width: 700px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: minmax(0,1fr); } .dag-tool-group { flex-wrap: wrap; } }
+@media (max-height: 560px) { .dag-viewport { height: clamp(200px, 55dvh, 300px); } }

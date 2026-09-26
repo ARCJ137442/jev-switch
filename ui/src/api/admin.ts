@@ -2,6 +2,11 @@ import { getBase } from '../api';
 import { t as tI18n } from '../i18n/core';
 import { PROVIDERS_FIXTURE } from '../fixtures/providers.mock';
 import { ROUTES_FIXTURE } from '../fixtures/routes.mock';
+import type { ProviderView } from '../generated/ProviderView';
+import type { ProviderInput } from '../generated/ProviderInput';
+import type { ProbeResult } from '../generated/ProbeResult';
+import { parseProviderTomlValue, stripTomlComment } from './providerTomlValue';
+import { getCallerToken } from '../auth/callerSession';
 
 /**
  * Admin API 客户端（contracts/05 §2 形状字面）。
@@ -31,34 +36,18 @@ export function setAdminMode(mode: AdminMode): void {
 /* ---------- 类型（contracts/05 §2） ---------- */
 
 /** GET /v1/admin/providers 条目 — 禁止 api_key 明文字段 */
-export interface AdminProvider {
-  id: string;
-  kind: string;
-  base: string;
-  enabled: boolean;
-  api_key_masked: string | null;
-  api_key_set: boolean;
-}
+export type AdminProvider = Omit<ProviderView, 'models' | 'api_key_masked'> &
+  Partial<Pick<ProviderView, 'models'>> & { api_key_masked: ProviderView['api_key_masked'] | null };
 
 export interface ProvidersResponse {
   providers: AdminProvider[];
 }
 
 /** PUT /v1/admin/providers 条目 — api_key 仅写入时携带；省略/null = 保留、空串 = 清除、非空 = 替换（A7 已核对）；整表替换语义见文件头 */
-export interface AdminProviderWrite {
-  id: string;
-  kind: string;
-  base: string;
-  enabled: boolean;
-  api_key?: string;
-}
+export type AdminProviderWrite = Omit<ProviderInput, 'models' | 'api_key' | 'api_key_env'> &
+  Partial<Pick<ProviderInput, 'models' | 'api_key' | 'api_key_env'>>;
 
-export interface ProbeResponse {
-  ok: boolean;
-  latency_ms: number;
-  status: number | null;
-  error: string | null;
-}
+export type ProbeResponse = ProbeResult;
 
 /* ---------- 通用请求（#43 cloud：admin 会话附带 + 401/403 全局上报） ---------- */
 
@@ -139,7 +128,9 @@ export async function loginAdmin(password: string): Promise<void> {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  const session = getAdminSession();
+  const adminSession = getAdminSession();
+  const callToken = getCallerToken();
+  const session = callToken ?? adminSession;
   if (session) headers.set('Authorization', `Bearer ${session}`);
   const res = await fetch(`${getBase()}${path}`, { ...init, headers });
   const text = await res.text();
@@ -154,23 +145,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body !== null && typeof body === 'object' && 'error' in body
         ? String((body as { error: unknown }).error)
         : `HTTP ${res.status}`;
-    if (res.status === 401 || res.status === 403) {
+    const requestId = res.headers.get('x-jev-request-id') ?? undefined;
+    if ((res.status === 401 || res.status === 403) && !callToken && adminSession) {
       // cloud 态会话缺失/过期 → 全局登录小窗（Shell 注册）；页面照常拿到异常
       authErrorHandler?.(res.status);
-      throw new AdminApiError(message, res.status);
+      throw new AdminApiError(message, res.status, undefined, requestId);
     }
-    throw new Error(message);
+    throw new AdminApiError(message, res.status, undefined, requestId);
   }
   if (body === null) throw new Error(`bad JSON (status ${res.status})`);
   return body as T;
 }
+
+/** Shared authenticated transport for management features and upstream rehearsal. */
+export const adminRequest = request;
 
 /* ---------- mock 引擎 ---------- */
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function cloneProviders(list: AdminProvider[]): AdminProvider[] {
-  return list.map((p) => ({ ...p }));
+  return list.map((p) => ({ ...p, models: [...(p.models ?? [])] }));
 }
 
 /** mock 内存态（PUT 整表替换语义，写入即刷新） */
@@ -221,13 +216,17 @@ function mockPut(list: AdminProviderWrite[]): ProvidersResponse {
   mockProviders = list.map((w) => {
     const prev = mockProviders.find((x) => x.id === w.id);
     const hasKey = typeof w.api_key === 'string' && w.api_key.length > 0;
+    const clearKey = w.api_key === '';
     return {
       id: w.id,
       kind: w.kind,
       base: w.base,
       enabled: w.enabled,
-      api_key_masked: hasKey ? maskKey(w.api_key as string) : (prev?.api_key_masked ?? null),
-      api_key_set: hasKey ? true : (prev?.api_key_set ?? false),
+      name: w.name ?? prev?.name,
+      account: w.account ?? prev?.account,
+      models: [...(w.models ?? prev?.models ?? [])],
+      api_key_masked: clearKey ? '' : hasKey ? maskKey(w.api_key as string) : (prev?.api_key_masked ?? null),
+      api_key_set: clearKey ? false : hasKey ? true : (prev?.api_key_set ?? false),
     };
   });
   return { providers: cloneProviders(mockProviders) };
@@ -289,11 +288,13 @@ export interface RoutesResponse {
 export class AdminApiError extends Error {
   readonly status: number;
   readonly cycleEdges?: string[];
-  constructor(message: string, status: number, cycleEdges?: string[]) {
+  readonly requestId?: string;
+  constructor(message: string, status: number, cycleEdges?: string[], requestId?: string) {
     super(message);
     this.name = 'AdminApiError';
     this.status = status;
     this.cycleEdges = cycleEdges;
+    this.requestId = requestId;
   }
 }
 
@@ -542,40 +543,12 @@ export interface TomlParseResult {
  *   base = "https://…"
  *   api_key = "…"      # 仅在内存中流转，随 PUT 一次发出
  *   enabled = true
- * 忽略 api_key_env 等未知键；结构不合法时收集 errors（不静默半导入）。
+ * 支持 name/account/models/api_key_env；结构不合法时收集 errors（不静默半导入）。
  */
 export function parseProvidersToml(text: string): TomlParseResult {
   const providers: AdminProviderWrite[] = [];
   const errors: string[] = [];
   let current: AdminProviderWrite | null = null;
-
-  const stripComment = (line: string): string => {
-    let inQuote = false;
-    let quoteChar = '';
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (inQuote) {
-        if (ch === quoteChar) inQuote = false;
-      } else if (ch === '"' || ch === "'") {
-        inQuote = true;
-        quoteChar = ch;
-      } else if (ch === '#') {
-        return line.slice(0, i);
-      }
-    }
-    return line;
-  };
-
-  const parseValue = (raw: string): string | boolean | null => {
-    const v = raw.trim();
-    if ((v.startsWith('"') && v.endsWith('"') && v.length >= 2) ||
-        (v.startsWith("'") && v.endsWith("'") && v.length >= 2)) {
-      return v.slice(1, -1);
-    }
-    if (v === 'true') return true;
-    if (v === 'false') return false;
-    return null;
-  };
 
   const flush = () => {
     if (current === null) return;
@@ -587,7 +560,7 @@ export function parseProvidersToml(text: string): TomlParseResult {
 
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    const line = stripComment(lines[i]).trim();
+    const line = stripTomlComment(lines[i]).trim();
     if (!line) continue;
 
     const section = line.match(/^\[([^\]]+)\]$/);
@@ -610,7 +583,7 @@ export function parseProvidersToml(text: string): TomlParseResult {
 
     const kv = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/);
     if (!kv) {
-      errors.push(tI18n('api.parseLine', { n: i + 1, line: line.slice(0, 40) }));
+      errors.push(tI18n('api.parseLine', { n: i + 1, line: '' }));
       continue;
     }
     if (current === null) {
@@ -618,8 +591,13 @@ export function parseProvidersToml(text: string): TomlParseResult {
       continue;
     }
     const key = kv[1];
-    const value = parseValue(kv[2]);
-    if (value === null) {
+    let rawValue = kv[2];
+    if (key === 'models' && rawValue.trim().startsWith('[')) {
+      while (!rawValue.trim().endsWith(']') && i + 1 < lines.length) rawValue += `\n${stripTomlComment(lines[++i])}`;
+    }
+    const value = parseProviderTomlValue(rawValue);
+    const validType = key === 'enabled' ? typeof value === 'boolean' : key === 'models' ? Array.isArray(value) : typeof value === 'string';
+    if (value === null || !validType) {
       errors.push(tI18n('api.valueType', { n: i + 1, key }));
       continue;
     }
@@ -637,7 +615,16 @@ export function parseProvidersToml(text: string): TomlParseResult {
         current.api_key = String(value);
         break;
       case 'api_key_env':
-        // 兼容 providers.example.toml；环境变量解析属 daemon 职责，UI 忽略
+        current.api_key_env = value as string;
+        break;
+      case 'name':
+        current.name = value as string;
+        break;
+      case 'account':
+        current.account = value as string;
+        break;
+      case 'models':
+        current.models = [...new Set(value as string[])];
         break;
       default:
         // 未知键不阻断（前向兼容），仅记录

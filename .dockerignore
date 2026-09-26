@@ -3,6 +3,8 @@
 # compose build 实际不可用）
 .git
 rs/target
+src-tauri/target
+src-tauri/binaries
 ui/node_modules
 # ui/dist 由容器内 stage ui 重新构建，宿主产物不进 context
 ui/dist

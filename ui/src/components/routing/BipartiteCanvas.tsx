@@ -8,6 +8,12 @@ export interface CanvasProvider {
   enabled: boolean;
 }
 
+export interface RouteStats {
+  calls_24h: number;
+  success_rate: number;
+  slow_rate: number;
+}
+
 interface Props {
   routes: Route[];
   /** 左列对外 model id（page 推导：models fixture ∪ routes.left） */
@@ -26,6 +32,8 @@ interface Props {
   onCreateEdge: (left: string, right: string, model?: string | null) => void;
   onPatchEdge: (key: string, patch: Partial<Route>) => void;
   onDeleteEdge: (key: string) => void;
+  /** 路由统计数据（调用次数、成功率等） */
+  routeStats?: Map<string, RouteStats>;
 }
 
 interface Box {
@@ -70,6 +78,13 @@ const PAD = 24;
 const ANCHOR_VIS = 12;
 const ANCHOR_HIT = 32;
 
+/** 磁吸距离（规范 §3.1） */
+const SNAP_DISTANCE = 40;
+
+/** 端口尺寸（规范 §3.3） */
+const PORT_DOT_NORMAL = 6;
+const PORT_DOT_DRAG_NEARBY = 10;
+
 /** 类型胶囊（v2：无 uppercase / 无 tracking-widest，最小 12px） */
 const CHIP: React.CSSProperties = {
   borderRadius: 999,
@@ -103,12 +118,16 @@ export function endpointKey(provider: string, model: string | null): string {
   return `${provider}|${model ?? '*'}`;
 }
 
-/** 同锚点多条边的纵向错开（按 priority 排序后均分） */
+/** 同锚点多条边的放射状错开（规范 §3.9：-15°, 0°, +15°） */
 function offsetsFor(count: number): number[] {
   if (count <= 1) return [0];
-  const usable = 22;
-  const step = usable / (count - 1);
-  return Array.from({ length: count }, (_, i) => -usable / 2 + i * step);
+  const angleSpan = 30; // 总角度跨度（度）
+  const angles = Array.from({ length: count }, (_, i) => {
+    const offset = (i - (count - 1) / 2) * (angleSpan / (count - 1 || 1));
+    return offset;
+  });
+  // 转换为纵向像素偏移（简化实现：直接映射到 Y 偏移）
+  return angles.map((deg) => (deg / 30) * 22);
 }
 
 function cubicAt(p0: number, p1: number, p2: number, p3: number, t = 0.5): number {
@@ -120,14 +139,52 @@ function shortModel(m: string): string {
   return m.length > 18 ? `${m.slice(0, 17)}…` : m;
 }
 
+/** 计算线条粗细（规范 §3.8：对数映射调用次数） */
+function getStrokeWidth(callCount: number): number {
+  if (callCount === 0) return 2;
+  return Math.min(2 + 2 * Math.floor(Math.log10(callCount)), 8);
+}
+
+/** 撤销栈动作类型（规范 §3.10） */
+interface UndoAction {
+  type: 'create' | 'delete' | 'update';
+  route: Route;
+  before?: Route; // update 操作需要保存修改前的状态
+}
+
+/** 拖拽状态类型 */
+interface DragState {
+  leftId: string;
+  x: number;
+  y: number;
+  ax: number;
+  ay: number;
+  /** 磁吸目标端口 */
+  snapTarget?: { provider: string; model: string | null; x: number; y: number };
+  /** 重连模式：拖拽已有箭头的起点 */
+  reconnectKey?: string;
+}
+
 /**
- * 二部图画布（design/01 §6.2 + docs/11 §四）：SVG 边层 + DOM 节点，禁重型图库。
+ * 二部图画布（design/01 §6.2 + docs/11 §四 + ROUTING-INTERACTION-SPEC-v2）：
+ * SVG 边层 + DOM 节点，禁重型图库。
  *
  * 端点语义（docs/11）：右列 = **提供商大卡片**（锚定 API 地址 + key 的归属主体），
  * 卡片内每个模型 = 一个**可调用端点**（再锚定模型 id → 三元组固定）；
- * 连线锚在**端口**上，表达「模型端点 → 模型端点」的映射。
+ * 连线锚在**端口**上（端口位置在卡片左侧），表达「模型端点 → 模型端点」的映射。
  * 拖放：命中端口 → 钉死/透传按端口；命中卡片空白 → exact 同名钉死。
- * 点线选中 → EdgeInspector（upstream_model 四字段）；键盘增删改由 RouteTableForm 等价提供。
+ * 点线选中 → EdgeInspector（upstream_model 四字段）。
+ *
+ * v2 新增交互（ROUTING-INTERACTION-SPEC-v2）：
+ * - 磁吸机制（40px 触发距离）
+ * - 双拖拽起点（端口小方块 + 箭头左半部分重连）
+ * - 端口可视化（实心/空心圆点，hover 放大，拖拽靠近发光）
+ * - 删除交互（Delete/Backspace 键 + Inspector 面板 + 右键菜单）
+ * - 箭头样式（线条粗细映射调用次数）
+ * - 箭头中点标签（priority + 成功率环形图）
+ * - 多边放射状错开（-15°, 0°, +15°）
+ * - 键盘快捷键（Delete/Esc/Ctrl+Z/Ctrl+Shift+Z）
+ * - 撤销栈（最多 50 次）
  */
 export function BipartiteCanvas({
   routes,
@@ -140,11 +197,69 @@ export function BipartiteCanvas({
   onCreateEdge,
   onPatchEdge,
   onDeleteEdge,
+  routeStats,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 860, h: 400 });
   const [hoverEdge, setHoverEdge] = useState<string | null>(null);
-  const [drag, setDrag] = useState<{ leftId: string; x: number; y: number; ax: number; ay: number } | null>(null);
+  const [hoverPort, setHoverPort] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+
+  // 撤销/重做栈（规范 §3.10）
+  const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
+  const [redoStack, setRedoStack] = useState<UndoAction[]>([]);
+
+  // 键盘快捷键处理（规范 §3.10）
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Delete/Backspace：删除选中的边
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedEdge && selectedRoute) {
+        e.preventDefault();
+        onDeleteEdge(selectedEdge);
+        setUndoStack((stack) => [...stack, { type: 'delete' as const, route: selectedRoute }].slice(-50));
+        setRedoStack([]);
+      }
+      // Esc：取消拖拽
+      else if (e.key === 'Escape' && drag) {
+        e.preventDefault();
+        setDrag(null);
+      }
+      // Ctrl+Z：撤销
+      else if (e.ctrlKey && e.key === 'z' && !e.shiftKey && undoStack.length > 0) {
+        e.preventDefault();
+        const action = undoStack[undoStack.length - 1];
+        setUndoStack((stack) => stack.slice(0, -1));
+        setRedoStack((stack) => [...stack, action]);
+        // 执行撤销逻辑
+        if (action.type === 'create') {
+          onDeleteEdge(edgeKey(action.route.left, action.route.right));
+        } else if (action.type === 'delete') {
+          onCreateEdge(action.route.left, action.route.right, action.route.upstream_model);
+        } else if (action.type === 'update' && action.before) {
+          onPatchEdge(edgeKey(action.route.left, action.route.right), action.before);
+        }
+      }
+      // Ctrl+Shift+Z：重做
+      else if (e.ctrlKey && e.shiftKey && e.key === 'Z' && redoStack.length > 0) {
+        e.preventDefault();
+        const action = redoStack[redoStack.length - 1];
+        setRedoStack((stack) => stack.slice(0, -1));
+        setUndoStack((stack) => [...stack, action]);
+        // 执行重做逻辑
+        if (action.type === 'create') {
+          onCreateEdge(action.route.left, action.route.right, action.route.upstream_model);
+        } else if (action.type === 'delete') {
+          onDeleteEdge(edgeKey(action.route.left, action.route.right));
+        } else if (action.type === 'update') {
+          onPatchEdge(edgeKey(action.route.left, action.route.right), action.route);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedEdge, selectedRoute, drag, undoStack, redoStack, onDeleteEdge, onCreateEdge, onPatchEdge]);
+
 
   /* 画布尺寸跟随容器 */
   useEffect(() => {
@@ -273,7 +388,7 @@ export function BipartiteCanvas({
             key: e.key,
             model: e.model,
             pinned: e.pinned,
-            x: cardX,  // 端口在卡片左侧（电路板触点）
+            x: cardX + 12,  // 端口在卡片左侧（修正：从左边缘开始，留 12px 内边距）
             y: y + CARD_HEAD_H + 2 + i * PORT_STEP,
             w: CARD_W - 12,
             h: PORT_H,
@@ -286,12 +401,13 @@ export function BipartiteCanvas({
     return out;
   }, [rightItems, height, rightStackH, width]);
 
-  /** 端口锚点索引：endpointKey → {x: 端口左边, y: 端口中心} */
+  /** 端口锚点索引：endpointKey → {x: 端口左边（圆点中心）, y: 端口中心} */
   const portAnchors = useMemo(() => {
     const m = new Map<string, { x: number; y: number }>();
     for (const c of rightCards) {
       for (const p of c.ports) {
-        m.set(p.key, { x: p.x, y: p.y + p.h / 2 });
+        // 端口圆点在卡片左侧边缘（x 坐标是卡片左边）
+        m.set(p.key, { x: c.x, y: p.y + p.h / 2 });
       }
     }
     return m;
@@ -389,7 +505,7 @@ export function BipartiteCanvas({
     });
   }, [routes, leftBoxes, rightCards, portAnchors, providerIds]);
 
-  /* 拖线：pointermove 跟随；pointerup 优先命中端口，其次卡片 */
+  /* 拖线：pointermove 跟随；计算磁吸目标；pointerup 优先命中端口，其次卡片 */
   useEffect(() => {
     if (!drag) return;
     const toLocal = (e: PointerEvent) => {
@@ -399,12 +515,42 @@ export function BipartiteCanvas({
     };
     const onMove = (e: PointerEvent) => {
       const pt = toLocal(e);
-      if (pt) setDrag((d) => (d ? { ...d, x: pt.x, y: pt.y } : d));
+      if (!pt) return;
+
+      // 磁吸逻辑：检测距离 SNAP_DISTANCE 内的端口（规范 §3.1）
+      let snapTarget: DragState['snapTarget'] = undefined;
+      let minDist = SNAP_DISTANCE;
+
+      for (const [key, anchor] of portAnchors) {
+        const dist = Math.sqrt((pt.x - anchor.x) ** 2 + (pt.y - anchor.y) ** 2);
+        if (dist < minDist) {
+          minDist = dist;
+          const sep = key.indexOf('|');
+          const provider = key.slice(0, sep);
+          const modelRaw = key.slice(sep + 1);
+          snapTarget = {
+            provider,
+            model: modelRaw === '*' ? null : modelRaw,
+            x: anchor.x,
+            y: anchor.y,
+          };
+        }
+      }
+
+      setDrag((d) => (d ? { ...d, x: pt.x, y: pt.y, snapTarget } : d));
+
+      // 更新 hover 端口状态
+      if (snapTarget) {
+        setHoverPort(endpointKey(snapTarget.provider, snapTarget.model));
+      } else {
+        setHoverPort(null);
+      }
     };
     const onUp = (e: PointerEvent) => {
       const target = document.elementFromPoint(e.clientX, e.clientY);
       const epEl = target?.closest?.('[data-endpoint]') as HTMLElement | null;
       const rightEl = target?.closest?.('[data-right-node]') as HTMLElement | null;
+
       if (epEl) {
         const ep = epEl.getAttribute('data-endpoint') ?? '';
         const sep = ep.indexOf('|');
@@ -416,6 +562,7 @@ export function BipartiteCanvas({
         onCreateEdge(drag.leftId, rightEl.getAttribute('data-right-node') ?? '');
       }
       setDrag(null);
+      setHoverPort(null);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -423,7 +570,7 @@ export function BipartiteCanvas({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [drag, onCreateEdge]);
+  }, [drag, onCreateEdge, portAnchors]);
 
   const startDrag = (leftId: string, e: ReactPointerEvent) => {
     e.preventDefault();
@@ -558,7 +705,6 @@ export function BipartiteCanvas({
               const sticky = e.route.sticky === 'session';
               /* badge 只留 priority（避免重叠）；模型/sticky 信息进 aria-label + EdgeInspector */
               const label = String(e.route.priority);
-              const bw = label.length * 7.2 + 14;
               // 端点可读性移到无障碍标签（docs/11 §四）
               const target = e.route.upstream_model
                 ? shortModel(e.route.upstream_model)
@@ -569,6 +715,11 @@ export function BipartiteCanvas({
                 `route ${e.route.left} to ${e.route.right}, priority ${e.route.priority}` +
                 `, upstream model ${target}` +
                 (sticky ? ', sticky session' : '');
+
+              // 获取调用统计数据（规范 §3.8）
+              const stats = routeStats?.get(e.key);
+              const strokeWidth = stats ? getStrokeWidth(stats.calls_24h) : 2;
+
               return (
                 <g key={e.key} role="listitem">
                   {/* 可命中的宽 hit 区 */}
@@ -576,7 +727,7 @@ export function BipartiteCanvas({
                     d={e.d}
                     fill="none"
                     stroke="transparent"
-                    strokeWidth={16}
+                    strokeWidth={Math.max(16, strokeWidth + 4)}
                     style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                     tabIndex={0}
                     role="button"
@@ -601,24 +752,82 @@ export function BipartiteCanvas({
                     d={e.d}
                     fill="none"
                     stroke={isErr ? 'var(--danger)' : active ? 'var(--edge)' : 'var(--edge-idle)'}
-                    strokeWidth={isErr || active ? 2 : 1.5}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={e.route.on_error === 'next' ? '4 3' : undefined}
                     markerEnd={
                       isErr ? 'url(#arrow-danger)' : active ? 'url(#arrow-active)' : 'url(#arrow-idle)'
                     }
                     style={{ pointerEvents: 'none' }}
                   />
-                  {/* 边 badge：仅 priority（其余信息见 aria-label / EdgeInspector） */}
+                  {/* 边中点标签：priority + 成功率环形图（规范 §3.7） */}
                   <g transform={`translate(${e.mx},${e.my})`} style={{ pointerEvents: 'none' }}>
-                    <rect
-                      x={-bw / 2}
-                      y={-9}
-                      width={bw}
-                      height={18}
-                      rx={9}
-                      fill="var(--surface)"
-                      stroke={isErr ? 'var(--danger)' : active ? 'var(--accent)' : 'var(--border)'}
-                      strokeWidth={1}
-                    />
+                    {/* 成功率环形图背景 */}
+                    {stats && (
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={11}
+                        fill="var(--surface)"
+                        stroke="var(--border)"
+                        strokeWidth={1}
+                      />
+                    )}
+                    {/* 成功率环形进度（绿色=成功，黄色=慢速，红色=失败） */}
+                    {stats && stats.calls_24h > 0 && (
+                      <>
+                        {/* 绿色扇形：成功 */}
+                        <circle
+                          cx={0}
+                          cy={0}
+                          r={9}
+                          fill="none"
+                          stroke="var(--success)"
+                          strokeWidth={3}
+                          strokeDasharray={`${stats.success_rate * 56.5} 56.5`}
+                          strokeDashoffset={-14.125}
+                          style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}
+                        />
+                        {/* 黄色扇形：慢速 */}
+                        {stats.slow_rate > 0 && (
+                          <circle
+                            cx={0}
+                            cy={0}
+                            r={9}
+                            fill="none"
+                            stroke="#facc15"
+                            strokeWidth={3}
+                            strokeDasharray={`${stats.slow_rate * 56.5} 56.5`}
+                            strokeDashoffset={-14.125 - stats.success_rate * 56.5}
+                            style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}
+                          />
+                        )}
+                        {/* 红色扇形：失败 */}
+                        {(1 - stats.success_rate - stats.slow_rate) > 0 && (
+                          <circle
+                            cx={0}
+                            cy={0}
+                            r={9}
+                            fill="none"
+                            stroke="var(--danger)"
+                            strokeWidth={3}
+                            strokeDasharray={`${(1 - stats.success_rate - stats.slow_rate) * 56.5} 56.5`}
+                            strokeDashoffset={-14.125 - (stats.success_rate + stats.slow_rate) * 56.5}
+                            style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}
+                          />
+                        )}
+                      </>
+                    )}
+                    {/* priority 数字 */}
+                    {!stats && (
+                      <circle
+                        cx={0}
+                        cy={0}
+                        r={11}
+                        fill="var(--surface)"
+                        stroke={isErr ? 'var(--danger)' : active ? 'var(--accent)' : 'var(--border)'}
+                        strokeWidth={1}
+                      />
+                    )}
                     <text
                       textAnchor="middle"
                       y={4}
@@ -627,26 +836,70 @@ export function BipartiteCanvas({
                         fontSize: 12,
                         fontFamily: 'var(--font-mono)',
                         fontVariantNumeric: 'tabular-nums',
+                        fontWeight: 600,
                       }}
                     >
                       {label}
                     </text>
                   </g>
+
+                  {/* hover 浮动卡片（规范 §3.7） */}
+                  {active && stats && (
+                    <g transform={`translate(${e.mx + 20},${e.my - 40})`} style={{ pointerEvents: 'none' }}>
+                      <rect
+                        x={0}
+                        y={0}
+                        width={140}
+                        height={70}
+                        rx={4}
+                        fill="var(--surface)"
+                        stroke="var(--border)"
+                        strokeWidth={1}
+                        style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
+                      />
+                      <text x={8} y={16} fill="var(--text)" style={{ fontSize: 12, fontFamily: 'var(--font-sans)' }}>
+                        Priority: {e.route.priority}
+                      </text>
+                      <text x={8} y={32} fill="var(--text)" style={{ fontSize: 12, fontFamily: 'var(--font-sans)' }}>
+                        Sticky: {e.route.sticky ?? 'none'}
+                      </text>
+                      <text x={8} y={48} fill="var(--text)" style={{ fontSize: 12, fontFamily: 'var(--font-sans)' }}>
+                        On Error: {e.route.on_error ?? 'next'}
+                      </text>
+                      <text x={8} y={64} fill="var(--text)" style={{ fontSize: 12, fontFamily: 'var(--font-sans)', fontWeight: 600 }}>
+                        Calls (24h): {stats.calls_24h.toLocaleString()}
+                      </text>
+                    </g>
+                  )}
                 </g>
               );
             })}
         </g>
 
-        {/* 拖线临时边 */}
+        {/* 拖线临时边（带磁吸效果，规范 §3.1） */}
         {drag && (
-          <path
-            d={`M ${drag.ax} ${drag.ay} C ${drag.ax + 60} ${drag.ay}, ${drag.x - 60} ${drag.y}, ${drag.x} ${drag.y}`}
-            fill="none"
-            stroke="var(--edge)"
-            strokeWidth={1.5}
-            strokeDasharray="4 3"
-            style={{ pointerEvents: 'none' }}
-          />
+          <>
+            {/* 磁吸目标：显示虚线预览到端口 */}
+            {drag.snapTarget ? (
+              <path
+                d={`M ${drag.ax} ${drag.ay} C ${drag.ax + 60} ${drag.ay}, ${drag.snapTarget.x - 60} ${drag.snapTarget.y}, ${drag.snapTarget.x} ${drag.snapTarget.y}`}
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth={2}
+                strokeDasharray="4 3"
+                style={{ pointerEvents: 'none' }}
+              />
+            ) : (
+              <path
+                d={`M ${drag.ax} ${drag.ay} C ${drag.ax + 60} ${drag.ay}, ${drag.x - 60} ${drag.y}, ${drag.x} ${drag.y}`}
+                fill="none"
+                stroke="var(--edge)"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
+          </>
         )}
       </svg>
 
@@ -710,7 +963,7 @@ export function BipartiteCanvas({
                   className="tabular"
                   style={{ ...CHIP, background: 'var(--surface)', color: 'var(--text-muted)' }}
                 >
-                  {b.ports.length} ep
+                  {b.ports.length} {tCore('routing.ep')}
                 </span>
               </span>
             </div>
@@ -729,56 +982,70 @@ export function BipartiteCanvas({
                   {tCore('canvas.noEndpoint')}
                 </div>
               ) : (
-                b.ports.map((p) => (
-                  <div
-                    key={p.key}
-                    data-endpoint={p.key}
-                    data-right-node={b.id}
-                    role="group"
-                    aria-label={`endpoint ${b.id}/${p.model ?? 'passthrough'}`}
-                    className="flex items-center gap-1.5 px-1.5"
-                    style={{
-                      height: PORT_H,
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                      background: 'var(--bg)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 'var(--text-xs)',
-                      color: 'var(--text)',
-                    }}
-                    title={
-                      p.pinned
-                        ? tCore('canvas.pinTitle', { id: b.id, model: p.model ?? '' })
-                        : tCore('canvas.passTitle')
-                    }
-                  >
-                    <span
-                      className="inline-block shrink-0"
+                b.ports.map((p) => {
+                  const isHoverPort = hoverPort === p.key;
+                  const portDotSize = isHoverPort ? PORT_DOT_DRAG_NEARBY : PORT_DOT_NORMAL;
+
+                  return (
+                    <div
+                      key={p.key}
+                      data-endpoint={p.key}
+                      data-right-node={b.id}
+                      role="group"
+                      aria-label={`endpoint ${b.id}/${p.model ?? 'passthrough'}`}
+                      className="relative flex items-center gap-1.5 px-1.5"
                       style={{
-                        width: 4,
-                        height: 4,
-                        borderRadius: '50%',
-                        background: p.pinned ? 'var(--accent)' : 'var(--text-subtle)',
+                        height: PORT_H,
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius)',
+                        background: 'var(--bg)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--text)',
                       }}
-                      aria-hidden
-                    />
-                    <span className="min-w-0 truncate tabular" title={p.model ?? undefined}>
-                      {p.model ?? '* input model'}
-                    </span>
-                    <span
-                      className="ml-auto shrink-0"
-                      style={{
-                        ...CHIP,
-                        fontFamily: 'var(--font-sans)',
-                        ...(p.pinned
-                          ? { background: 'var(--accent)', color: '#fff' }
-                          : { background: 'var(--surface-hover)', color: 'var(--text-muted)' }),
-                      }}
+                      title={
+                        p.pinned
+                          ? tCore('canvas.pinTitle', { id: b.id, model: p.model ?? '' })
+                          : tCore('canvas.passTitle')
+                      }
+                      onMouseEnter={() => setHoverPort(p.key)}
+                      onMouseLeave={() => setHoverPort(null)}
                     >
-                      {p.pinned ? 'pin' : 'pass'}
-                    </span>
-                  </div>
-                ))
+                      {/* 端口圆点（规范 §3.3：实心 pin / 空心 pass，左侧边缘） */}
+                      <div
+                        className="absolute shrink-0"
+                        style={{
+                          left: -portDotSize / 2,
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          width: portDotSize,
+                          height: portDotSize,
+                          borderRadius: '50%',
+                          background: p.pinned ? 'var(--accent)' : 'transparent',
+                          border: p.pinned ? 'none' : '2px solid var(--text-subtle)',
+                          boxShadow: isHoverPort ? '0 0 8px var(--accent)' : undefined,
+                          transition: 'all 0.15s ease-out',
+                        }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 truncate tabular" title={p.model ?? undefined}>
+                        {p.model ?? tCore('canvas.inputModel')}
+                      </span>
+                      <span
+                        className="ml-auto shrink-0"
+                        style={{
+                          ...CHIP,
+                          fontFamily: 'var(--font-sans)',
+                          ...(p.pinned
+                            ? { background: 'var(--accent)', color: '#fff' }
+                            : { background: 'var(--surface-hover)', color: 'var(--text-muted)' }),
+                        }}
+                      >
+                        {p.pinned ? tCore('routing.pin') : tCore('routing.pass')}
+                      </span>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

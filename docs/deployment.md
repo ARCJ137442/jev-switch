@@ -23,11 +23,17 @@ docker compose up -d
 curl http://127.0.0.1:11435/health
 ```
 
-- 配置真值：`./data/providers.toml`（宿主 bind mount；**首启自动播种**为 `rs/providers.example.toml` 的拷贝）。用目录挂载而非单文件——宿主文件不存在时 Docker 会误建同名目录。
+- 持久数据：挂载整个 `./data` 目录，保留 SQLite 中的统一配置快照、入口、Token 和调用记录。`providers.toml` 首启自动播种并导入；之后人工修改 TOML 须通过控制台显式导入，不能覆盖数据库已确认的配置。用目录挂载而非单文件。
 - 打开 `http://<主机>:11435/` 即控制台（daemon 同源托管 `ui/dist`，API 走相对路径，无跨源）。
-- cloud 态凭据缺失 = **fail-closed**：无 token → 全 `/v1` 401；无 admin 密码 → 登录恒 401（启动日志有 warn）。**两个值必设**。
+- cloud 态凭据缺失时拒绝访问：公开调用需要调用 Token，管理操作需要管理员密码会话或 admin 角色 Token。示例中的环境变量用于首次启动；也可以先用管理员密码登录，再创建调用 Token。
+
+运行镜像不调用 apt：TLS 根证书从同一 Debian 系列的 Rust 构建镜像复制，Docker `HEALTHCHECK` 调用 daemon 自带的 `--healthcheck` 子命令，核对 `/health` 的 `status`、产品身份和 API revision。这样运行层无需为探活额外下载 `curl` 或证书包。
+
+Rust 构建会先按锁文件检查本机 BuildKit 依赖缓存；完整时直接离线构建，缺失时才联网获取（单次 fetch 上限 300 秒）。UI 的 npm 锁文件也由 `npm ci` 严格安装。缓存不能绕过 Rust/npm 锁文件校验，也不需要把个人 Cargo 凭据复制进镜像。网络受限时，排查构建阶段实际需要的 Cargo/npm 依赖源；运行层不再依赖 Debian CDN。
 
 本地非容器跑法不变（README 快速开始三命令；默认 `mode = "local"`）。
+
+Unix daemon 同时处理 SIGINT 和 SIGTERM。Docker/Compose 停机时先关闭监听，已受理请求继续完成；连接排空上限为 10 秒，超时后取消未完成连接。Compose 设置 `stop_grace_period: 15s`，给内核排空和退出留出时间；直接使用 `docker run` 时可设置 `--stop-timeout 15`。此行为不承诺撤销上游已经执行的计算或费用。
 
 ---
 
@@ -46,6 +52,8 @@ curl http://127.0.0.1:11435/health
 
 `mode = "cloud"` **不会**把 `127.0.0.1` 上游改写成别的地址，也**不会**发现/代理任何 LAN 服务——它是纯鉴权开关（+绑定地址）。
 
+容器中的 `127.0.0.1` 指向容器自己；上游在另一容器时，可使用同一 Docker 网络内的服务名，例如 `http://laya:18765/v1/systemone`。不要直接把宿主机本地配置的回环地址复制到容器后期待它指向宿主机。
+
 ---
 
 ## 三、local / cloud 两态对照
@@ -53,10 +61,10 @@ curl http://127.0.0.1:11435/health
 | 维度 | `mode = "local"`（默认） | `mode = "cloud"` |
 |---|---|---|
 | 绑定 | `127.0.0.1:11435` | `0.0.0.0:11435`（容器内必需，见 §五偏差） |
-| `/v1/systemone`、`/v1/models` | **完全不校验**（现状零变化） | `Authorization: Bearer <调用 token>`；缺失/错值 → **401** |
-| `/v1/admin/*` | **完全不校验** | `POST /v1/admin/login {password}` 换**短时会话 token**（内存态、2h、不落盘）→ 后续带 `Authorization: Bearer <会话>` |
+| `/v1/systemone`、`/v1/models` | 仅限本机 loopback 调用，无需 Token | `Authorization: Bearer <调用 token>`；缺失/错值 → **401** |
+| `/v1/admin/*` | 仅限本机 loopback 管理，无需 Token | 管理员密码换短时会话（2h），或使用 admin 角色调用 Token；readonly Token 无管理权限 |
 | `/health` | 放行 | **放行**（探活需要，不设门） |
-| 凭据来源 | —（不需要） | token：`auth_tokens`（toml）或 `JEV_AUTH_TOKENS`（逗号分隔，**非空 env 完全覆盖**）；密码：`admin_password`（toml）或 `JEV_ADMIN_PASSWORD`（**非空 env 优先**） |
+| 凭据来源 | 本机 loopback 无需凭据 | 调用 Token 由数据库管理；旧 TOML/env Token 一次性导入为 readonly，撤销后重启不复活。密码：`admin_password` 或优先的 `JEV_ADMIN_PASSWORD` |
 | 上游拓扑 | 以内核所在位置访问 | **完全相同**（§二） |
 | CORS | 5173 白名单 | **相同**（不扩公网 origin；同源托管下用不到 CORS） |
 | 会话 | 不需要 | 进程内存，重启全废；改密码/重启 = 全体登出 |
@@ -76,15 +84,15 @@ admin_password = "…"           # 或 env JEV_ADMIN_PASSWORD（env 优先）
 
 ## 四、云态鉴权风险块（部署前必读）
 
-1. **无 token 即 401**：cloud 态下 `/v1/*` 一切请求先过 Bearer 门。token 列表为空 = 全部 401（fail-closed，不是放行）。把 token 当密码管：`.env` 已 gitignore；**不要**贴进 issue/截图/日志；轮换 = 改 `.env` + `docker compose restart`。
-2. **admin 密码必设**：未设置时 `POST /v1/admin/login` 恒 401（fail-closed），管理面等于锁死——这是故意的。密码与调用 token **分权**（双 token 裁决，docs/12 §二.6）：调用 token 进不了 admin 门，会话 token 也进不了 `/v1` 门（有单测断言分池）。
+1. **公开调用需要有效 Token**：cloud 下未提供、停用或已撤销的调用 Token 均被拒绝。首次导入之后，以控制台 Token 管理进行轮换和撤销；只改 `.env` 并重启不会自动撤销数据库中已有的 Token。
+2. **区分角色与凭据用途**：管理员密码会话用于管理；readonly 调用 Token 只允许公开调用、自身统计和自身事件；admin 调用 Token 还允许管理。管理员密码会话不充当公开调用 Token。首次部署须配置管理员密码，之后才能在管理界面创建受管理的调用凭据。
 3. **会话是内存态**：不落盘、2 小时过期、重启全废。浏览器侧只存会话 token（`localStorage["jev_admin_session"]`），**密码从不落浏览器存储**。
 4. **防火墙建议**：
    - `0.0.0.0:11435` 绑定 = 所有网卡可达；云主机请在安全组/防火墙**按需放行**（自用可只放行办公网 IP 或走 SSH 隧道）；
    - 暴露公网时**前置 HTTPS 反代**（nginx/caddy 终结 TLS）——Bearer 明文头在公网上必须加密传输；本仓 CORS/鉴权不管传输层加密；
    - 非必要不开 `0.0.0.0` 到无关网段；本地态（loopback）永远是更安全的默认。
 5. **redact 兜底**：调用 token 与 admin 密码已纳入 daemon 的 known_keys 集——错误体/日志若意外拼进凭据值会被掩码（contracts/04 §2 红线 4 扩展面）；但**别依赖兜底**，上游侧日志仍须自己管住。
-6. **探活无鉴权**：`/health` 两态放行——它只回 `{status, version}`，无敏感信息；这是探针（Docker HEALTHCHECK / LB）的必要豁免。
+6. **探活无鉴权**：`/health` 两态放行，返回 `status/version/product/api_revision/build_revision` 供探针和桌面壳核对身份，不包含凭据。
 
 ---
 
@@ -103,7 +111,7 @@ admin_password = "…"           # 或 env JEV_ADMIN_PASSWORD（env 优先）
 **选：daemon 内 `tower_http::ServeDir` 挂 `ui/dist`（同源），不旁挂 nginx。**
 
 理由：
-1. **同源消解 CORS**：UI 与 API 同一 origin，浏览器零预检、零白名单问题（反代改端口需设 `window.__JEV_BASE__`，见下）；
+1. **同源消解 CORS**：UI 与 API 同一 origin，浏览器零预检、零白名单问题；正式 UI 自动跟随托管源，包括自定义端口与 HTTPS 反代；
 2. **单进程单端口**：镜像无第二个常驻进程，HEALTHCHECK/日志/重启语义简单；nginx 方案要多维护一个反代配置面；
 3. 本项目 CORS 白名单语义（5173 dev + 同源 prod）已够用——nginx 在这里只搬运字节，不带来新能力。
 
@@ -119,17 +127,17 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 
 | 场景 | 头 |
 |---|---|
-| cloud 调 `/v1/systemone`、`/v1/models` | `Authorization: Bearer <调用 token>`（`auth_tokens`/`JEV_AUTH_TOKENS` 之值） |
-| cloud 调 `/v1/admin/*` | 先 `POST /v1/admin/login` `{"password":"…"}` → 200 `{"token":"…","expires_in":7200}` → `Authorization: Bearer <token>` |
+| cloud 调 `/v1/systemone`、`/v1/models` | `Authorization: Bearer <受管理的调用 token>`；旧配置/env Token 只在首次导入时成为 readonly 凭据 |
+| cloud 调 `/v1/admin/*` | 管理员密码换取会话，或使用 admin 角色调用 Token；readonly Token 无管理权限（当前管理会话门返回 401） |
 | 401 错误体 | `{"error":"…","upstream":null,"retryable":false}`（与契约 05 §3 同形，经 redact） |
 | `/health`、`POST /v1/admin/login` | 不带任何鉴权头 |
 
 **UI 存储键（已实现）**：
-- 调用 token：`window.__JEV_TOKEN__` 或 `localStorage["jev_token"]`（api.ts 读取；**未设则不带头** → local 态零变化）
+- 调用 Token：在“我的用量”中输入，仅保留于当前页面内存，刷新后须重新输入；旧 `localStorage["jev_token"]` 会清理。无 Token 时不附带调用鉴权头，local 回环调用仍可使用。
 - admin 会话：`window.__JEV_ADMIN_SESSION__` 或 `localStorage["jev_admin_session"]`（api/admin.ts 读取；login 成功自动写入）
-- 反代到非 11435 端口时：页面加载前设 `window.__JEV_BASE__ = "https://你的域名"`（api.ts 的 getBase 优先级最高）
+- 正式构建默认使用同源相对 API，不再用 11435 端口判断来源。Vite 开发环境默认连接 `http://127.0.0.1:11435`。确实需要分离 UI/API 时，页面加载前可设 `window.__JEV_BASE__ = "https://你的网关域名"`，并由部署者处理对应跨源配置。
 
-**浏览器现状**：Providers/Routing 页任意 admin 401/403 → 自动弹登录小窗（Shell 全局接线）；登录成功整页刷新重拉。local 态永不触发（服务端不产 401）。
+**浏览器现状**：管理请求 401/403 接入登录提示，成功后重新拉取页面数据；调用者登录先清除旧管理员会话。只读身份仅保留仪表盘/演练场及自身数据。仪表盘配置读取失败显示权限/加载提示，不能误报为零个提供商或零条路由。
 
 ---
 
@@ -139,8 +147,8 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 |---|---|---|
 | Rust 全测 | `cargo test --manifest-path rs/Cargo.toml --workspace`（含 auth 中间件/login/config 双态专测） | 见提交记录 |
 | UI 门禁 | `npm run lint --prefix ui` && `npm run build --prefix ui` | 见提交记录 |
-| cloud 冒烟（本机 daemon，等价 compose 验收） | `JEV_SWITCH_MODE=cloud` 起 daemon → 无 token 401 / 有 token 200 / login→admin 200 | 见提交记录 |
-| compose 实跑 | `docker compose up -d` → curl → down | **本机无 docker/podman，跳过**（报告注明；中间件已由单测全覆盖） |
+| cloud 冒烟（本机 daemon） | `JEV_SWITCH_MODE=cloud` 起 daemon → 无 token 401 / 有 token 200 / login→admin 200 | 已实际验证；与容器验收分别记录 |
+| compose 实跑 | 从当前 Dockerfile 构建；隔离 Compose 运行、受控上游调用、重建容器后恢复数据库状态 | 2026-09-25 已通过；详见[联调记录](verification/2026-09-24-entry-gateway-integration.md)；仍非已发布镜像 |
 | local 回归 | `scripts/smoke.ps1`（免 token 现状） | 见提交记录 |
 
 ---
@@ -155,7 +163,7 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 
 | 项 | 行为 |
 |---|---|
-| 主窗口 | 默认 1440×900，最小 1024×640；先载壳内**等待页**（黑底白 J），轮询 `GET /health` 至 200 后切入 `http://127.0.0.1:11435`（**不指 vite**——UI 由 sidecar daemon 的 ServeDir 同源托管，local 态免 token，`getBase()` 同源分支自动生效） |
+| 主窗口 | 当前默认 900×560 逻辑像素，常规最小 760×480；首次显示前按当前显示器工作区、DPI 与标题栏调整并居中，小工作区会同步下调最小尺寸。先载壳内等待页；核对 `/health` 的服务身份、接口修订与版本后切入 `http://127.0.0.1:11435`，UI 由 daemon 同源托管。见[响应式验收](responsiveness-check-2026-09-24.md)。 |
 | Sidecar | 启动 spawn 打包进资源的 `jev-switch-daemon.exe`（= `rs` workspace 的 `jev-switch` bin，release 产物）；`JEV_SWITCH_CONFIG` 指向 `%APPDATA%\jev-switch\providers.toml`（**首启播种模板、已有不覆盖**，模板 = `src-tauri/src/default_providers.toml`，仅 `api_key_env` 示例值）；`JEV_UI_DIST` 指向打包的 `ui\dist`；**`JEV_SWITCH_MODE` 不设 = local** |
 | 复用 | 若 11435 已有健康 daemon（手起/残留）→ 不重复 spawn，直接接入 |
 | 单实例 | `tauri-plugin-single-instance`：二次双击聚焦已有窗口 |
@@ -166,18 +174,14 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 ### 9.2 构建（本机已验，Windows / x86_64-msvc）
 
 ```powershell
-# 1) sidecar 二进制（release）
-cargo build --release --manifest-path rs/Cargo.toml -p jev-switch-daemon
-Copy-Item rs\target\release\jev-switch.exe `
-  src-tauri\binaries\jev-switch-daemon-x86_64-pc-windows-msvc.exe -Force
+# 一次生成 MSI、NSIS 与配套便携运行目录；不安装、不触发 UAC
+.\scripts\build-windows-release.ps1
 
-# 2) 打包（自动跑 beforeBuildCommand = npm run build --prefix ui 保证 dist 新鲜）
-cd src-tauri
-cargo tauri build          # = nsis + msi；CLI：cargo tauri 2.9.6（或 npx @tauri-apps/cli 2.11.5）
+# 也可指定便携目录；目标必须不存在
+.\scripts\build-windows-release.ps1 -PortableDestination "$env:TEMP\jev-switch-portable-build1"
 ```
 
-前置：Rust（msvc）、Node、Tauri CLI（`cargo install tauri-cli`）、WebView2（NSIS 安装器自动引导下载）。
-`src-tauri/binaries/*.exe`、`src-tauri/target/`、`src-tauri/gen/` 已 gitignore——**fresh clone 必须先跑上面第 1 步**，否则 `tauri build` 找不到 sidecar。
+前置：Rust（msvc）、Node、Tauri CLI（`cargo install tauri-cli`）、WebView2（NSIS 安装器自动引导下载）。脚本会先构建 daemon release 并更新 Tauri sidecar，再运行 Tauri UI hook 与 MSI/NSIS 构建，最后从同一组输入生成文件夹式便携运行时。`src-tauri/binaries/*.exe`、`src-tauri/target/`、`src-tauri/gen/` 已 gitignore。
 
 产物（2026-09-23 实测）：
 
@@ -185,9 +189,11 @@ cargo tauri build          # = nsis + msi；CLI：cargo tauri 2.9.6（或 npx @t
 |---|---|---|
 | NSIS 安装包 | `src-tauri/target/release/bundle/nsis/jev-switch_0.1.0_x64-setup.exe` | 3,424,907 B（≈3.3 MB） |
 | MSI 安装包 | `src-tauri/target/release/bundle/msi/jev-switch_0.1.0_x64_en-US.msi` | 4,927,488 B（≈4.7 MB） |
-| 便携布局 | `src-tauri/target/release/`（`jev-switch.exe` + `jev-switch-daemon.exe` + `ui\dist\` 同目录，直接可跑） | — |
+| 历史便携布局（2026-09-23） | `src-tauri/target/release/`（`jev-switch.exe` + `jev-switch-daemon.exe` + `ui\dist\` 同目录） | — |
 
 安装布局（NSIS/MSI 一致，实测解包确认）：`$INSTDIR\` 平铺 `jev-switch.exe`、`jev-switch-daemon.exe`、`ui\dist\…`——壳的 sidecar/UI 路径解析器按此多候选探测（打包 + dev 双布局）。
+
+2026-09-26 起，便携验收目录由 `scripts/build-windows-release.ps1` 从同次 MSI/NSIS 构建输入组装，具体路径与 SHA-256 写在每份 `build-manifest.json`；发布流水线另将目录压为 Windows x64 ZIP。最新执行与哈希见[总计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[发版手册](RELEASE.md)。
 
 ### 9.3 实测证据（双击开箱门禁，2026-09-23）
 
@@ -206,11 +212,11 @@ cargo tauri build          # = nsis + msi；CLI：cargo tauri 2.9.6（或 npx @t
 2. **sidecar 命名 `jev-switch-daemon` 而非 `jev-switch`**：externalBin 落地时剥 target-triple，若与壳主二进制同名 `jev-switch.exe` → WiX **ICE30**（两组件装同一文件名）→ MSI light 失败。改名后 nsis+msi 双绿。
 3. 打包时 `Failed to add bundler type … __TAURI_BUNDLE_TYPE` **warn**：无 updater 插件场景的已知无害告警，不影响安装包。
 4. 打开配置目录 = `explorer <dir>`（explorer 自身单实例，不再造轮子）。
-5. 等待页不跑跨源 fetch：daemon CORS 白名单只有 5173/同源（contracts/05 §5），`tauri.localhost` origin 会被挡——就绪轮询放在壳 Rust 侧（纯 std TCP 探 `/health`），200 后 `location.replace` 切入。
+5. 等待页不跑跨源 fetch：就绪轮询放在壳 Rust 侧（纯 std TCP 探 `/health`），核对服务身份及版本后再切入；不能把任意 HTTP 200 当成兼容内核。
 
 ### 9.5 后置（❄️ 不做，docs/12 §三冻结清单）
 
-- Tauri **macOS / Linux** 打包与签名（Windows 首发裁决）；GitHub Release 便携分发的 CI 流水线归发布线；
+- Tauri **macOS / Linux** 打包与签名（Windows 首发裁决）；
 - 托盘「退出」路径的 UI 自动化回归（本次人工验收级：收尸逻辑在 `RunEvent::Exit` 单点，代码审阅覆盖）。
 
 ---
@@ -296,9 +302,14 @@ curl -X PUT http://127.0.0.1:11435/v1/admin/password \
 | `GET /v1/admin/listen` | `{addr}` | 同上 |
 | `PUT /v1/admin/password` | `{updated:true, env_override_active}`（**永不回显密码**） | 门外 in-handler：见 10.2 |
 
-**Rebind 时序（try-bind → 优雅退场 → spawn）**：
-1. 地址与当前**不重叠**（不同端口/IP 不互含）：先 **try-bind 新地址**（失败 → 错误给调用方、**旧监听原样保留**）→ 成功则 spawn 新 serve（`with_graceful_shutdown`）→ 取消旧 serve：**停 accept、在途请求跑完**（`DRAIN_TIMEOUT=10s` 超时兜底 `abort` 强杀）→ 更新共享 `bound` 地址。
-2. **同端口重叠例外**（成对默认 local⇄cloud 同为 `:11435` 仅 IP 不同——新 bind 会被旧监听物理挡住）：优雅退场旧 serve → try-bind → 成功 spawn；失败 → **恢复绑定旧地址**再报错（带病不上线，服务不悬空）。
+**Rebind 时序（try-bind → 停 accept 确认 → 切换；旧连接独立排空）**：
+1. 地址与当前**不重叠**（不同端口/IP 不互含）：先 **try-bind 新地址**。失败直接返回错误，旧监听保持原样；成功后停止旧 listener、确认套接字释放，再启动新服务并更新共享 `bound` 地址，随即回复切换请求。
+2. **同端口重叠例外**（如成对默认 local⇄cloud 同为 `:11435`）：新地址先试绑失败且与旧地址重叠时，先关闭旧 listener 并确认释放，再试绑新地址。失败则恢复旧地址后报错；若旧地址恰被其他进程抢占，返回明确的 `restore failed`，不能保证这种竞争下服务仍可用。
+3. 两种路径都让已接受的连接独立排空。旧连接上的切换请求可正常收到响应，在途上游请求继续完成；超过 `DRAIN_TIMEOUT=10s` 的剩余连接（包括无限 SSE）会被取消并释放。**10 秒是连接清理上限，不是切换接口必须等待的时间**，否则切换请求等待自己结束会形成互相等待。
+
+2026-09-25 的隔离实测：Windows 换端口并恢复约 32ms/30ms；Docker 同端口 cloud→local / local→cloud 为 5.2ms/4.8ms。它们是本次环境的观测值，不是响应时间保证。真实 TCP 测试另覆盖旧端口关闭、慢请求完成、重叠绑定失败恢复和 SSE 超时取消，证据见 [联调记录](verification/2026-09-24-entry-gateway-integration.md)。
+
+启动日志中的 `legacy_config_tokens` 仅是配置文件/环境中旧式调用 Token 的数量；真正托管调用权限以持久存储为准。紧随其后的 `managed call tokens restored` 给出启用数/总数，不能因前者为零就认定所有调用都会失败。日志只记录数量，不输出凭据。
 
 **重启粒度声明**：本次全部热切均在**任务级**（tokio task + socket 替换；内核 Router/auth/handlers 的 `Arc` 共享、**永不因换地址而亡**；进程级零重启）。
 进程级「独立小网关」方案**本期不实现**——可选演进：将 listen 层拆独立进程做故障隔离（daemon 崩不影响网关 accept 队列等场景），需要时再立项。

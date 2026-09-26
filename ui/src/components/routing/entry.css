@@ -1,0 +1,39 @@
+.entry-workspace { display: grid; gap: 1rem; }
+.entry-toolbar, .entry-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.entry-toolbar { justify-content: space-between; }
+.entry-muted { color: var(--text-muted); font-size: var(--text-sm); }
+.entry-toolbar input[type='search'] { width: min(100%, 20rem); }
+.entry-button { display: inline-flex; justify-content: center; align-items: center; gap: .375rem; padding: .5rem .75rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: var(--text-sm); }
+.entry-button:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--text-subtle); }
+.entry-button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+.entry-button.danger { color: var(--danger); }
+.entry-button:disabled { opacity: .5; cursor: not-allowed; }
+.entry-input { min-width: 0; width: 100%; padding: .5rem .625rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: var(--text-sm); }
+.entry-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: .875rem; }
+.entry-card { padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); display: grid; align-content: start; gap: .875rem; }
+.entry-card[data-enabled='false'] { background: var(--surface-hover); }
+.entry-card header { display: flex; justify-content: space-between; align-items: start; gap: .5rem; }
+.entry-card h3 { font-family: var(--font-mono); overflow-wrap: anywhere; font-size: var(--text-base); font-weight: 600; }
+.entry-badge { display: inline-flex; border: 1px solid var(--border); border-radius: 1rem; padding: .125rem .5rem; font-size: var(--text-xs); color: var(--text-muted); }
+.entry-badge[data-enabled='true'] { color: var(--success); background: var(--success-bg); border-color: transparent; }
+.entry-stats { display: flex; gap: .75rem; flex-wrap: wrap; font-size: var(--text-xs); color: var(--text-muted); }
+.entry-message { padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.entry-error { color: var(--danger); background: var(--danger-bg); border-color: var(--danger); overflow-wrap: anywhere; }
+.entry-dialog { width: min(900px, calc(100vw - 2rem)); max-height: calc(100dvh - 3rem); padding: 0; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.entry-dialog::backdrop { background: var(--overlay); }
+.entry-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.entry-dialog form { display: flex; flex-direction: column; min-height: 0; gap: 1rem; padding: 1.25rem; }
+.entry-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-right: .25rem; }
+.entry-dialog fieldset { min-width: 0; }
+.entry-dialog h2 { font-size: var(--text-lg); font-weight: 600; }
+.entry-dialog-header { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+.entry-dialog-header, .entry-footer { flex-shrink: 0; }
+.entry-fields { display: grid; grid-template-columns: 1fr 1fr; gap: .875rem; }
+.entry-field { display: grid; gap: .375rem; font-size: var(--text-sm); min-width: 0; }
+.entry-route { padding: .875rem; border: 1px solid var(--border); border-radius: var(--radius); display: grid; grid-template-columns: 1.3fr 1fr .6fr; gap: .75rem; }
+.entry-route-list { display: grid; gap: .75rem; }
+.entry-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; background: var(--surface); padding-top: .75rem; border-top: 1px solid var(--border); }
+.routing-tabs { display: flex; align-items: center; gap: .25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.routing-tabs button { padding: .625rem 1rem; border-bottom: 2px solid transparent; color: var(--text-muted); border-radius: 0; }
+.routing-tabs button[aria-selected='true'] { color: var(--accent); border-bottom-color: var(--accent); }
+@media (max-width: 640px) { .entry-fields, .entry-route { grid-template-columns: 1fr; } .entry-dialog { max-height: calc(100dvh - 1rem); } }

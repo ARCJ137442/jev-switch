@@ -1,15 +1,16 @@
 name: Release
 
-# 发版流水线（任务 #45 · docs/12 §四-线3 尾「GitHub Release 便携分发」）
+# 发版流水线（任务 #45 · docs/12 §四-线3「GitHub Release 便携分发」）
 #
 # 触发：
-#   - push tag `v*`            → 全量发版（测试门禁 → Windows 桌面 + ghcr 镜像 → GitHub Release）
-#   - workflow_dispatch        → 干跑：构建产物但 **不推 ghcr、不建 Release**（验流水线本身）
+#   - push tag `v*`     → 全量发版（测试门禁 → Windows 桌面 + ghcr 镜像 → GitHub Release）
+#   - workflow_dispatch → 干跑：构建产物但**不推 ghcr、不建 Release**（验流水线本身）
 #
-# 测试门禁不在本文件重复实现 —— 以 `workflow_call` 复用 .github/workflows/ci.yml。
-# Windows 上 `cargo test` 与 `cargo build` 同 target-dir 会撞文件锁（os error 5 拒绝访问），
-# 故测试一律留在 ubuntu 的 ci.yml，Windows job 只构建、且 rs/ 与 src-tauri/ 是两个
-# 互不相干的 Cargo 工程（各自 target 目录）→ 结构上不可能撞锁。
+# 测试门禁不在本文件重复实现 —— 以 `workflow_call` 复用 ci.yml。
+# Windows 上 `cargo test` 与 `cargo build` 同 target-dir 会撞文件锁
+# （实测 error: failed to remove file jev-switch.exe / os error 5），
+# 故后端测试留在 ubuntu 的 ci.yml；Windows 顺序运行壳测试与构建，rs/ 与 src-tauri/
+# 是两个互不相干的 Cargo 工程（各自 target 目录）→ 结构上不会撞锁。
 
 on:
   push:
@@ -21,7 +22,7 @@ on:
         required: false
         default: ''
 
-# 最小权限：默认只读，发 Release / 推 ghcr 的两个 job 各自就地提权
+# 最小权限：默认只读，发 Release / 推 ghcr 的 job 各自就地提权
 permissions:
   contents: read
 
@@ -31,20 +32,229 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # externalBin 落地时剥 target-triple；且**不可**与壳主二进制 jev-switch.exe 同名
+  JEV_BUILD_REVISION: ${{ github.sha }}
+  # sidecar 落地时剥 target-triple；**不可**与壳主二进制 jev-switch.exe 同名
   # （WiX ICE30 两组件同装一文件名 → MSI 失败），见 docs/deployment.md §9.4-2
   SIDECAR_TRIPLE: x86_64-pc-windows-msvc
-  TAURI_CLI_VERSION: 2.11.5
 
 jobs:
-  # ── 1. 版本一致性门禁（防忘记 bump） ────────────────────────────────
+  # ── 1. 版本一致性门禁（防忘记 bump 四处版本号） ──────────────────
   meta:
     name: 版本门禁
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
-      prerelease: ${{ steps.v.outputs.prerelease }}
       publish: ${{ steps.v.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
-<!-- MORE -->
+
+      - name: 解析并校验版本号
+        id: v
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            PUBLISH=true
+          else
+            VERSION="$REQUESTED_VERSION"
+            PUBLISH=false
+          fi
+
+          UI_VER=$(node -p "require('./ui/package.json').version")
+          TAURI_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          RS_VER=$(grep -m1 '^version' rs/Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          SHELL_VER=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+
+          # 干跑未给版本 → 取 ui/package.json，做四处一致性检查
+          if [ -z "$VERSION" ]; then VERSION="$UI_VER"; fi
+
+          echo "tag/input : $VERSION"
+          echo "ui        : $UI_VER"
+          echo "tauri.conf: $TAURI_VER"
+          echo "rs/Cargo  : $RS_VER"
+          echo "shell/Cargo: $SHELL_VER"
+
+          fail=0
+          for pair in "ui:$UI_VER" "tauri.conf:$TAURI_VER" "rs/Cargo:$RS_VER" "shell/Cargo:$SHELL_VER"; do
+            name="${pair%%:*}"; got="${pair#*:}"
+            if [ "$got" != "$VERSION" ]; then
+              echo "::error::$name 版本 $got ≠ 期望 $VERSION — 四处版本号必须同步（见 docs/RELEASE.md）"
+              fail=1
+            fi
+          done
+          [ "$fail" = "0" ] || exit 1
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+
+  # ── 2. 测试门禁（复用 ci.yml，不重复实现） ─────────────────────────
+  gate:
+    name: 测试门禁
+    needs: meta
+    uses: ./.github/workflows/ci.yml
+
+  # ── 3. Windows 桌面（Tauri 2 · MSI + NSIS + 便携版） ──────────────
+  windows:
+    name: Windows 桌面
+    needs: [meta, gate]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust 缓存（rs/ + src-tauri/ 两工程分键）
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rs/target
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('rs/Cargo.lock', 'src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-release-
+
+      - name: npm ci
+        run: npm ci --prefix ui
+
+      # daemon 先构建 → 作为 sidecar 塞进 src-tauri/binaries/
+      # （binaries/ 已 gitignore，fresh clone 必须这步，见 docs/deployment.md §9.2）
+      # 命名必须带 target-triple（externalBin 约定），且**不可**与壳 bin 同名
+      # （WiX ICE30 → MSI 失败，见 docs/deployment.md §9.4-2）
+      - name: 构建 daemon（sidecar）
+        run: cargo build --release --locked --manifest-path rs/Cargo.toml -p jev-switch-daemon
+
+      - name: 放置 sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
+          Copy-Item rs/target/release/jev-switch.exe `
+            "src-tauri/binaries/jev-switch-daemon-${{ env.SIDECAR_TRIPLE }}.exe" -Force
+          Get-ChildItem src-tauri/binaries
+
+      - name: 桌面内核身份与产物解析回归
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+      # 必须在 src-tauri/ 下跑：beforeBuildCommand 的 hook cwd = src-tauri 的父目录
+      # （= 仓库根），故 `npm run build --prefix ui` 才解析正确（docs/deployment.md §9.4-1）
+      - name: Tauri build（nsis + msi）
+        working-directory: src-tauri
+        run: npx --yes @tauri-apps/cli@2.11.5 build
+
+      - name: 组装同批便携运行目录并压缩
+        shell: pwsh
+        run: |
+          $msi = @(Get-ChildItem src-tauri/target/release/bundle/msi -Filter '*.msi' -File)
+          $nsis = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*.exe' -File)
+          if ($msi.Count -ne 1 -or $nsis.Count -ne 1) {
+            throw "Expected one MSI and one NSIS artifact; found MSI=$($msi.Count), NSIS=$($nsis.Count)."
+          }
+          $portable = "src-tauri/target/release/bundle/portable/jev-switch-${{ needs.meta.outputs.version }}"
+          .\scripts\package-portable.ps1 -Destination $portable -MsiPath $msi[0].FullName -NsisPath $nsis[0].FullName
+          $zip = "src-tauri/target/release/bundle/jev-switch-portable-${{ needs.meta.outputs.version }}-windows-x64.zip"
+          Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $zip -CompressionLevel Optimal
+          Get-FileHash -LiteralPath $zip -Algorithm SHA256
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-switch-windows-${{ needs.meta.outputs.version }}
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/jev-switch-portable-*-windows-x64.zip
+          if-no-files-found: error
+
+  # ── 4. Docker 镜像（ghcr.io） ─────────────────────────────────────
+  docker:
+    name: Docker 镜像
+    needs: [meta, gate]
+    runs-on: ubuntu-latest
+    outputs:
+      image: ghcr.io/${{ steps.img.outputs.repo }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # 干跑不推镜像 —— 只验 Dockerfile 能构建
+      - name: 登录 ghcr.io
+        if: needs.meta.outputs.publish == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 镜像名转小写（ghcr 要求）
+        id: img
+        shell: bash
+        run: printf 'repo=%s\n' "$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: JEV_BUILD_REVISION=${{ github.sha }}
+          push: ${{ needs.meta.outputs.publish == 'true' }}
+          tags: |
+            ghcr.io/${{ steps.img.outputs.repo }}:${{ needs.meta.outputs.version }}
+            ghcr.io/${{ steps.img.outputs.repo }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 5. GitHub Release（仅 tag 触发） ──────────────────────────────
+  release:
+    name: GitHub Release
+    needs: [meta, windows, docker]
+    if: needs.meta.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: jev-switch-windows-${{ needs.meta.outputs.version }}
+          path: dist
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: v${{ needs.meta.outputs.version }}
+          generate_release_notes: true
+          files: dist/**/*
+          body: |
+            ## 安装
+
+            **Windows 桌面**：下载下方 `.msi`（或 NSIS `.exe`）双击安装。
+            **Windows 便携版**：下载 `.zip` 并解压，双击其中的 `jev-switch.exe`；它与同次构建的安装包共享壳、daemon 与 UI 资源，不运行安装器。
+
+            **Docker（Bash）**：先将 `JEV_ADMIN_PASSWORD` 设置为自己的管理员密码。
+            下例挂载持久数据卷，并只在宿主机回环地址提供控制台。
+
+            ```bash
+            : "${JEV_ADMIN_PASSWORD:?请先设置管理员密码}"
+            export JEV_ADMIN_PASSWORD
+            docker pull ${{ needs.docker.outputs.image }}:${{ needs.meta.outputs.version }}
+            docker run -d --name jev-switch \
+              -p 127.0.0.1:11435:11435 \
+              --restart unless-stopped --stop-timeout 15 \
+              -e JEV_SWITCH_MODE=cloud -e JEV_BIND=0.0.0.0:11435 \
+              -e JEV_ADMIN_PASSWORD -v jev-switch-data:/data \
+              ${{ needs.docker.outputs.image }}:${{ needs.meta.outputs.version }}
+            ```
+
+            打开 `http://127.0.0.1:11435`，用管理员密码登录，再到 Token 管理创建调用 Token。
+            远程部署、反向代理和配置导入见 `docs/deployment.md`。
+            发版流程与排查见 `docs/RELEASE.md`。

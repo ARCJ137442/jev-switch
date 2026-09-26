@@ -25,3 +25,11 @@ Thumbs.db
 src-tauri/target/
 src-tauri/binaries/*.exe
 src-tauri/gen/
+
+# 本机 Tauri 验收截图可能包含脱敏密钥片段或演示数据，不进入公开仓库
+docs/verification/tauri-user-evidence-2026-09-26/
+# 旧设计/runtime 审计截图不是当前产品发布素材，留在本机供历史核对
+docs/design/previews/runtime-audit/
+docs/design/previews/v2/
+# 本机 Claude Code 定时任务锁，不属于项目交付物
+.claude/scheduled_tasks.lock

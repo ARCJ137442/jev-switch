@@ -17,7 +17,9 @@
         font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
       }
       main {
-        height: 100%;
+        box-sizing: border-box;
+        min-height: 100%;
+        padding: 32px 24px 64px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -47,6 +49,9 @@
         font-size: 13px;
         color: #a8a8a8;
         font-family: Consolas, "Courier New", monospace;
+        max-width: 52rem;
+        overflow-wrap: anywhere;
+        text-align: center;
       }
       .spinner {
         width: 22px;

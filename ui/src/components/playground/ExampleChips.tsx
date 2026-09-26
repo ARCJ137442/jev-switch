@@ -14,7 +14,16 @@ interface Props {
 export function ExampleChips({ examples, onPick, activeId }: Props) {
   const { t } = useI18n();
   return (
-    <div className="fade-in flex flex-wrap items-center gap-2">
+    <div className="playground-examples min-w-0">
+      <label className="playground-example-select items-center gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+        <span className="shrink-0">{t('pg.examples')}</span>
+        <select aria-label={t('pg.examples')} value={activeId ?? ''}
+          onChange={event => { const example = examples.find(item => item.id === event.target.value); if (example) onPick(example); }}
+          className="h-9 min-w-0 flex-1 border px-2" style={{ background: 'var(--surface)', color: 'var(--text)' }}>
+          {examples.map(example => <option key={example.id} value={example.id}>{example.label}</option>)}
+        </select>
+      </label>
+      <div className="playground-example-chips fade-in flex flex-wrap items-center gap-2">
       <span
         className="mr-1"
         style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
@@ -47,6 +56,7 @@ export function ExampleChips({ examples, onPick, activeId }: Props) {
           </button>
         );
       })}
+      </div>
     </div>
   );
 }

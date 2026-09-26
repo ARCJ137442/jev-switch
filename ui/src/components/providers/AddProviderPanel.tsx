@@ -3,7 +3,7 @@ import {
   parseProvidersToml,
   type AdminProviderWrite,
 } from '../../api/admin';
-import { useI18n } from '../../i18n';
+import { useI18n, type MessageKey } from '../../i18n';
 
 interface Props {
   /** toml | form — 空态引导可预选 toml */
@@ -14,13 +14,16 @@ interface Props {
 
 interface FormState {
   id: string;
+  name: string;
+  account: string;
   kind: string;
   base: string;
+  modelsText: string;
   enabled: boolean;
   apiKey: string;
 }
 
-const EMPTY_FORM: FormState = { id: '', kind: '', base: '', enabled: true, apiKey: '' };
+const EMPTY_FORM: FormState = { id: '', name: '', account: '', kind: '', base: '', modelsText: '', enabled: true, apiKey: '' };
 
 /** 输入框（v2：mono 仅用于 id/base/key 这类机读值） */
 const inputStyle: React.CSSProperties = {
@@ -87,9 +90,12 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
     try {
       const provider: AdminProviderWrite = {
         id: form.id.trim(),
+        name: form.name.trim() || null,
+        account: form.account.trim() || null,
         kind: form.kind.trim(),
         base: form.base.trim(),
         enabled: form.enabled,
+        models: [...new Set(form.modelsText.split(/\r?\n/).map((model) => model.trim()).filter(Boolean))],
       };
       if (form.apiKey.length > 0) provider.api_key = form.apiKey;
       await onAdd(provider);
@@ -176,16 +182,22 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
 
       {tab === 'form' ? (
         <form onSubmit={(e) => void submitForm(e)} className="space-y-3 px-4 py-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="id" hint={t('common.required')}>
               <input
                 value={form.id}
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
-                placeholder="vercel"
+                placeholder="gateway-primary"
                 spellCheck={false}
                 className="h-9 w-full px-2.5"
                 style={inputStyle}
               />
+            </Field>
+            <Field label={t('providers.name' as MessageKey)}>
+              <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Work account" className="h-9 w-full px-2.5" style={inputStyle} />
+            </Field>
+            <Field label={t('providers.account' as MessageKey)}>
+              <input value={form.account} onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))} placeholder="team@example.com" className="h-9 w-full px-2.5" style={inputStyle} />
             </Field>
             <Field label="kind" hint={t('common.required')}>
               <input
@@ -207,6 +219,9 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
               className="h-9 w-full px-2.5"
               style={inputStyle}
             />
+          </Field>
+          <Field label={t('providers.models' as MessageKey)} hint={t('providers.modelsHint' as MessageKey)}>
+            <textarea value={form.modelsText} onChange={(e) => setForm((f) => ({ ...f, modelsText: e.target.value }))} rows={3} spellCheck={false} placeholder={'provider/model-a\nprovider/model-b'} className="w-full resize-y p-2.5 leading-relaxed" style={inputStyle} />
           </Field>
           <Field label="api_key">
             <input

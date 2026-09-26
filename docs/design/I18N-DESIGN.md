@@ -1,9 +1,12 @@
 # 国际化 (i18n) 设计方案
 
-**日期**: 2026-09-24  
-**版本**: 1.0  
-**状态**: 实施中  
-**作者**: Claude Opus 4.8
+**日期**: 2026-09-24
+**版本**: 1.1
+**状态**: 语言注册与选择机制已实施；新增语言翻译待提供
+**原方案作者**: Claude Opus 4.8
+**实施记录**: GPT-6 Luna
+
+> **2026-09-24 最新方向：**用户已确认使用可扩展的多语言选择列表，后续可以添加日语、俄语、法语等。现阶段补全中文/英文体验与语言扩展机制，实施时参考 CC Switch 的语言选择、词条组织与回退方式；不能继续把语言 UI 固化为中英切换按钮，也不能把未翻译的语言显示为已可用。见 [入口网关认知对齐与实施计划](ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。本文历史测试勾选不代表当前测试存在或已经通过，后续按实际文件与运行结果验收。
 
 ---
 
@@ -11,29 +14,18 @@
 
 ### 1.1 架构
 
-**词典文件**:
+**词典与注册**:
 - `ui/src/i18n/en.ts` — 英文词典（默认语言，CDP 断言依赖）
 - `ui/src/i18n/zh.ts` — 中文词典（类型强制与 en 键集一致）
+- `ui/src/i18n/languages.ts` — 可用语言注册表、语言代码校验、浏览器语言匹配与选择列表数据
+- `ui/src/i18n/core.ts` — 持久化选择、英文缺键回退、`<html lang>` 同步
+- `ui/src/components/ui/LangToggle.tsx` — 从注册表渲染的语言下拉选择器；目前只列出已完整提供的 English 与简体中文
 
-**类型安全**:
-```typescript
-// en.ts
-export const en = {
-  'common.reload': 'Reload',
-  'shell.navHome': 'Home',
-  // ...
-} as const;
+`languageRegistry` 是唯一可用语言目录。新增语言前，先补齐与英文键集一致的词典，再向注册表添加代码、显示名称、HTML语言标记和词典；选择器、校验、浏览器匹配及翻译表会读取该目录。不能仅为展示语言选项而注册未完成翻译的语言。
 
-export type MessageKey = keyof typeof en;
+初始化顺序：可用的 `localStorage['jev_lang']` → 注册表中完全匹配的浏览器 locale → 注册表中匹配主语言代码的 locale → 英文默认值。无效存储值回退英文。手动选择立即写入 `jev_lang` 并更新 `<html lang>`；存储不可用时继续在当前会话切换。中文页面写 `zh-CN`，英文页面写 `en`。
 
-// zh.ts
-import type { en } from './en';
-export const zh: Record<keyof typeof en, string> = {
-  'common.reload': '重载',
-  'shell.navHome': '首页',
-  // ...
-};
-```
+当前翻译函数对目标语言缺失键回退英文，再回退键名。新增语言应通过词典键集检查确保覆盖，不将回退机制视为翻译完成。
 
 **使用方式**:
 ```typescript
@@ -69,28 +61,22 @@ function MyComponent() {
 
 ---
 
-## §2 测试保障
+## §2 测试保障与本轮验证
 
 ### 2.1 i18n 键集一致性测试
 
-**测试文件**: `ui/src/tests/i18n.test.ts`
+历史设计稿曾记录 `ui/src/tests/i18n.test.ts`，当前仓库没有该测试文件，不能将旧勾选视为本轮测试结果。项目目前没有 i18n 专用测试命令。
 
-**测试用例**:
-1. ✅ zh 和 en 的键集完全一致
-2. ✅ zh 没有缺失 en 中的键
-3. ✅ zh 没有多余的键
-4. ✅ en 没有空值
-5. ✅ zh 没有空值
-6. ✅ 所有键遵循命名规范（`namespace.key`）
-
-**CI 集成**:
-```bash
-npm test -- i18n.test.ts
-```
+本轮变更后应运行 `cd ui && npm run lint`（等价于 TypeScript 全项目检查），并在浏览器验收：存储为 `zh` 时显示中文并设 `html.lang=zh-CN`；无效存储值时回退英文；无存储时 `zh-*` 浏览器偏好选择中文、其他偏好选英文；切换后两处语言选择器同步并持久化。浏览器行为尚未在此实施记录中声称通过。
 
 ---
 
 ## §3 多语言扩展设计
+
+### 3.0 参考实现与取舍
+
+已核对 CC Switch 官方仓库 `src/i18n/index.ts`：
+[官方源码](https://github.com/farion1231/cc-switch/blob/main/src/i18n/index.ts)。该实现把 locale 代码和资源集中注册，通过持久化选择优先初始化，再识别浏览器语言并回退到默认语言；其 `fallbackLng: "en"` 负责缺失词条回退。Jev Switch 采用相同的注册表驱动语言选项、偏好读取与默认回退思路。CC Switch 目前包含 `zh`、`zh-TW`、`en`、`ja`，并采用 i18next；Jev Switch 当前只注册已完整翻译的 `en` 和 `zh`，沿用现有轻量词典与 React Context，不引入新的 i18n 依赖。Jev Switch 使用既有 `jev_lang` 存储键，并将中文文档语言标记为 `zh-CN`。
 
 ### 3.1 目标语言优先级
 
@@ -98,10 +84,10 @@ npm test -- i18n.test.ts
 |-------|------|------|
 | P0 | 英文（en） | 默认语言，国际用户 |
 | P0 | 中文（zh） | 主要用户群体 |
-| P1 | 日文（ja） | 潜在用户群 |
-| P1 | 韩文（ko） | 潜在用户群 |
-| P2 | 法文（fr） | 欧洲用户 |
-| P2 | 德文（de） | 欧洲用户 |
+| 后续 | 日文（ja） | 翻译完成并加入注册表后开放 |
+| 后续 | 韩文（ko） | 翻译完成并加入注册表后开放 |
+| 后续 | 法文（fr） | 翻译完成并加入注册表后开放 |
+| 后续 | 德文（de） | 翻译完成并加入注册表后开放 |
 
 ### 3.2 语言切换键设计
 
@@ -135,23 +121,23 @@ type Locale = 'en-US' | 'en-GB' | 'zh-CN' | 'zh-TW' | 'ja-JP' | 'ko-KR';
 ### 3.3 语言检测与回退
 
 **优先级**:
-1. 用户手动选择（localStorage: `jev-switch-locale`）
-2. 浏览器语言（`navigator.language`）
+1. 用户手动选择（localStorage: `jev_lang`）
+2. 浏览器语言（`navigator.language`，不可用时读取 `navigator.languages[0]`）
 3. 默认英文（`en`）
 
 **回退策略**:
 ```typescript
 function detectLocale(): Locale {
   // 1. 用户偏好
-  const stored = localStorage.getItem('jev-switch-locale');
-  if (stored && isValidLocale(stored)) {
-    return stored as Locale;
+  const stored = localStorage.getItem('jev_lang');
+  if (stored && isRegisteredLocale(stored)) {
+    return stored;
   }
 
   // 2. 浏览器语言（取前缀）
-  const browserLang = navigator.language.split('-')[0];
-  if (isValidLocale(browserLang)) {
-    return browserLang as Locale;
+  const browserLang = matchRegisteredLocale(navigator.language);
+  if (browserLang) {
+    return browserLang;
   }
 
   // 3. 默认英文
@@ -295,21 +281,18 @@ t('card.confirmDelete')  // "card.confirmDelete": "Confirm delete?"
 
 ---
 
-## §7 验收清单
+## §7 实施验收记录
 
-- [x] en.ts 和 zh.ts 键集一致
-- [x] 测试套件 i18n.test.ts 通过
-- [ ] 所有 UI 组件使用 `t()` 函数，无硬编码文案
-- [ ] 语言切换功能正常（LocalStorage 持久化）
-- [ ] 浏览器语言自动检测正常
-- [ ] CDP 断言依赖的英文字面量未变动
+- [x] 语言列表只包含注册表中已支持的英文和简体中文。
+- [x] 语言选择调用 `setLang`，旧 `toggleLang` API 保留并动态轮换注册语言。
+- [x] 选择写入 `jev_lang`；无效存储值回退英文；无存储时匹配支持的浏览器语言，其他语言回退英文。
+- [x] 初始化及切换同步 `<html lang>`（英文 `en`、简体中文 `zh-CN`）。
+- [x] `cd ui && npm run lint` 通过；核心运行时检查覆盖存储优先级、无效值回退、浏览器匹配、默认语言、无效手动输入防护、持久化与 `html.lang`。
+- [x] 浏览器 locale 匹配从语言注册表动态计算；可用纯函数用临时 `ja` 注册表条目验证 `ja-JP` 按主语言代码匹配，不需要也不应把未翻译日语加入产品注册表。
+- [x] 浏览器端下拉切换、刷新恢复与 HTML lang 已实测；2026-09-25 继续覆盖 cloud 管理员/只读界面及英文 390px 窄屏，见实施与联调记录。
+- [x] 可用列表当前只有 en/zh，未将尚未完成翻译的语言注册为可用；新增语言仍遵循完整翻译后注册的门槛。
 
----
+本轮只记录确有代码与命令结果支撑的状态。没有名为 `ui/src/tests/i18n.test.ts` 的当前测试文件，历史设计中的该测试勾选不代表本轮测试结果。
 
-**下一步**:
-1. 添加更多语言（ja, ko）
-2. 实现自动化翻译检查脚本
-3. 集成到 CI/CD 流程
-
-**文档作者**: Claude Opus 4.8  
+**文档作者**: 原方案 Claude Opus 4.8；实施记录 GPT-6 Luna
 **最后更新**: 2026-09-24

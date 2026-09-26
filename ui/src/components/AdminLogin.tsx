@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { loginAdmin } from '../api/admin';
-import { useI18n } from '../i18n';
+import { useI18n, type MessageKey } from '../i18n';
+import { useAuth } from '../auth/AuthContext';
 
 /**
  * #43 cloud 态 admin 登录小窗（任务书 B：**极简能用**，视觉打磨归 UI 线 #42）。
@@ -13,10 +14,12 @@ import { useI18n } from '../i18n';
  */
 interface AdminLoginProps {
   onSuccess: () => void;
+  onCancel: () => void;
 }
 
-export function AdminLogin({ onSuccess }: AdminLoginProps) {
+export function AdminLogin({ onSuccess, onCancel }: AdminLoginProps) {
   const { t } = useI18n();
+  const auth = useAuth();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,6 +37,7 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
     try {
       await loginAdmin(password);
       setPassword(''); // 密码只内存瞬存，成功即清
+      auth.markAdmin();
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -44,30 +48,33 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay"
+      className="admin-login-overlay fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-overlay p-3"
       role="dialog"
       aria-modal="true"
       aria-labelledby="admin-login-title"
+      onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.stopPropagation(); onCancel(); } }}
     >
       <form
         onSubmit={(e) => void submit(e)}
-        className="w-full max-w-sm rounded-card border border-border bg-panel p-6"
+        className="max-h-full w-full max-w-sm overflow-y-auto rounded-card border border-border bg-panel p-5 sm:p-6"
       >
         <h2
           id="admin-login-title"
-          className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted"
+          className="text-sm font-semibold"
+          style={{ color: 'var(--text-muted)' }}
         >
           {t('login.title')}
         </h2>
-        <p className="mt-2 font-mono text-xs text-inkMuted">
-          {t('login.desc')}
+        <p className="mt-2 text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+          {t('access.adminLoginHint' as MessageKey)}
         </p>
         <input
           ref={inputRef}
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="admin password"
+          placeholder={t('access.adminPassword' as MessageKey)}
+          aria-label={t('access.adminPassword' as MessageKey)}
           autoComplete="current-password"
           className="mt-4 h-9 w-full border border-border bg-soft px-3 font-mono text-xs text-ink placeholder:text-inkSubtle focus:border-primaryBright focus:outline-none"
         />
@@ -77,6 +84,7 @@ export function AdminLogin({ onSuccess }: AdminLoginProps) {
           </p>
         )}
         <div className="mt-4 flex justify-end gap-2">
+          <button type="button" disabled={busy} onClick={onCancel} className="h-8 border border-border px-4 text-xs">{t('common.cancel')}</button>
           <button
             type="submit"
             disabled={busy || password.length === 0}

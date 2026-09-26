@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AdminProvider, ProbeResponse } from '../../api/admin';
 import { KeyForm } from './KeyForm';
+import { ProviderConfigForm, type ProviderConfigFields } from './ProviderConfigForm';
 import { ProbeButton } from './ProbeButton';
 import { useI18n, type MessageKey } from '../../i18n';
 
@@ -10,45 +11,42 @@ interface Props {
   busy: boolean;
   onToggle: (provider: AdminProvider, enabled: boolean) => void;
   onReplaceKey: (provider: AdminProvider, apiKey: string) => Promise<void>;
+  onClearKey: (provider: AdminProvider) => void;
+  onUpdate: (provider: AdminProvider, fields: ProviderConfigFields) => Promise<void>;
   onDelete: (provider: AdminProvider) => void;
 }
 
-type Health = 'ok' | 'warn' | 'danger' | 'off' | 'unknown';
+type Connectivity = 'reachable' | 'unreachable' | 'off' | 'unknown';
 
-/** 健康判定（v2 §3.2 健康灯前置）：probe 结果 × enabled → 一个状态 */
-function healthOf(provider: AdminProvider, probe: ProbeResponse | null): Health {
+/** Probe measures endpoint connectivity only, never model inference health. */
+function connectionOf(provider: AdminProvider, probe: ProbeResponse | null): Connectivity {
   if (!provider.enabled) return 'off';
   if (probe === null) return 'unknown';
-  if (!probe.ok) return 'danger';
-  return probe.latency_ms >= 1000 ? 'warn' : 'ok';
+  return probe.ok ? 'reachable' : 'unreachable';
 }
 
-const HEALTH_COLOR: Record<Health, string> = {
-  ok: 'var(--success)',
-  warn: 'var(--warning)',
-  danger: 'var(--danger)',
+const CONNECTION_COLOR: Record<Connectivity, string> = {
+  reachable: 'var(--success)',
+  unreachable: 'var(--danger)',
   off: 'var(--text-subtle)',
   unknown: 'var(--text-subtle)',
 };
 
-/** 不健康时脉动（tokens.css .status-warning/.status-danger） */
-const HEALTH_PULSE: Record<Health, string> = {
-  ok: '',
-  warn: 'status-warning',
-  danger: 'status-danger',
+const CONNECTION_PULSE: Record<Connectivity, string> = {
+  reachable: '',
+  unreachable: 'status-danger',
   off: '',
   unknown: '',
 };
 
-const HEALTH_LABEL: Record<Health, MessageKey> = {
-  ok: 'card.healthy',
-  warn: 'card.degraded',
-  danger: 'card.probeFailed',
+const CONNECTION_LABEL: Record<Connectivity, MessageKey> = {
+  reachable: 'providers.probeReachable',
+  unreachable: 'providers.probeUnreachable',
   off: 'card.disabled',
-  unknown: 'card.untested',
+  unknown: 'providers.probeUntested',
 };
 
-/** probe 延迟火花线：线走 --accent，失败点 --danger（v2 图形优先） */
+/** Endpoint probe latency history; it does not represent inference health. */
 function Sparkline({ hist }: { hist: ReadonlyArray<{ ms: number; ok: boolean }> }) {
   const w = 64;
   const h = 16;
@@ -81,14 +79,15 @@ function Sparkline({ hist }: { hist: ReadonlyArray<{ ms: number; ok: boolean }> 
 }
 
 /**
- * 提供商卡片（v2 设计系统 · docs/design/UI-REDESIGN-v2.md §3.2）：
- * 头「● Healthy + id」+ Probe + 开关 / 身 kind·base·掩码 key / 脚 探测结果 + 火花线。
+ * 一个接入配置一张卡：账号、地址、密钥、适配器 kind 与模型资源共同归属此卡。
  * 密钥只出掩码（契约 04 §2），卡片内不存在任何明文；说明文字全部走 title tooltip。
  */
-export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete }: Props) {
+export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onClearKey, onUpdate, onDelete }: Props) {
   const [probe, setProbe] = useState<ProbeResponse | null>(null);
   const [hist, setHist] = useState<ReadonlyArray<{ ms: number; ok: boolean }>>([]);
   const [showKeyForm, setShowKeyForm] = useState(false);
+  const [showConfigForm, setShowConfigForm] = useState(false);
+  const [confirmClearKey, setConfirmClearKey] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const onProbe = (r: ProbeResponse) => {
@@ -97,8 +96,8 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
   };
 
   const { t } = useI18n();
-  const health = healthOf(provider, probe);
-  const label = t(HEALTH_LABEL[health]);
+  const connectivity = connectionOf(provider, probe);
+  const label = t(CONNECTION_LABEL[connectivity]);
 
   const card: React.CSSProperties = {
     background: 'var(--surface)',
@@ -120,7 +119,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
     <section
       className="fade-in card-hover flex flex-col overflow-hidden"
       style={card}
-      aria-label={`provider ${provider.id}`}
+      aria-label={`${t('providers.accountCard')} ${provider.id}`}
     >
       {/* 头：● Healthy · id — Probe + 开关 */}
       <header
@@ -129,12 +128,12 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
       >
         <span className="flex min-w-0 items-center gap-2.5" aria-live="polite">
           <span
-            className={HEALTH_PULSE[health]}
+            className={CONNECTION_PULSE[connectivity]}
             style={{
               width: 10,
               height: 10,
               borderRadius: '50%',
-              background: HEALTH_COLOR[health],
+              background: CONNECTION_COLOR[connectivity],
               display: 'inline-block',
               flexShrink: 0,
             }}
@@ -142,7 +141,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
           />
           <span
             className="font-semibold"
-            style={{ fontSize: 'var(--text-base)', color: HEALTH_COLOR[health] }}
+            style={{ fontSize: 'var(--text-base)', color: CONNECTION_COLOR[connectivity] }}
           >
             {label}
           </span>
@@ -166,7 +165,7 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
             <span
               role="switch"
               aria-checked={provider.enabled}
-              aria-label={`enable ${provider.id}`}
+              aria-label={t((provider.enabled ? 'providers.disableAccount' : 'providers.enableAccount') as MessageKey, { id: provider.id })}
               tabIndex={0}
               onClick={() => !busy && onToggle(provider, !provider.enabled)}
               onKeyDown={(e) => {
@@ -197,15 +196,31 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
         </span>
       </header>
 
-      {/* 身：kind + base + masked key */}
+      {/* One composite provider account config: endpoint, account identity, credentials and model resources. */}
       <div className="flex-1 space-y-1.5 px-4 py-3">
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text)' }}>{provider.kind}</div>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="font-semibold" style={{ fontSize: 'var(--text-sm)', color: 'var(--text)' }}>{provider.name || provider.account || provider.id}</span>
+          {provider.account && <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{t('providers.account' as MessageKey)} · {provider.account}</span>}
+        </div>
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{provider.kind}</div>
         <div
           className="truncate"
           style={{ ...mono, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}
           title={provider.base}
         >
           {provider.base}
+        </div>
+
+        <div className="mt-3">
+          <div className="mb-1 flex items-baseline justify-between gap-2">
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{t('providers.models' as MessageKey)}</span>
+            <span className="tabular" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>{t('providers.modelsCount' as MessageKey, { n: provider.models?.length ?? 0 })}</span>
+          </div>
+          {provider.models && provider.models.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {provider.models.map((model) => <code key={model} className="max-w-full break-all border px-1.5 py-0.5" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface-hover)', color: 'var(--text)', fontSize: 'var(--text-xs)' }}>{model}</code>)}
+            </div>
+          ) : <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>{t('providers.noModels' as MessageKey)}</span>}
         </div>
 
         {/* key 行 — 只出掩码，无 Show 明文 */}
@@ -222,10 +237,13 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
                 : t('card.keyUnset')}
             </span>
           </span>
+          <span className="flex shrink-0 gap-1.5">
           <button
             type="button"
             onClick={() => {
               setShowKeyForm((v) => !v);
+              setShowConfigForm(false);
+              setConfirmClearKey(false);
               setConfirmDelete(false);
             }}
             disabled={busy}
@@ -234,6 +252,16 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
           >
             {showKeyForm ? t('common.close') : t('card.replaceKey')}
           </button>
+          {provider.api_key_set && <button type="button" onClick={() => { setConfirmClearKey((value) => !value); setShowKeyForm(false); setShowConfigForm(false); }} disabled={busy} style={btn}>{t('providers.clearKey' as MessageKey)}</button>}
+          </span>
+        </div>
+        {confirmClearKey && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <span style={{ color: 'var(--warning)' }}>{t('providers.confirmClearKey' as MessageKey)}</span>
+          <button type="button" disabled={busy} onClick={() => { onClearKey(provider); setConfirmClearKey(false); }} style={{ ...btn, color: 'var(--danger)' }}>{t('providers.clearKey' as MessageKey)}</button>
+          <button type="button" onClick={() => setConfirmClearKey(false)} style={btn}>{t('common.cancel')}</button>
+        </div>}
+        <div className="mt-3">
+          <button type="button" disabled={busy} onClick={() => { setShowConfigForm((value) => !value); setShowKeyForm(false); setConfirmClearKey(false); setConfirmDelete(false); }} style={btn}>{showConfigForm ? t('common.close') : t('providers.editConfig' as MessageKey)}</button>
         </div>
       </div>
 
@@ -244,20 +272,24 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onDelete 
         aria-live="polite"
       >
         {probe === null ? (
-          <span style={{ color: 'var(--text-muted)' }}>{t('card.lastUntested')}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('providers.probeUntested' as MessageKey)}</span>
         ) : probe.ok ? (
           <span style={{ color: 'var(--success)' }}>
-            {t('card.lastProbeOk', { ms: probe.latency_ms, status: probe.status ?? 200 })}
+            {t('card.lastProbeOk', { ms: probe.latency_ms, status: probe.status > 0 ? probe.status : '—' })}
           </span>
         ) : (
           <span className="truncate" style={{ color: 'var(--danger)' }} title={probe.error ?? ''}>
             {t('card.lastProbeFail', {
-              detail: probe.error ?? (probe.status !== null ? String(probe.status) : '—'),
+              detail: probe.error ?? (probe.status > 0 ? String(probe.status) : '—'),
             })}
           </span>
         )}
         <Sparkline hist={hist} />
       </div>
+
+      <div className="px-4 pb-2 text-xs" style={{ color: 'var(--text-subtle)' }}>{t('providers.probeOnly' as MessageKey)}</div>
+
+      {showConfigForm && <ProviderConfigForm provider={provider} busy={busy} onSave={(fields) => onUpdate(provider, fields)} onCancel={() => setShowConfigForm(false)} />}
 
       {/* Replace key 内联表单（仅密文输入） */}
       {showKeyForm && (

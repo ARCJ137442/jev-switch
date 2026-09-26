@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { probeProvider, type ProbeResponse } from '../../api/admin';
-import { useI18n } from '../../i18n';
+import { useI18n, type MessageKey } from '../../i18n';
 
 interface Props {
   providerId: string;
@@ -21,7 +21,7 @@ export function ProbeButton({ providerId, onResult }: Props) {
       const result = await probeProvider(providerId);
       onResult(result);
     } catch (e) {
-      onResult({ ok: false, latency_ms: 0, status: null, error: (e as Error).message });
+      onResult({ ok: false, latency_ms: 0, status: 0, error: (e as Error).message });
     } finally {
       setLoading(false);
     }
@@ -32,7 +32,7 @@ export function ProbeButton({ providerId, onResult }: Props) {
       type="button"
       onClick={() => void onClick()}
       disabled={loading}
-      title={t('probe.tip')}
+      title={t('providers.probeTip' as MessageKey)}
       className="transition-colors disabled:cursor-not-allowed disabled:opacity-60"
       style={{
         fontSize: 'var(--text-sm)',

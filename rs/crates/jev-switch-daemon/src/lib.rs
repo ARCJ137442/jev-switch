@@ -35,20 +35,21 @@ pub mod config;
 pub mod db;
 pub mod events;
 pub mod listen;
+pub mod tokens;
 
 use axum::{
     body::Bytes,
-    extract::State,
-    http::{header, HeaderValue, Method, StatusCode},
+    extract::{Extension, State},
+    http::{header, HeaderName, HeaderValue, Method, StatusCode},
     middleware,
     response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
-use config::{Config, ConfigError};
+use config::Config;
 use jev_adapters::{upstream_laya::LayaUpstream, upstream_vercel::VercelUpstream};
 use jev_core::{
-    adapter::{plain_ctx, Registry},
+    adapter::{plain_ctx, Registry, UpstreamAdapter},
     redact::redact,
     upstream::JevError,
 };
@@ -120,11 +121,7 @@ fn error_response(
 
 /// 读 state 的已知密钥快照（cloned，避开跨 await 持锁）。
 fn known_keys_snapshot(state: &AppState) -> Vec<String> {
-    state
-        .known_keys
-        .read()
-        .expect("known_keys lock")
-        .clone()
+    state.known_keys.read().expect("known_keys lock").clone()
 }
 
 /// 装配：config → Registry（DAG 边 + 注册 vercel/laya 上游）+ known_keys。
@@ -132,52 +129,35 @@ fn known_keys_snapshot(state: &AppState) -> Vec<String> {
 /// 与原 `main` 的装配逻辑逐语义一致（A7 只是挪进可测入口）；差异：
 /// - `read_api_key` 现为「明文 api_key 优先、api_key_env 兼容」（Q4=b）
 /// - 启动即收集已知密钥供 redact
-pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
+pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
     // 进程启动时刻（status.uptime_s 基准；多次 build_state 只取首次 —— 测试同进程共享）
     admin::PROCESS_START.get_or_init(std::time::Instant::now);
+    // SQLite is the runtime authority for providers and routes; the first startup imports
+    // the legacy TOML graph/providers once and leaves a fingerprint for drift detection.
+    let db_path = db::db_path_for_config(&config_path);
+    let db_conn = match db::open_connection(&db_path) {
+        Ok(conn) => {
+            if let Err(e) = db::init_database(&conn) {
+                tracing::error!(error = %e, "database migration failed");
+                panic!("failed to initialize database: {e}");
+            }
+            tracing::info!(path = %db_path.display(), "database initialized");
+            conn
+        }
+        Err(e) => {
+            tracing::error!(error = %e, path = %db_path.display(), "database open failed");
+            panic!("failed to open database: {e}");
+        }
+    };
+    if let Err(e) = db::restore_or_seed_runtime_config(&db_conn, &mut config, &config_path) {
+        tracing::error!(error = %e, "runtime config snapshot migration failed");
+        panic!("failed to restore runtime config snapshot: {e}");
+    }
     let route_edges = config.route_edges();
     let mut registry = Registry::new(route_edges);
-
-    if let Some(p) = config.providers.get("vercel") {
-        if p.enabled {
-            let api_key = match config.read_api_key("vercel") {
-                Ok(k) => k,
-                Err(ConfigError::MissingEnv { provider, var }) => {
-                    tracing::warn!(provider = %provider, var = %var, "skipping vercel provider: missing env");
-                    String::new()
-                }
-                Err(e) => {
-                    // 配置级错误（如未知 provider）不致命：跳过注册，与旧行为一致的降级
-                    tracing::warn!(error = %e, "skipping vercel provider: config error");
-                    String::new()
-                }
-            };
-            if !api_key.is_empty() {
-                match VercelUpstream::new(p.base.clone(), api_key) {
-                    Ok(u) => {
-                        registry.register(Box::new(u));
-                        tracing::info!(base = %p.base, "vercel upstream ready");
-                    }
-                    Err(e) => tracing::warn!(error = %e, "vercel upstream init failed"),
-                }
-            }
-        } else {
-            tracing::info!("vercel provider disabled in config");
-        }
-    }
-
-    if let Some(p) = config.providers.get("laya") {
-        if p.enabled {
-            match LayaUpstream::new(p.base.clone()) {
-                Ok(u) => {
-                    registry.register(Box::new(u));
-                    tracing::info!(base = %p.base, "laya upstream ready");
-                }
-                Err(e) => tracing::warn!(error = %e, "laya upstream init failed"),
-            }
-        } else {
-            tracing::info!("laya provider disabled in config");
-        }
+    for upstream in build_upstreams(&config) {
+        tracing::info!(provider = %upstream.id(), "configured upstream ready");
+        registry.register(upstream);
     }
 
     // 已知密钥集（redact 用）：明文字段 + 各 provider 能解析出的有效 key
@@ -196,31 +176,42 @@ pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
             known_keys.push(t);
         }
     }
+    let configured_tokens = config.effective_auth_tokens();
+    if let Err(error) = tokens::import_legacy_config_tokens(&db_conn, &configured_tokens) {
+        tracing::error!(error = %error, "failed to import legacy call tokens into the managed token store");
+        panic!("failed to import configured call tokens: {error}");
+    }
+    let auth = Arc::new(auth::AuthState::from_config(&config));
+    auth.managed_tokens_only
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    match tokens::list(&db_conn) {
+        Ok(tokens) => {
+            let enabled_tokens = tokens.iter().filter(|token| token.enabled).count();
+            tracing::info!(
+                enabled_tokens,
+                total_tokens = tokens.len(),
+                "managed call tokens restored"
+            );
+            if enabled_tokens == 0
+                && *auth.mode.read().expect("mode lock") == config::RunMode::Cloud
+            {
+                tracing::warn!("cloud mode: no enabled managed call tokens; create a call token through access management to use public model endpoints");
+            }
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "could not read managed call token counts during startup")
+        }
+    }
     if let Some(pw) = config.effective_admin_password() {
         if !pw.is_empty() && !known_keys.contains(&pw) {
             known_keys.push(pw);
         }
     }
 
-    // Phase 4: 初始化数据库
-    let db_path = db::db_path();
-    let db_conn = match db::open_connection(&db_path) {
-        Ok(conn) => {
-            if let Err(e) = db::init_database(&conn) {
-                tracing::error!(error = %e, "database migration failed");
-                panic!("failed to initialize database: {e}");
-            }
-            tracing::info!(path = %db_path.display(), "database initialized");
-            conn
-        }
-        Err(e) => {
-            tracing::error!(error = %e, path = %db_path.display(), "database open failed");
-            panic!("failed to open database: {e}");
-        }
-    };
-
     // 加载服务入口到内存
-    let endpoints: HashMap<String, db::endpoints::ServiceEndpoint> = match db::endpoints::load_all(&db_conn) {
+    let endpoints: HashMap<String, db::endpoints::ServiceEndpoint> = match db::endpoints::load_all(
+        &db_conn,
+    ) {
         Ok(eps) => eps.into_iter().map(|ep| (ep.id.clone(), ep)).collect(),
         Err(e) => {
             tracing::warn!(error = %e, "load service endpoints failed, starting with empty map");
@@ -228,16 +219,65 @@ pub fn build_state(config: Config, config_path: PathBuf) -> AppState {
         }
     };
 
-    AppState {
+    let state = AppState {
         registry: Arc::new(registry),
         config_path,
         known_keys: Arc::new(RwLock::new(known_keys)),
-        auth: Arc::new(auth::AuthState::from_config(&config)),
+        auth,
         listen: Arc::new(std::sync::OnceLock::new()),
         events: events::EventBus::new(200),
         service_endpoints: Arc::new(RwLock::new(endpoints)),
         db_conn: Arc::new(Mutex::new(db_conn)),
+    };
+    if let Err(e) = admin::endpoints::refresh_endpoint_routes(&state, &[]) {
+        tracing::warn!(error = %e, "failed to load persisted endpoint routes into runtime registry");
     }
+    state
+}
+
+/// Build adapters from configured provider IDs, allowing several independent credentials
+/// or accounts for the same adapter kind.
+pub(crate) fn build_upstreams(config: &Config) -> Vec<Box<dyn UpstreamAdapter>> {
+    let mut ids: Vec<_> = config.providers.keys().cloned().collect();
+    ids.sort();
+    let mut adapters: Vec<Box<dyn UpstreamAdapter>> = Vec::new();
+    for id in ids {
+        let Some(provider) = config.providers.get(&id) else {
+            continue;
+        };
+        if !provider.enabled {
+            continue;
+        }
+        match provider.kind.as_str() {
+            "laya" => {
+                let key = config.effective_api_key(&id);
+                match LayaUpstream::new_with_id(id.clone(), provider.base.clone(), key) {
+                    Ok(adapter) => adapters.push(Box::new(adapter)),
+                    Err(error) => {
+                        tracing::warn!(provider = %id, error = %error, "upstream adapter init failed")
+                    }
+                }
+            }
+            "vercel" => match config.read_api_key(&id) {
+                Ok(key) if !key.is_empty() => {
+                    match VercelUpstream::new_with_id(id.clone(), provider.base.clone(), key) {
+                        Ok(adapter) => adapters.push(Box::new(adapter)),
+                        Err(error) => {
+                            tracing::warn!(provider = %id, error = %error, "upstream adapter init failed")
+                        }
+                    }
+                }
+                Ok(_) => tracing::warn!(provider = %id, "provider skipped: API key is empty"),
+                Err(error) => {
+                    tracing::warn!(provider = %id, error = %error, "provider skipped: API key unavailable")
+                }
+            },
+            kind => {
+                tracing::warn!(provider = %id, kind = %kind, "provider skipped: unsupported adapter kind")
+            }
+        }
+    }
+    adapters
 }
 
 /// 可测装配入口（A8 基座）：state → axum `Router`（CORS 白名单 + 双态鉴权中间件
@@ -266,12 +306,18 @@ pub fn build_app(state: AppState) -> Router {
             HeaderValue::from_static("http://127.0.0.1:5173"),
             HeaderValue::from_static("http://localhost:5173"),
         ]))
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .expose_headers([HeaderName::from_static("x-jev-request-id")]);
 
     // 静态 UI 目录：容器内指到 /app/ui/dist；本地默认仓库相对 ui/dist。
-    let ui_dist =
-        std::env::var("JEV_UI_DIST").unwrap_or_else(|_| "ui/dist".to_string());
+    let ui_dist = std::env::var("JEV_UI_DIST").unwrap_or_else(|_| "ui/dist".to_string());
 
     // 公开门（无鉴权中间件 —— login/password 自带逻辑：password in-handler 鉴权）
     let public = Router::new()
@@ -288,6 +334,16 @@ pub fn build_app(state: AppState) -> Router {
             auth::require_call_token,
         ));
 
+    let caller_routes = Router::new()
+        .route("/v1/auth/me", get(tokens::get_me))
+        .route("/v1/stats/my", get(tokens::stats_my))
+        .route("/v1/events/my", get(tokens::events_my))
+        .route("/v1/events/my/stream", get(tokens::events_stream_my))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_managed_caller,
+        ));
+
     // admin 会话门（cloud；local loopback 直通、非 loopback 403）——
     // mode / listen 热切端点在此门内（cloud 翻转需会话，防匿名拆锁）
     let admin_routes = Router::new()
@@ -300,8 +356,33 @@ pub fn build_app(state: AppState) -> Router {
             get(admin::get_routes).put(admin::put_routes),
         )
         .route(
-            "/v1/admin/providers/:id/probe",
-            post(admin::probe_provider),
+            "/v1/admin/config/storage",
+            get(admin::runtime_config_status),
+        )
+        .route(
+            "/v1/admin/config/import-toml",
+            post(admin::import_runtime_config),
+        )
+        .route(
+            "/v1/admin/config/export-toml",
+            post(admin::export_runtime_config),
+        )
+        .route(
+            "/v1/admin/tokens",
+            get(tokens::list_tokens).post(tokens::create_token),
+        )
+        .route(
+            "/v1/admin/tokens/:id",
+            put(tokens::update_token).delete(tokens::revoke_token),
+        )
+        .route("/v1/admin/tokens/:id/stats", get(tokens::stats_admin_token))
+        .route("/v1/admin/stats", get(tokens::stats_admin))
+        .route("/v1/admin/events", get(tokens::events_admin))
+        .route("/v1/admin/events/stream", get(tokens::events_stream_admin))
+        .route("/v1/admin/providers/:id/probe", post(admin::probe_provider))
+        .route(
+            "/v1/admin/providers/:id/invoke",
+            post(admin::invoke_provider),
         )
         .route("/v1/admin/mode", put(admin::put_mode))
         .route(
@@ -320,7 +401,8 @@ pub fn build_app(state: AppState) -> Router {
         )
         .route(
             "/v1/admin/config/default_strategy",
-            get(admin::endpoints::get_default_strategy).put(admin::endpoints::update_default_strategy),
+            get(admin::endpoints::get_default_strategy)
+                .put(admin::endpoints::update_default_strategy),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -329,6 +411,7 @@ pub fn build_app(state: AppState) -> Router {
 
     public
         .merge(v1)
+        .merge(caller_routes)
         .merge(admin_routes)
         .layer(cors) // 最后加的层 = 最外层：预检 OPTIONS 先过 CORS
         .fallback_service(ServeDir::new(ui_dist))
@@ -347,12 +430,19 @@ struct HealthBody {
     status: &'static str,
     #[cfg_attr(feature = "ts-rs", ts(type = "string"))]
     version: &'static str,
+    product: &'static str,
+    api_revision: u32,
+    #[cfg_attr(feature = "ts-rs", ts(type = "string | null"))]
+    build_revision: Option<&'static str>,
 }
 
 async fn health_handler() -> Json<HealthBody> {
     Json(HealthBody {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
+        product: "jev-switch",
+        api_revision: 1,
+        build_revision: option_env!("JEV_BUILD_REVISION"),
     })
 }
 
@@ -400,12 +490,23 @@ struct ModelsResponse {
 
 async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
     let router = state.registry.router();
+    let published: std::collections::HashSet<String> = state
+        .service_endpoints
+        .read()
+        .expect("endpoints lock")
+        .values()
+        .filter(|endpoint| endpoint.enabled)
+        .map(|endpoint| endpoint.id.clone())
+        .collect();
     // 保留 6af3a47 的不可路由过滤：只列出真正可路由的 model
     // （upstream 未注册的 model 不列出 —— 否则 UI 判断可用、点击即 404）
     let mut data: Vec<ModelEntry> = router
         .list_models()
         .into_iter()
         .filter_map(|m| {
+            if !published.contains(&m) {
+                return None;
+            }
             let upstream = router.route(&m).ok()?.id().to_string();
             Some(ModelEntry {
                 id: m,
@@ -438,8 +539,7 @@ async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
 
 /// 把 JevError 转换为 axum Response（contracts/05 §3；error 串过 redact）。
 fn jev_error_to_response(e: JevError, keys: &[String]) -> Response {
-    let status =
-        StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     // 404 路由错误不带 upstream 字段（A4 行为保留）
     let upstream = e.error_body_upstream().map(str::to_string);
     let retryable = e.retryable();
@@ -449,23 +549,278 @@ fn jev_error_to_response(e: JevError, keys: &[String]) -> Response {
 
 async fn systemone_handler(
     State(state): State<AppState>,
+    caller: Option<Extension<tokens::CallerIdentity>>,
     body: Bytes,
-) -> Result<Json<JevResponse>, Response> {
+) -> Response {
     let keys = known_keys_snapshot(&state);
     // 0. 协议解析：本地 400（criteria 缺失/错形态、未知 type、必填缺失、
     //    questions 非 record…）—— 按 contracts/01 §6 不发上游。
     //    手工 Bytes 提取：axum Json 提取器对 data 类错误回 422，契约要求 400。
-    let req: JevRequest = serde_json::from_slice(&body).map_err(|e| {
-        error_response(
-            StatusCode::BAD_REQUEST,
-            e.to_string(),
+    let req: JevRequest = match serde_json::from_slice(&body) {
+        Ok(request) => request,
+        Err(error) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                error.to_string(),
+                None,
+                false,
+                &keys,
+            )
+        }
+    };
+
+    let endpoint_id = req.model.clone();
+    let published = state
+        .service_endpoints
+        .read()
+        .expect("endpoints lock")
+        .get(&endpoint_id)
+        .map(|endpoint| endpoint.enabled)
+        .unwrap_or(false);
+    if !published {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            format!("unknown public model '{endpoint_id}'"),
             None,
             false,
             &keys,
-        )
-    })?;
+        );
+    }
+    let started = std::time::Instant::now();
+    let strategy = admin::endpoints::routing_strategy(&state, &endpoint_id);
+    let mut result = run_request_with_strategy_traced(&state.registry, req, &keys, strategy).await;
+    let elapsed = started.elapsed();
+    if let Ok(response) = &mut result {
+        if let Some(trace) = response
+            .extra
+            .get_mut("route_trace")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            trace.insert(
+                "gateway_latency_ms".into(),
+                serde_json::json!(elapsed.as_millis().min(u64::MAX as u128) as u64),
+            );
+        }
+    } else if let Err(failure) = &mut result {
+        if let Some(trace) = failure.route_trace.as_object_mut() {
+            trace.insert(
+                "gateway_latency_ms".into(),
+                serde_json::json!(elapsed.as_millis().min(u64::MAX as u128) as u64),
+            );
+        }
+    }
+    let request_id = record_request(
+        &state,
+        &endpoint_id,
+        caller
+            .as_ref()
+            .map(|Extension(identity)| identity.id.as_str()),
+        &mut result,
+        elapsed,
+    );
+    let mut response = match result {
+        Ok(response) => Json(response).into_response(),
+        Err(failure) => failure.response,
+    };
+    if let Some(request_id) = request_id {
+        if let Ok(value) = HeaderValue::from_str(&request_id) {
+            response.headers_mut().insert("x-jev-request-id", value);
+        }
+    }
+    response
+}
 
-    run_request(&state.registry, req, &keys).await.map(Json)
+fn record_request(
+    state: &AppState,
+    endpoint_id: &str,
+    token_id: Option<&str>,
+    result: &mut Result<JevResponse, RequestFailure>,
+    elapsed: std::time::Duration,
+) -> Option<String> {
+    let (
+        success,
+        status,
+        provider,
+        upstream_model,
+        route_key,
+        cost_usd,
+        upstream_calls,
+        usage,
+        mut route_trace,
+    ) = match result {
+        Ok(response) => {
+            let trace = response.extra.get("route_trace");
+            let provider = trace
+                .and_then(|value| value.get("selected_provider"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let model = trace
+                .and_then(|value| value.get("selected_model"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| response.model.clone())
+                .unwrap_or_default();
+            let hops: Vec<String> = trace
+                .and_then(|value| value.get("selected_hops"))
+                .and_then(serde_json::Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            (
+                true,
+                200_u16,
+                provider.to_owned(),
+                model,
+                if hops.is_empty() {
+                    endpoint_id.to_owned()
+                } else {
+                    hops.join("→")
+                },
+                response.cost_usd,
+                Some(response.upstream_calls.unwrap_or(1)),
+                response.usage.clone(),
+                trace.cloned(),
+            )
+        }
+        Err(failure) => {
+            let attempts = failure
+                .route_trace
+                .get("attempts")
+                .and_then(serde_json::Value::as_array);
+            let last_failed = attempts.and_then(|items| {
+                items.iter().rev().find(|item| {
+                    item.get("outcome").and_then(serde_json::Value::as_str) == Some("failed")
+                })
+            });
+            let provider = last_failed
+                .and_then(|item| item.get("provider_id"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let model = last_failed
+                .and_then(|item| item.get("upstream_model"))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let hops: Vec<String> = last_failed
+                .and_then(|item| item.get("hops"))
+                .and_then(serde_json::Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            let calls = failure
+                .route_trace
+                .get("upstream_calls")
+                .and_then(serde_json::Value::as_u64)
+                .map(|value| value.min(u64::from(u32::MAX)) as u32);
+            (
+                false,
+                failure.response.status().as_u16(),
+                provider.to_owned(),
+                model.to_owned(),
+                if hops.is_empty() {
+                    endpoint_id.to_owned()
+                } else {
+                    hops.join("→")
+                },
+                None,
+                calls,
+                None,
+                Some(failure.route_trace.clone()),
+            )
+        }
+    };
+    let latency_ms = elapsed.as_millis().min(i64::MAX as u128) as i64;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    // The handler admitted this published endpoint before invoking the upstream.
+    // Keep its accepted ID even if it was deleted or renamed while the call ran.
+    // History no longer has an FK tied to the lifetime of the endpoint row.
+    let usage_json = usage
+        .as_ref()
+        .and_then(|value| serde_json::to_string(value).ok());
+    let Ok(mut conn) = state.db_conn.lock() else {
+        tracing::warn!("failed to lock call history database");
+        return None;
+    };
+    let Ok(tx) = conn.transaction() else {
+        tracing::warn!("failed to begin call history transaction");
+        return None;
+    };
+    if let Err(error) = tx.execute(
+        "INSERT INTO call_logs (timestamp, endpoint_id, route_key, upstream_provider, upstream_model, success, latency_ms, error_message, token_id, cost_usd, upstream_calls, usage_json, http_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        rusqlite::params![now, endpoint_id, route_key, provider, upstream_model, if success { 1 } else { 0 }, latency_ms,
+            if success { None::<String> } else { Some(format!("HTTP {status}")) }, token_id, cost_usd,
+            upstream_calls.map(i64::from), usage_json, i64::from(status)],
+    ) {
+        tracing::warn!(error = %error, "failed to persist request statistics");
+        return None;
+    }
+    let log_id = tx.last_insert_rowid();
+    let request_id = format!("jev-{log_id}");
+    if let Some(serde_json::Value::Object(trace)) = route_trace.as_mut() {
+        trace.insert(
+            "request_id".into(),
+            serde_json::Value::String(request_id.clone()),
+        );
+    }
+    let route_trace_json = route_trace
+        .as_ref()
+        .and_then(|trace| serde_json::to_string(trace).ok());
+    if let Err(error) = tx.execute(
+        "UPDATE call_logs SET request_id=?, route_trace_json=? WHERE id=?",
+        rusqlite::params![request_id, route_trace_json, log_id],
+    ) {
+        tracing::warn!(error = %error, "failed to persist request route trace");
+        return None;
+    }
+    if let Err(error) = tx.commit() {
+        tracing::warn!(error = %error, "failed to commit request history");
+        return None;
+    }
+
+    if let Ok(response) = result {
+        response.extra.insert(
+            "request_id".into(),
+            serde_json::Value::String(request_id.clone()),
+        );
+        if let Some(trace) = route_trace.clone() {
+            response.extra.insert("route_trace".into(), trace);
+        }
+    }
+
+    let detail = serde_json::json!({
+        "endpoint_id": endpoint_id,
+        "success": success,
+        "status": status,
+        "provider": provider,
+        "upstream_model": upstream_model,
+        "latency_ms": latency_ms,
+        "upstream_calls": upstream_calls,
+        "usage": usage,
+        "cost_usd": cost_usd,
+        "request_id": request_id,
+        "route_trace": route_trace
+    })
+    .to_string();
+    state.events.push_for_token_with_id(
+        log_id as u64,
+        "request",
+        detail,
+        token_id.map(str::to_owned),
+    );
+    Some(request_id)
 }
 
 /// handler → `Registry::invoke` 的薄封装（failover/DAG 逻辑 A5 起内核化在
@@ -473,17 +828,46 @@ async fn systemone_handler(
 ///
 /// sticky：HTTP 层暂无 sticky key 入口 → `plain_ctx()`（sticky_key=None），
 /// core 侧有 RouteCtx 单测覆盖（见报告 A4 sticky 备注）。
+#[cfg(test)]
 async fn run_request(
     registry: &Registry,
     req: JevRequest,
     keys: &[String],
 ) -> Result<JevResponse, Response> {
-    match registry.invoke(req, plain_ctx()).await {
+    run_request_with_strategy_traced(
+        registry,
+        req,
+        keys,
+        jev_core::adapter::RoutingStrategy::Failover,
+    )
+    .await
+    .map_err(|failure| failure.response)
+}
+
+struct RequestFailure {
+    response: Response,
+    route_trace: serde_json::Value,
+}
+
+async fn run_request_with_strategy_traced(
+    registry: &Registry,
+    req: JevRequest,
+    keys: &[String],
+    strategy: jev_core::adapter::RoutingStrategy,
+) -> Result<JevResponse, RequestFailure> {
+    match registry
+        .invoke_with_strategy_traced(req, plain_ctx(), strategy)
+        .await
+    {
         Ok(resp) => Ok(resp),
-        Err(e) => {
+        Err(failure) => {
             // tracing 输出同样 redact（contracts/04 §2：日志/tracing 统一脱敏）
-            tracing::warn!(error = %redact(&e.to_string(), keys), status = e.http_status(), "invoke failed");
-            Err(jev_error_to_response(e, keys))
+            tracing::warn!(error = %redact(&failure.error.to_string(), keys), status = failure.error.http_status(), "invoke failed");
+            let response = jev_error_to_response(failure.error, keys);
+            Err(RequestFailure {
+                response,
+                route_trace: failure.route_trace,
+            })
         }
     }
 }
@@ -503,20 +887,48 @@ fn state_types_are_send_sync() {
 mod tests {
     use super::*;
 
+    #[test]
+    fn configured_adapter_kind_allows_multiple_provider_ids() {
+        let mut cfg = Config::default();
+        for (id, account) in [("laya-account-a", "first"), ("laya-account-b", "second")] {
+            cfg.providers.insert(
+                id.into(),
+                config::ProviderConfig {
+                    kind: "laya".into(),
+                    base: "http://127.0.0.1:1/v1/systemone".into(),
+                    name: Some(account.into()),
+                    account: Some(account.into()),
+                    models: vec!["m".into()],
+                    api_key: Some(format!("test-{account}")),
+                    api_key_env: None,
+                    enabled: true,
+                },
+            );
+        }
+        let ids: Vec<_> = build_upstreams(&cfg)
+            .into_iter()
+            .map(|up| up.id().to_string())
+            .collect();
+        assert_eq!(ids, vec!["laya-account-a", "laya-account-b"]);
+    }
+
     /// contracts/05 §2 /health 形状快照：{status, version}，JSON。
     #[test]
     fn health_shape_snapshot() {
         let body = HealthBody {
             status: "ok",
             version: env!("CARGO_PKG_VERSION"),
+            product: "jev-switch",
+            api_revision: 1,
+            build_revision: option_env!("JEV_BUILD_REVISION"),
         };
         let v = serde_json::to_value(&body).unwrap();
         assert_eq!(
             v,
-            serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION")})
+            serde_json::json!({"status": "ok", "version": env!("CARGO_PKG_VERSION"), "product":"jev-switch", "api_revision":1, "build_revision":option_env!("JEV_BUILD_REVISION")})
         );
         // 键集冻结：不得漂移出第三个键
-        assert_eq!(v.as_object().unwrap().len(), 2);
+        assert_eq!(v.as_object().unwrap().len(), 5);
         // 当前契约样例版本字面量（0.1.0）
         assert_eq!(v["version"], "0.1.0");
         assert_eq!(v["status"], "ok");
@@ -535,10 +947,10 @@ mod tests {
             }],
             upstreams: vec![UpstreamCapabilityEntry {
                 id: "vercel".into(),
-                question_types: vec!["choice", "score", "boolean"],
+                question_types: vec!["choice", "score", "noul"],
                 has_confidence: false,
-                has_usage: false,
-                noul_via_boolean: true,
+                has_usage: true,
+                noul_via_boolean: false,
             }],
         };
         let v = serde_json::to_value(&resp).unwrap();
@@ -549,10 +961,10 @@ mod tests {
                 "data": [{ "id": "jev", "object": "model", "upstream": "vercel" }],
                 "upstreams": [{
                     "id": "vercel",
-                    "question_types": ["choice", "score", "boolean"],
+                    "question_types": ["choice", "score", "noul"],
                     "has_confidence": false,
-                    "has_usage": false,
-                    "noul_via_boolean": true
+                    "has_usage": true,
+                    "noul_via_boolean": false
                 }]
             })
         );
@@ -563,9 +975,9 @@ mod tests {
     }
 
     /* ════════════════════════════════════════════════════════
-       A4/A5 failover（进程内 fake UpstreamAdapter → Registry；
-       不占 11435、无 wiremock）
-       ════════════════════════════════════════════════════════ */
+    A4/A5 failover（进程内 fake UpstreamAdapter → Registry；
+    不占 11435、无 wiremock）
+    ════════════════════════════════════════════════════════ */
 
     use jev_core::adapter::{Registry, UpstreamAdapter};
     use jev_core::router::{MatchMode, OnError, RouteEdge, Sticky};
@@ -611,13 +1023,19 @@ mod tests {
         }
         async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, JevError> {
             let n = self.handle.calls.fetch_add(1, Ordering::SeqCst) + 1; // 1-based
-            self.handle.seen_models.lock().unwrap().push(req.model.clone());
-            let ok = || serde_json::from_str::<JevResponse>(r#"{"answers":{}}"#).map_err(|e| {
-                JevError::BadResponse {
-                    upstream_id: self.id.clone(),
-                    message: e.to_string(),
-                }
-            });
+            self.handle
+                .seen_models
+                .lock()
+                .unwrap()
+                .push(req.model.clone());
+            let ok = || {
+                serde_json::from_str::<JevResponse>(r#"{"answers":{}}"#).map_err(|e| {
+                    JevError::BadResponse {
+                        upstream_id: self.id.clone(),
+                        message: e.to_string(),
+                    }
+                })
+            };
             let rate429 = || {
                 Err(JevError::Upstream {
                     upstream_id: self.id.clone(),
@@ -741,14 +1159,23 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let resp = run_request(&reg, noul_request("jev"), &[]).await.expect("failover success");
+        let resp = run_request(&reg, noul_request("jev"), &[])
+            .await
+            .expect("failover success");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "首候选实发 1 次");
         assert_eq!(h2.calls.load(Ordering::SeqCst), 1, "次候选实发 1 次");
         // upstream_calls 如实 = 实发次数 >= 2
-        assert!(resp.upstream_calls.unwrap_or(0) >= 2, "got {:?}", resp.upstream_calls);
+        assert!(
+            resp.upstream_calls.unwrap_or(0) >= 2,
+            "got {:?}",
+            resp.upstream_calls
+        );
         assert_eq!(resp.upstream_calls, Some(2));
         // upstream_model 改写：vercel 收到 typesafe-ai/jev，laya 收到 laya-english
-        assert_eq!(h1.seen_models.lock().unwrap().as_slice(), &["typesafe-ai/jev"]);
+        assert_eq!(
+            h1.seen_models.lock().unwrap().as_slice(),
+            &["typesafe-ai/jev"]
+        );
         assert_eq!(h2.seen_models.lock().unwrap().as_slice(), &["laya-english"]);
     }
 
@@ -789,8 +1216,14 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let resp = run_request(&reg, noul_request("jev"), &[]).await.expect("second wins");
-        assert_eq!(h1.calls.load(Ordering::SeqCst), 0, "cap 跳过 = 零实发（连 429 都没走到）");
+        let resp = run_request(&reg, noul_request("jev"), &[])
+            .await
+            .expect("second wins");
+        assert_eq!(
+            h1.calls.load(Ordering::SeqCst),
+            0,
+            "cap 跳过 = 零实发（连 429 都没走到）"
+        );
         assert_eq!(h2.calls.load(Ordering::SeqCst), 1);
         assert_eq!(resp.upstream_calls, Some(1), "upstream_calls 只计实发");
     }
@@ -828,7 +1261,11 @@ mod tests {
         let resp = run_request(&reg, noul_request("jev"), &[]).await;
         assert_eq!(status_of(resp).await, 400, "透传上游码");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "首候选实发一次即停");
-        assert_eq!(h2.calls.load(Ordering::SeqCst), 0, "不可重试错误不 failover");
+        assert_eq!(
+            h2.calls.load(Ordering::SeqCst),
+            0,
+            "不可重试错误不 failover"
+        );
     }
 
     /// 上游响应形态非法 → 502 即返（不 failover；BadResponse 非 retryable）。
@@ -851,7 +1288,9 @@ mod tests {
         let (v1, h1) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
         let mut reg = Registry::new(vec![edge("laya-english", "laya", 0)]);
         reg.register(v1);
-        let resp = run_request(&reg, noul_request("laya-english"), &[]).await.expect("ok");
+        let resp = run_request(&reg, noul_request("laya-english"), &[])
+            .await
+            .expect("ok");
         assert_eq!(resp.upstream_calls, Some(1));
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
         // 无 upstream_model 改写 → 沿用原 model
@@ -865,7 +1304,9 @@ mod tests {
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::Err429OnceThenOk);
         let mut reg = Registry::new(vec![edge("jev", "vercel", 10)]); // 默认策略
         reg.register(v1);
-        let resp = run_request(&reg, noul_request("jev"), &[]).await.expect("retry then ok");
+        let resp = run_request(&reg, noul_request("jev"), &[])
+            .await
+            .expect("retry then ok");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 2, "默认策略同候选重试");
         assert_eq!(resp.upstream_calls, Some(2));
     }
@@ -880,8 +1321,15 @@ mod tests {
                 HeaderValue::from_static("http://127.0.0.1:5173"),
                 HeaderValue::from_static("http://localhost:5173"),
             ]))
-            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
-            .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
+            .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+            .expose_headers([HeaderName::from_static("x-jev-request-id")]);
         // tower-http 不提供只读 introspection；构造成功 + 预检行为由 curl 实测覆盖。
         // 此处至少锁定构造路径可编译（防 very_permissive 回潮需人工改回本函数）。
         let _ = layer;

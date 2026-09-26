@@ -3,13 +3,6 @@
 /**
  * `PUT /v1/admin/providers` 单项入参（**仅写入用，永不作响应**）。
  * 不 derive `Serialize` —— 从结构上杜绝「明文 key 被序列化出去」的路径。
+ * `api_key` 省略时保留原 key，空串表示清除并回退 `api_key_env`；`api_key_env` 省略时保留已有值。
  */
-export type ProviderInput = { id: string, kind: string, base: string, enabled: boolean, 
-/**
- * 新明文 key；**省略 = 保留原 key**；`""` = 清除（回退 `api_key_env`）。
- */
-api_key: string | null, 
-/**
- * env 名（可选；省略 = 保留已有）。
- */
-api_key_env: string | null, };
+export type ProviderInput = { id: string, name?: string | null, account?: string | null, kind: string, base: string, enabled: boolean, models: Array<string>, api_key: string | null, api_key_env: string | null, };

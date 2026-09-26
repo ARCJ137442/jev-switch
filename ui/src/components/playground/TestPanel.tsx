@@ -50,6 +50,13 @@ interface Props {
 
 type Status = 'idle' | 'loading' | 'ok' | 'error';
 
+const STATUS_I18N_KEY = {
+  idle: 'tp.statusIdle',
+  loading: 'tp.statusLoading',
+  ok: 'tp.statusOk',
+  error: 'tp.statusError',
+} as const;
+
 /**
  * 双栏布局的核心面板 — 左侧 Input，右侧 Output
  * 极简风 — 顶部 tab 真双视图 Form / JSON（questionsJson 仍是唯一真值，
@@ -266,7 +273,7 @@ export function TestPanel({
                 }}
                 aria-hidden
               />
-              {status}
+              {t(STATUS_I18N_KEY[status])}
               {latencyMs !== null && <span className="tabular">· {latencyMs}ms</span>}
             </span>
           </div>
@@ -623,7 +630,7 @@ function Metering({
             <span className="text-inkSubtle">tokens</span>
             {cell('in', `~${inputTokens}`)}
             {cell('out', `~${estOut}`)}
-            <span className="border border-border bg-soft px-1 py-px text-[10px] uppercase tracking-widest text-inkMuted">
+            <span className="border border-border bg-soft px-1 py-px text-xs text-inkMuted">
               {tCore('tp.estimate')}
             </span>
           </>
@@ -663,7 +670,7 @@ function ProbBar({
           />
         ))}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-inkSubtle">
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-inkSubtle">
         {entries.map(([k, v], i) => (
           <span
             key={k}
@@ -703,7 +710,7 @@ function AnswerShell({
         <span className="text-inkSubtle tabular">{qid}</span>
         <span className="text-inkSubtle">→</span>
         {typeTag && (
-          <span className="border border-border px-1 py-px text-[10px] uppercase tracking-widest text-inkSubtle">
+          <span className="border border-border px-1 py-px text-xs text-inkSubtle">
             {typeTag}
           </span>
         )}
@@ -794,7 +801,7 @@ function AnswerRow({ qid, raw }: { qid: string; raw: unknown }) {
                 style={{ width: `${Math.round(Math.min(Math.max(eff, 0), 1) * 100)}%` }}
               />
             </div>
-            <span className="font-mono text-[10px] tabular text-inkMuted">
+            <span className="font-mono text-xs tabular text-inkMuted">
               {Math.round(Math.min(Math.max(eff, 0), 1) * 100)}%
             </span>
           </div>

@@ -46,20 +46,20 @@ pub enum ConfigError {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   双态开关（docs/12 §一 · 任务 #43 —— 裁决已锁）
-   local：loopback 免鉴权（非 loopback peer → 403 应用层兜底）
-   cloud：/v1 需 Bearer 调用 token，admin 需登录会话 —— mode 只管鉴权，
-          **不涉及上游拓扑**（拓扑不区分原则，docs/12 §一）。
+双态开关（docs/12 §一 · 任务 #43 —— 裁决已锁）
+local：loopback 免鉴权（非 loopback peer → 403 应用层兜底）
+cloud：/v1 需 Bearer 调用 token，admin 需登录会话 —— mode 只管鉴权，
+       **不涉及上游拓扑**（拓扑不区分原则，docs/12 §一）。
 
-   bind 与 mode 关系（ListenSupervisor 修订裁决 —— 方案一「成对默认 + 热 Rebind」）：
-   - **未显式配置 `bind`**（文件与 `JEV_BIND` 皆无）→ 成对默认：
-     local = 127.0.0.1:11435、cloud = 0.0.0.0:11435；`PUT /v1/admin/mode`
-     翻转时自动热 Rebind 到对端默认（local 态对 LAN **内核级关闭**端口）。
-   - **显式 `bind`**（文件 `bind` 或 env `JEV_BIND`）→ 恒绑显式值，mode 翻转
-     **不**改监听（响应 `rebind.skipped = "explicit bind"`），此时 local 态由
-     鉴权中间件的 **peer loopback 校验兜底**（非 loopback → 403）。
-   - 运行时改监听走 `PUT /v1/admin/listen`（热 Rebind，零进程重启）。
-   ══════════════════════════════════════════════════════════════════ */
+bind 与 mode 关系（ListenSupervisor 修订裁决 —— 方案一「成对默认 + 热 Rebind」）：
+- **未显式配置 `bind`**（文件与 `JEV_BIND` 皆无）→ 成对默认：
+  local = 127.0.0.1:11435、cloud = 0.0.0.0:11435；`PUT /v1/admin/mode`
+  翻转时自动热 Rebind 到对端默认（local 态对 LAN **内核级关闭**端口）。
+- **显式 `bind`**（文件 `bind` 或 env `JEV_BIND`）→ 恒绑显式值，mode 翻转
+  **不**改监听（响应 `rebind.skipped = "explicit bind"`），此时 local 态由
+  鉴权中间件的 **peer loopback 校验兜底**（非 loopback → 403）。
+- 运行时改监听走 `PUT /v1/admin/listen`（热 Rebind，零进程重启）。
+══════════════════════════════════════════════════════════════════ */
 
 /// 运行双态（配置 `mode = "local" | "cloud"`，默认 local；env `JEV_SWITCH_MODE` 可覆盖；
 /// 运行时热切：`PUT /v1/admin/mode` —— `AuthState.mode` 为 `RwLock`，逐请求读锁）。
@@ -186,10 +186,7 @@ pub fn resolve_auth_tokens(file_tokens: &[AuthToken], env: Option<&str>) -> Vec<
 }
 
 /// `JEV_ADMIN_PASSWORD` 优先（任务书字面；env 非空才赢，空串视为未设）。
-pub fn resolve_admin_password(
-    file_password: Option<&str>,
-    env: Option<&str>,
-) -> Option<String> {
+pub fn resolve_admin_password(file_password: Option<&str>, env: Option<&str>) -> Option<String> {
     if let Some(pw) = env.map(str::trim).filter(|s| !s.is_empty()) {
         return Some(pw.to_string());
     }
@@ -199,11 +196,19 @@ pub fn resolve_admin_password(
         .map(String::from)
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)] // kind 目前只作配置标注（装配按 provider id 选 adapter），随 toml 往返保留
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub kind: String,
     pub base: String,
+    /// Friendly UI label for a specific provider account/configuration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Account label; the upstream need not expose a username concept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    /// Models available in this credential context.
+    #[serde(default)]
+    pub models: Vec<String>,
     /// 明文密钥（Q4=b 默认档；0600 文件）。**读取优先级高于 `api_key_env`**。
     /// 仅存在于 daemon —— 永不进 GET 响应 / 日志 / tracing（contracts/04 §2）。
     #[serde(default)]
@@ -255,7 +260,10 @@ impl Config {
 
     /// 生效调用 token 列表：文件 `auth_tokens` ← env `JEV_AUTH_TOKENS`（非空 env 完全取代）。
     pub fn effective_auth_tokens(&self) -> Vec<String> {
-        resolve_auth_tokens(&self.auth_tokens, std::env::var("JEV_AUTH_TOKENS").ok().as_deref())
+        resolve_auth_tokens(
+            &self.auth_tokens,
+            std::env::var("JEV_AUTH_TOKENS").ok().as_deref(),
+        )
     }
 
     /// 生效 admin 密码：文件 `admin_password` ← env `JEV_ADMIN_PASSWORD`（非空 env 优先）。
@@ -268,7 +276,10 @@ impl Config {
 
     /// 生效监听地址：env `JEV_BIND` ← 文件 `bind` ← 成对默认（随 `mode`）。
     /// 返回 `(地址, 是否显式)`；非法 bind 字符串 → [`ConfigError::InvalidBind`]（启动硬拒）。
-    pub fn effective_bind(&self, mode: RunMode) -> Result<(std::net::SocketAddr, bool), ConfigError> {
+    pub fn effective_bind(
+        &self,
+        mode: RunMode,
+    ) -> Result<(std::net::SocketAddr, bool), ConfigError> {
         resolve_bind(
             self.bind.as_deref(),
             std::env::var("JEV_BIND").ok().as_deref(),
@@ -339,10 +350,13 @@ impl Config {
                 return Ok(k.to_string());
             }
         }
-        let var = p.api_key_env.as_deref().ok_or_else(|| ConfigError::MissingEnv {
-            provider: provider_id.into(),
-            var: "<api_key unset and api_key_env unset>".into(),
-        })?;
+        let var = p
+            .api_key_env
+            .as_deref()
+            .ok_or_else(|| ConfigError::MissingEnv {
+                provider: provider_id.into(),
+                var: "<api_key unset and api_key_env unset>".into(),
+            })?;
         std::env::var(var).map_err(|_| ConfigError::MissingEnv {
             provider: provider_id.into(),
             var: var.into(),
@@ -352,7 +366,9 @@ impl Config {
     /// provider 的有效密钥（明文或 env 解析成功 → `Some`；否则 `None`）。
     /// admin GET 掩码 / `api_key_set` 用；**不回传明文**。
     pub fn effective_api_key(&self, provider_id: &str) -> Option<String> {
-        self.read_api_key(provider_id).ok().filter(|k| !k.is_empty())
+        self.read_api_key(provider_id)
+            .ok()
+            .filter(|k| !k.is_empty())
     }
 }
 
@@ -360,18 +376,22 @@ fn default_config_path() -> PathBuf {
     // Windows: %USERPROFILE%\.jev-switch\providers.toml
     // Unix:    $HOME/.jev-switch/providers.toml
     if let Ok(home) = std::env::var("USERPROFILE") {
-        PathBuf::from(home).join(".jev-switch").join("providers.toml")
+        PathBuf::from(home)
+            .join(".jev-switch")
+            .join("providers.toml")
     } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".jev-switch").join("providers.toml")
+        PathBuf::from(home)
+            .join(".jev-switch")
+            .join("providers.toml")
     } else {
         PathBuf::from("providers.toml")
     }
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   文件权限（contracts/04 §1：providers.toml 0600、目录 0700）
-   Unix：真实 chmod；Windows：NTFS ACL 不在本期 —— 按用户裁决降级为 warning。
-   ══════════════════════════════════════════════════════════════════ */
+文件权限（contracts/04 §1：providers.toml 0600、目录 0700）
+Unix：真实 chmod；Windows：NTFS ACL 不在本期 —— 按用户裁决降级为 warning。
+══════════════════════════════════════════════════════════════════ */
 
 /// 写回配置文件后收紧为 **0600**（admin PUT 落盘路径调用）。
 ///
@@ -410,9 +430,7 @@ pub fn enforce_dir_perms(dir: &Path) {
     #[cfg(windows)]
     {
         let _ = dir;
-        tracing::warn!(
-            "配置目录 0700 权限无法在 Windows 强制 —— 按用户裁决降级为本警告。"
-        );
+        tracing::warn!("配置目录 0700 权限无法在 Windows 强制 —— 按用户裁决降级为本警告。");
     }
 }
 
@@ -470,10 +488,7 @@ enabled = true
         let cfg: Config = toml::from_str(toml).unwrap();
         assert_eq!(cfg.providers.len(), 2);
         assert_eq!(cfg.router.get("laya-english"), Some(&"laya".into()));
-        assert_eq!(
-            cfg.router.get("typesafe-ai/jev"),
-            Some(&"vercel".into())
-        );
+        assert_eq!(cfg.router.get("typesafe-ai/jev"), Some(&"vercel".into()));
     }
 
     #[test]
@@ -547,7 +562,9 @@ priority = 10
         let cfg: Config = toml::from_str(toml).unwrap();
         let edges = cfg.route_edges();
         assert_eq!(edges.len(), 2);
-        assert!(edges.iter().any(|e| e.left == "laya-english" && e.right == "laya"));
+        assert!(edges
+            .iter()
+            .any(|e| e.left == "laya-english" && e.right == "laya"));
         assert!(edges.iter().any(|e| e.left == "jev" && e.right == "vercel"));
     }
 
@@ -707,11 +724,7 @@ enabled = true
     /* ── A7：文件权限 0600（Unix assert / Windows warning 降级） ── */
 
     fn touch_config(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "jev-perm-{}-{}",
-            name,
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("jev-perm-{}-{}", name, std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("providers.toml");
         std::fs::write(&path, "[providers.x]\nkind=\"k\"\nbase=\"b\"\n").unwrap();
@@ -805,7 +818,10 @@ enabled = true
         assert_eq!(addr.to_string(), "0.0.0.0:11435");
         assert!(!explicit);
         // paired_default 与 resolve_bind 一致
-        assert_eq!(paired_default(RunMode::Local).to_string(), "127.0.0.1:11435");
+        assert_eq!(
+            paired_default(RunMode::Local).to_string(),
+            "127.0.0.1:11435"
+        );
         assert_eq!(paired_default(RunMode::Cloud).to_string(), "0.0.0.0:11435");
     }
 
@@ -857,7 +873,10 @@ admin_password = "pw-test-1234"
         )
         .unwrap();
         assert_eq!(
-            cfg.auth_tokens.iter().map(|t| t.value()).collect::<Vec<_>>(),
+            cfg.auth_tokens
+                .iter()
+                .map(|t| t.value())
+                .collect::<Vec<_>>(),
             ["tok-test-aaa", "tok-test-bbb"]
         );
         assert_eq!(cfg.admin_password.as_deref(), Some("pw-test-1234"));
@@ -888,7 +907,10 @@ token = "tok-test-ccc"
             RunMode::Local
         );
         // env 空串/未设 → 文件值
-        assert_eq!(resolve_mode(RunMode::Cloud, Some("")).unwrap(), RunMode::Cloud);
+        assert_eq!(
+            resolve_mode(RunMode::Cloud, Some("")).unwrap(),
+            RunMode::Cloud
+        );
         assert_eq!(resolve_mode(RunMode::Local, None).unwrap(), RunMode::Local);
         // 非法 env → 硬错（启动即拒，防带病上线）
         assert!(matches!(
@@ -901,7 +923,10 @@ token = "tok-test-ccc"
     fn resolve_auth_tokens_env_full_replace() {
         let file = vec![
             AuthToken::Plain("tok-file-1".into()),
-            AuthToken::Table { token: "tok-file-2".into(), name: None },
+            AuthToken::Table {
+                token: "tok-file-2".into(),
+                name: None,
+            },
         ];
         // env 非空 → 完全取代文件
         assert_eq!(

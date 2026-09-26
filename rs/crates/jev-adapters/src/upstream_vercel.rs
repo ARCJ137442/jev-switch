@@ -1,19 +1,18 @@
 //! Vercel AI Gateway 上游实现（M0.5 + M0.7 翻译层 · A5：`UpstreamAdapter` + 能力注册制）
 //!
 //! 参考 jev-decision-lab `decision-bricks.ts::VercelGatewayJevRuntime`：
-//! - POST 到 `https://ai-gateway.vercel.sh/v4/ai/evaluation-model`
-//! - Headers: `Authorization: Bearer <AI_GATEWAY_API_KEY>` + ai-* header
-//! - `noul` → `boolean` 出站在组 body 时做（[`normalize_request_for_vercel`]）
-//! - `boolean/probability` → `noul` 入站走 [`VercelProtocol::incoming`]（唯一出口路径）
-//! - Vercel 不报 `usage`：写 `None`
+//! - POST TypeSafe-compatible Jev requests to `/typesafe/v1/systemone`
+//! - Headers: `Authorization: Bearer <AI_GATEWAY_API_KEY>`
+//! - Preserve the Jev request body, including `model` and `type: noul`
+//! - Normalize the TypeSafe response through [`VercelProtocol::incoming`]
 //!
-//! 不变量：调用方在 handler 层只看到 Jev 标准 `type: noul`；Vercel 看到的永远是
-//! `type: boolean`（除非原本就是 choice / score）。
+//! 当前 TypeSafe-compatible 接口接收原生 Jev question type；Choice 与 Score 的
+//! confidence 由上游返回并原样保留。旧 Evaluation API 的 boolean 翻译不参与活动请求路径。
 //!
 //! 能力注册制（07 P2）：[`VERCEL_CAPABILITIES`] 是本 adapter 自报的能力表 ——
 //! 内核不再按 id 硬编码查表（原 `capabilities_of("vercel")` 已删）。
 
-use crate::vercel_protocol::{normalize_request_for_vercel, VercelProtocol, VERCEL_UPSTREAM_ID};
+use crate::vercel_protocol::{VercelProtocol, VERCEL_UPSTREAM_ID};
 use jev_core::adapter::{IncomingCtx, ProtocolAdapter, UpstreamAdapter};
 use jev_core::upstream::{Capabilities, JevError, QuestionType};
 use jev_protocol::{JevRequest, JevResponse};
@@ -22,19 +21,16 @@ use std::time::Duration;
 
 /// Vercel 自报能力表（与 A4 硬编码表逐字段一致 —— 行为不回潮）。
 pub const VERCEL_CAPABILITIES: Capabilities = Capabilities {
-    question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Boolean],
-    has_confidence: false,
-    has_usage: false,
-    noul_via_boolean: true,
+    question_types: &[
+        QuestionType::Choice,
+        QuestionType::Score,
+        QuestionType::Noul,
+    ],
+    has_confidence: true,
+    has_usage: true,
+    noul_via_boolean: false,
     retryable_status: &[408, 429, 500, 502, 503, 504],
 };
-
-/// Vercel 强制要求的 ai-* header（参考 TS 实现）。
-const VERCEL_HEADERS: &[(&str, &str)] = &[
-    ("ai-gateway-protocol-version", "0.0.1"),
-    ("ai-gateway-auth-method", "api-key"),
-    ("ai-evaluation-model-specification-version", "4"),
-];
 
 pub struct VercelUpstream {
     id: String,
@@ -46,9 +42,13 @@ pub struct VercelUpstream {
 
 impl VercelUpstream {
     pub fn new(base: String, api_key: String) -> Result<Self, JevError> {
+        Self::new_with_id(VERCEL_UPSTREAM_ID.into(), base, api_key)
+    }
+
+    pub fn new_with_id(id: String, base: String, api_key: String) -> Result<Self, JevError> {
         if api_key.is_empty() {
             return Err(JevError::Config {
-                upstream_id: VERCEL_UPSTREAM_ID.into(),
+                upstream_id: id.clone(),
                 message: "AI_GATEWAY_API_KEY is empty".into(),
             });
         }
@@ -58,11 +58,11 @@ impl VercelUpstream {
             // 强制 IPv4 first：Cloudflare IPv6 在很多机器不可达（MVP 依赖系统 dns_order）
             .build()
             .map_err(|e| JevError::Config {
-                upstream_id: VERCEL_UPSTREAM_ID.into(),
+                upstream_id: id.clone(),
                 message: format!("reqwest build failed: {e}"),
             })?;
         Ok(Self {
-            id: VERCEL_UPSTREAM_ID.into(),
+            id,
             base,
             api_key,
             http,
@@ -83,32 +83,14 @@ impl UpstreamAdapter for VercelUpstream {
     }
 
     async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, JevError> {
-        // 1. 出站方言化（wire 级 noul → boolean；req 原样保留，语义层出口统一 noul）
-        let normalized = normalize_request_for_vercel(&req).map_err(|e| JevError::BadResponse {
-            upstream_id: self.id.clone(),
-            message: format!("serialize normalized request: {e}"),
-        })?;
-
-        // 2. 构造请求。Vercel gateway body 顶层只需要 state + questions
-        //    （model 走 ai-model-id header）。
-        let vercel_body = serde_json::json!({
-            "state": normalized.get("state").cloned().unwrap_or(serde_json::Value::Null),
-            "questions": normalized.get("questions").cloned().unwrap_or(serde_json::json!({})),
-        });
-
-        let mut req_builder = self
+        // The TypeSafe endpoint speaks Jev directly; model and question types belong
+        // in the request body. Keeping this whole avoids silently changing noul to
+        // the legacy Evaluation API's boolean dialect.
+        let resp = self
             .http
             .post(&self.base)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .header("ai-model-id", &req.model);
-        for (k, v) in VERCEL_HEADERS {
-            req_builder = req_builder.header(*k, *v);
-        }
-
-        // 3. 发请求
-        let resp = req_builder
-            .json(&vercel_body)
+            .bearer_auth(&self.api_key)
+            .json(&req)
             .send()
             .await
             .map_err(|e| {
@@ -142,7 +124,7 @@ impl UpstreamAdapter for VercelUpstream {
             });
         }
 
-        // 4. 入站归一化（冻结 ProtocolAdapter::incoming —— boolean → noul 唯一出口）
+        // Normalize the TypeSafe response through the adapter's single incoming path.
         let ctx = IncomingCtx {
             request: &req,
             original: &req,
@@ -155,8 +137,12 @@ impl UpstreamAdapter for VercelUpstream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vercel_protocol::normalize_request_for_vercel;
     use jev_protocol::{Criteria, Question};
+    use serde_json::json;
     use std::collections::BTreeMap;
+    use wiremock::matchers::{body_json, header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[tokio::test]
     async fn vercel_request_translation_in_normalize() {
@@ -194,10 +180,13 @@ mod tests {
     #[test]
     fn vercel_capability_self_reported() {
         let cap = VERCEL_CAPABILITIES;
-        assert!(cap.supports(QuestionType::Boolean));
-        assert!(cap.supports(QuestionType::Noul)); // via translation
-        assert!(!cap.has_confidence);
-        assert!(cap.noul_via_boolean);
+        assert!(!cap.supports(QuestionType::Boolean));
+        assert!(cap.supports(QuestionType::Noul));
+        assert!(cap.supports(QuestionType::Choice));
+        assert!(cap.supports(QuestionType::Score));
+        assert!(cap.has_confidence);
+        assert!(cap.has_usage);
+        assert!(!cap.noul_via_boolean);
         assert!(cap.is_retryable_status(429));
         assert!(!cap.is_retryable_status(400));
     }
@@ -207,8 +196,69 @@ mod tests {
         // daemon 装配路径经 UpstreamAdapter trait 取能力（注册制接线）
         let u = VercelUpstream::new("http://127.0.0.1:1/x".into(), "k".into()).unwrap();
         let cap: Capabilities = UpstreamAdapter::capabilities(&u);
-        assert_eq!(cap.noul_via_boolean, true);
+        assert_eq!(cap.noul_via_boolean, false);
         assert!(cap.retryable_status.contains(&429));
-        assert_eq!(VercelProtocol.dialect(), "vercel_boolean");
+        assert_eq!(VercelProtocol.dialect(), "typesafe_jev");
+    }
+
+    #[tokio::test]
+    async fn typesafe_http_api_sends_jev_body_and_parses_usage() {
+        let server = MockServer::start().await;
+        let mut questions = std::collections::BTreeMap::new();
+        questions.insert(
+            "is_true".to_string(),
+            Question::Noul {
+                instructions: "Is the statement true?".into(),
+                criteria: Criteria::Bool {
+                    r#true: "The statement is true.".into(),
+                    r#false: "The statement is false.".into(),
+                },
+            },
+        );
+        let request = JevRequest {
+            model: "typesafe-ai/jev".into(),
+            state: json!({"statement":"The meeting begins at 10 AM."}),
+            questions,
+        };
+        Mock::given(method("POST"))
+            .and(path("/typesafe/v1/systemone"))
+            .and(header("authorization", "Bearer test-vck-fixture-key"))
+            .and(body_json(json!({
+                "model":"typesafe-ai/jev",
+                "state":{"statement":"The meeting begins at 10 AM."},
+                "questions":{"is_true":{
+                    "type":"noul",
+                    "instructions":"Is the statement true?",
+                    "criteria":{"true":"The statement is true.","false":"The statement is false."}
+                }}
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "model":"typesafe-ai/jev",
+                "answers":{"is_true":{"type":"noul","noul":0.98}},
+                "usage":{"inputTokens":12,"outputTokens":3},
+                "providerMetadata":{"gateway":{"gatewayCost":"0.000042","routing":{"finalProvider":"typesafe-ai"}}}
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let upstream = VercelUpstream::new(
+            format!("{}/typesafe/v1/systemone", server.uri()),
+            "test-vck-fixture-key".into(),
+        )
+        .unwrap();
+        let response = upstream.evaluate(request).await.unwrap();
+        assert_eq!(response.model.as_deref(), Some("typesafe-ai/jev"));
+        assert_eq!(response.usage.as_ref().unwrap().input_tokens, Some(12));
+        assert_eq!(response.usage.as_ref().unwrap().output_tokens, Some(3));
+        assert_eq!(response.cost_usd, Some(0.000042));
+        assert_eq!(
+            response.extra["providerMetadata"]["gateway"]["routing"]["finalProvider"],
+            "typesafe-ai"
+        );
+        let jev_protocol::Answer::Noul(answer) = &response.answers["is_true"] else {
+            panic!("expected a Jev noul answer");
+        };
+        assert_eq!(answer.noul, Some(0.98));
     }
 }

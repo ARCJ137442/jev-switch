@@ -52,7 +52,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
       }}
       onClick={(e) => e.stopPropagation()}
       role="dialog"
-      aria-label={`edge ${route.left} to ${route.right}`}
+      aria-label={t('dag.edgeLabel', { left: route.left, right: route.right })}
     >
       <header
         className="flex items-center justify-between gap-2 px-3 py-2"
@@ -72,7 +72,7 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
         <button
           type="button"
           onClick={onClose}
-          aria-label="close inspector"
+          aria-label={t('common.close')}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center"
           style={{
             fontSize: 'var(--text-base)',
@@ -85,17 +85,17 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
       </header>
 
       <div className="space-y-2.5 px-3 py-3">
-        <Field label="priority">
+        <Field label={t('entry.priority')}>
           <input
             type="number"
             value={prio}
             onChange={(e) => commitPrio(e.target.value)}
             className="tabular"
             style={{ ...control, fontFamily: 'var(--font-mono)' }}
-            aria-label="priority"
+            aria-label={t('entry.priority')}
           />
         </Field>
-        <Field label="upstream_model" hint={t('edge.hintKeep')}>
+        <Field label={t('entry.upstreamModel')} hint={t('edge.hintKeep')}>
           <input
             type="text"
             value={route.upstream_model ?? ''}
@@ -106,29 +106,29 @@ export function EdgeInspector({ route, style, onPatch, onDelete, onClose }: Prop
             placeholder="typesafe-ai/jev"
             spellCheck={false}
             style={{ ...control, fontFamily: 'var(--font-mono)' }}
-            aria-label="upstream model"
+            aria-label={t('entry.upstreamModel')}
           />
         </Field>
-        <Field label="sticky">
+        <Field label={t('entry.sticky')}>
           <select
             value={route.sticky ?? 'none'}
             onChange={(e) => onPatch({ sticky: e.target.value as 'none' | 'session' })}
             style={control}
-            aria-label="sticky"
+            aria-label={t('entry.sticky')}
           >
-            <option value="none">none</option>
-            <option value="session">session</option>
+            <option value="none">{t('dag.none')}</option>
+            <option value="session">{t('dag.session')}</option>
           </select>
         </Field>
-        <Field label="on_error">
+        <Field label={t('entry.onError')}>
           <select
             value={route.on_error ?? 'next'}
             onChange={(e) => onPatch({ on_error: e.target.value as 'next' | 'fail' })}
             style={control}
-            aria-label="on error"
+            aria-label={t('entry.onError')}
           >
-            <option value="next">next</option>
-            <option value="fail">fail</option>
+            <option value="next">{t('entry.next')}</option>
+            <option value="fail">{t('entry.fail')}</option>
           </select>
         </Field>
       </div>

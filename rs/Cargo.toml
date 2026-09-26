@@ -46,3 +46,6 @@ wiremock = "0.6"
 # Phase 4: 数据库支持（服务入口配置 + 调用统计）
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio-rusqlite = "0.6"
+sha2 = "0.10"
+getrandom = "0.2"
+futures-util = "0.3"

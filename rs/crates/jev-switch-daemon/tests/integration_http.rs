@@ -32,8 +32,8 @@ use std::sync::{Arc, RwLock};
 use tower::ServiceExt;
 
 /* ══════════════════════════════════════════════════════════════════
-   夹具
-   ══════════════════════════════════════════════════════════════════ */
+夹具
+══════════════════════════════════════════════════════════════════ */
 
 /// 测试专用假 key（真实密钥永不进测试/提交）。
 const FAKE_KEY: &str = "sk-test1234abcd";
@@ -52,6 +52,27 @@ fn temp_config(name: &str, content: &str) -> std::path::PathBuf {
 /// `auth.rs` 模块测试专覆盖）。`listen` 留空 OnceLock（oneshot 路径：
 /// mode 翻转 rebind.skipped="no listener"、`PUT /listen` → 503）。
 fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    // 创建临时内存数据库用于测试
+    let db_conn = rusqlite::Connection::open_in_memory().expect("open test db");
+    jev_switch_daemon::db::init_database(&db_conn).expect("init test db");
+    // Tests that construct a bare Registry model it as an explicitly published
+    // legacy endpoint, matching the compatibility import used by build_state.
+    let endpoints: HashMap<String, _> = registry
+        .router()
+        .list_models()
+        .into_iter()
+        .filter(|model| registry.router().route(model).is_ok())
+        .map(|id| {
+            let endpoint =
+                jev_switch_daemon::db::endpoints::create(&db_conn, &id, "follow_global", true)
+                    .unwrap();
+            (id, endpoint)
+        })
+        .collect();
+
     AppState {
         registry: Arc::new(registry),
         config_path,
@@ -59,6 +80,8 @@ fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
         auth: Arc::new(jev_switch_daemon::auth::AuthState::default()),
         listen: Arc::new(std::sync::OnceLock::new()),
         events: jev_switch_daemon::events::EventBus::new(200),
+        service_endpoints: Arc::new(RwLock::new(endpoints)),
+        db_conn: Arc::new(Mutex::new(db_conn)),
     }
 }
 
@@ -147,12 +170,15 @@ fn choice_only_fake(id: &str, calls: Arc<AtomicU32>) -> Box<dyn UpstreamAdapter>
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   1 · GET /health 形状（HTTP 级）
-   ══════════════════════════════════════════════════════════════════ */
+1 · GET /health 形状（HTTP 级）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn health_json_shape_over_http() {
-    let path = temp_config("health", "[providers.laya]\nkind=\"laya\"\nbase=\"http://127.0.0.1:1/x\"\nenabled=false\n");
+    let path = temp_config(
+        "health",
+        "[providers.laya]\nkind=\"laya\"\nbase=\"http://127.0.0.1:1/x\"\nenabled=false\n",
+    );
     let cfg = Config::load(&path).unwrap();
     let app = build_app(build_state(cfg, path.clone()));
 
@@ -160,14 +186,21 @@ async fn health_json_shape_over_http() {
     assert_eq!(status, 200, "{body}");
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(v["status"], "ok");
+    assert_eq!(v["product"], "jev-switch");
+    assert_eq!(v["api_revision"], 1);
+    assert!(v["build_revision"].is_null() || v["build_revision"].is_string());
     assert!(v["version"].is_string());
-    assert_eq!(v.as_object().unwrap().len(), 2, "键集冻结: {body}");
+    assert_eq!(
+        v.as_object().unwrap().len(),
+        5,
+        "daemon identity prevents reusing an unrelated service: {body}"
+    );
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   2 · 未知 model → 404 错误体（upstream:null）
-   ══════════════════════════════════════════════════════════════════ */
+2 · 未知 model → 404 错误体（upstream:null）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn unknown_model_is_404_with_null_upstream() {
@@ -178,15 +211,22 @@ async fn unknown_model_is_404_with_null_upstream() {
     let (status, body) = send(app, "POST", "/v1/systemone", Some(noul_body("ghost-model"))).await;
     assert_eq!(status, 404, "{body}");
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(v["upstream"], serde_json::Value::Null, "404 必须 upstream:null: {body}");
+    assert_eq!(
+        v["upstream"],
+        serde_json::Value::Null,
+        "404 必须 upstream:null: {body}"
+    );
     assert_eq!(v["retryable"], false);
-    assert!(v["error"].as_str().unwrap().contains("ghost-model"), "{body}");
+    assert!(
+        v["error"].as_str().unwrap().contains("ghost-model"),
+        "{body}"
+    );
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   3 · capability 不匹配 → 422（回归护栏 · 零实发）
-   ══════════════════════════════════════════════════════════════════ */
+3 · capability 不匹配 → 422（回归护栏 · 零实发）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn capability_mismatch_is_422_without_real_send() {
@@ -197,7 +237,10 @@ async fn capability_mismatch_is_422_without_real_send() {
     let app = build_app(state_with(reg, path.clone()));
 
     let (status, body) = send(app, "POST", "/v1/systemone", Some(noul_body("jev"))).await;
-    assert_eq!(status, 422, "题型不匹配必须 422（6af3a47 不可回潮）: {body}");
+    assert_eq!(
+        status, 422,
+        "题型不匹配必须 422（6af3a47 不可回潮）: {body}"
+    );
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert!(
         v["error"].as_str().unwrap().contains("question type"),
@@ -208,8 +251,8 @@ async fn capability_mismatch_is_422_without_real_send() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   4 · 协议非法（缺 criteria）→ 400
-   ══════════════════════════════════════════════════════════════════ */
+4 · 协议非法（缺 criteria）→ 400
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn missing_criteria_is_400() {
@@ -234,8 +277,8 @@ async fn missing_criteria_is_400() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   5 · retryable 上游错误 → 503 + retryable:true（wiremock）
-   ══════════════════════════════════════════════════════════════════ */
+5 · retryable 上游错误 → 503 + retryable:true（wiremock）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn retryable_upstream_error_maps_to_503() {
@@ -265,8 +308,8 @@ async fn retryable_upstream_error_maps_to_503() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   6 · failover：双候选首败次成 → 200 + upstream_calls==2（wiremock）
-   ══════════════════════════════════════════════════════════════════ */
+6 · failover：双候选首败次成 → 200 + upstream_calls==2（wiremock）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn failover_first_fail_second_ok_counts_two_calls() {
@@ -280,8 +323,7 @@ async fn failover_first_fail_second_ok_counts_two_calls() {
     let mock_laya = wiremock::MockServer::start().await;
     wiremock::Mock::given(wiremock::matchers::any())
         .respond_with(
-            wiremock::ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({"answers": {}})),
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"answers": {}})),
         )
         .mount(&mock_laya)
         .await;
@@ -303,8 +345,11 @@ async fn failover_first_fail_second_ok_counts_two_calls() {
         RetryPolicy::no_retry(), // 隔离：首败即跨候选
     );
     reg.register(Box::new(
-        VercelUpstream::new(format!("{}/evaluate", mock_vercel.uri()), "itg-test-key".into())
-            .expect("vercel"),
+        VercelUpstream::new(
+            format!("{}/evaluate", mock_vercel.uri()),
+            "itg-test-key".into(),
+        )
+        .expect("vercel"),
     ));
     reg.register(Box::new(
         LayaUpstream::new(format!("{}/v1/systemone", mock_laya.uri())).expect("laya"),
@@ -331,8 +376,8 @@ async fn failover_first_fail_second_ok_counts_two_calls() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   7 · GET /v1/models 不可路由过滤（回归护栏 · 6af3a47）
-   ══════════════════════════════════════════════════════════════════ */
+7 · GET /v1/models 不可路由过滤（回归护栏 · 6af3a47）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn models_filters_unroutable_entries() {
@@ -358,18 +403,25 @@ async fn models_filters_unroutable_entries() {
         .iter()
         .map(|m| m["id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids, vec!["keep-model"], "不可路由 ghost-model 必须被过滤（6af3a47）: {body}");
-    assert!(v["upstreams"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|u| u["id"] == "laya"), "能力列表来自注册制 trait: {body}");
+    assert_eq!(
+        ids,
+        vec!["keep-model"],
+        "不可路由 ghost-model 必须被过滤（6af3a47）: {body}"
+    );
+    assert!(
+        v["upstreams"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|u| u["id"] == "laya"),
+        "能力列表来自注册制 trait: {body}"
+    );
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   8 · GET /v1/admin/providers 无明文（HTTP 级复核）
-   ══════════════════════════════════════════════════════════════════ */
+8 · GET /v1/admin/providers 无明文（HTTP 级复核）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn admin_providers_over_http_has_no_plaintext() {

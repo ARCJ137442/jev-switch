@@ -25,18 +25,24 @@ pub enum JevError {
     #[error("upstream {upstream_id} timed out")]
     Timeout { upstream_id: String },
     #[error("upstream {upstream_id} network error: {message}")]
-    Network { upstream_id: String, message: String },
+    Network {
+        upstream_id: String,
+        message: String,
+    },
     // A9：原 `#[allow(dead_code)]` 已删 —— `Registry::invoke` 与
     // `Router::check_capability` 均在构造本变体（422 路径），非死代码。
     #[error("capability mismatch for upstream {upstream_id}: {detail}")]
-    Capability {
-        upstream_id: String,
-        detail: String,
-    },
+    Capability { upstream_id: String, detail: String },
     #[error("upstream {upstream_id} returned invalid JSON: {message}")]
-    BadResponse { upstream_id: String, message: String },
+    BadResponse {
+        upstream_id: String,
+        message: String,
+    },
     #[error("upstream {upstream_id} config error: {message}")]
-    Config { upstream_id: String, message: String },
+    Config {
+        upstream_id: String,
+        message: String,
+    },
     /// 无匹配边（contracts/03 §4 → 404 `UnknownModel`）。
     /// A5 扩充：`Registry::invoke` 冻结返回 `Result<_, JevError>`，路由错误并入本枚举。
     #[error("no upstream registered for model '{0}'")]
@@ -80,7 +86,9 @@ impl JevError {
     /// 转换为 HTTP status code（给 axum handler 用）。
     pub fn http_status(&self) -> u16 {
         match self {
-            JevError::Upstream { status, retryable, .. } => {
+            JevError::Upstream {
+                status, retryable, ..
+            } => {
                 if *retryable && (*status == 429 || *status == 504 || *status >= 500) {
                     503
                 } else {
@@ -135,7 +143,11 @@ mod tests {
     fn supports_noul_via_boolean_shortcut() {
         // 翻译层型能力（boolean 方言上游）对 Noul 短路为 true
         let cap = Capabilities {
-            question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Boolean],
+            question_types: &[
+                QuestionType::Choice,
+                QuestionType::Score,
+                QuestionType::Boolean,
+            ],
             has_confidence: false,
             has_usage: false,
             noul_via_boolean: true,
@@ -151,7 +163,11 @@ mod tests {
     fn local_style_caps_do_not_retry() {
         // 本地类上游 retryable_status=[0]（空表语义）→ 任何真实 status 都不重试
         let cap = Capabilities {
-            question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Noul],
+            question_types: &[
+                QuestionType::Choice,
+                QuestionType::Score,
+                QuestionType::Noul,
+            ],
             has_confidence: true,
             has_usage: false,
             noul_via_boolean: false,

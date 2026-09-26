@@ -15,10 +15,11 @@
         "label": "main",
         "title": "Jev-Switch",
         "url": "waiting.html",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 1024,
-        "minHeight": 640,
+        "width": 900,
+        "height": 560,
+        "minWidth": 760,
+        "minHeight": 480,
+        "visible": false,
         "center": true,
         "resizable": true
       }

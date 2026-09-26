@@ -3,4 +3,4 @@
 /**
  * `GET /health` — contracts/05 §2：JSON 为准（旧文本 "jev-switch MVP" 弃用）。
  */
-export type HealthBody = { status: string, version: string, };
+export type HealthBody = { status: string, version: string, product: string, api_revision: number, build_revision: string | null, };

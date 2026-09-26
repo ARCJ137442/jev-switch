@@ -1,7 +1,7 @@
 //! 模型路由 DAG（A4 · contracts/03 + 08 §3）
 //!
 //! - 节点 = 对外 model id ∪ 中间别名 ∪ 提供商 id；边 = [`RouteEdge`]（`[[routes]]`）
-//! - [`Router::select`] 返回**有序候选**（priority 升序，稳定排序），支持 exact/prefix、
+//! - [`Router::select`] 返回**有序候选**（从入口开始逐层按 priority 升序的 DFS），支持 exact/prefix、
 //!   多跳别名链、`RouteCtx::{sticky_key, exclude}`
 //! - 加载配置时用 [`check_acyclic`] 检环，成环拒绝（DAG 约束，contracts/03 §4）
 //! - 旧 `[router] "m" = "u"` 扁平表 = 单条 exact 边（由 daemon config 合并成 edges）
@@ -20,7 +20,8 @@
 //!   `select` 是其按契约剥壳的视图；daemon failover 循环用 `plan` 取 `on_error`。
 //! - 候选策略（`on_error` / `sticky`）取**末跳边**（指向上游的那条边）；
 //!   `upstream_model` 沿路径叠加（路径上靠后的 Some 覆盖靠前的，全 None = 沿用入参 model）。
-//! - `priority` 排序取末跳边的 priority。
+//! - `priority` 按路由层级逐层排序：入口分支优先，分支内再按下一层出边排序；
+//!   展开出的候选保持该 DFS 顺序，避免别名末跳权重覆盖入口分支优先级。
 //! - prefix 匹配：仅在**顶层**对入参 model 匹配；`left` 去掉尾部 `*` 后做前缀比较
 //!   （`local/*` → 前缀 `local/`）；节点展开（多跳）只走 exact 边。
 //! - 粘性：`note_success(sticky_key, upstream_id)` 记忆；同 key 下 sticky=session 的
@@ -49,8 +50,8 @@ pub enum RouterError {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   边序列化（contracts/03 §2；与 `[[routes]]` 双向等价）
-   ══════════════════════════════════════════════════════════════════ */
+边序列化（contracts/03 §2；与 `[[routes]]` 双向等价）
+══════════════════════════════════════════════════════════════════ */
 
 /// 边匹配模式：`exact`（默认）| `prefix`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -155,9 +156,18 @@ impl RouteEdge {
     }
 }
 
+/// Priority is scoped to siblings (edges sharing a `left`). The remaining keys
+/// make equal-priority order deterministic across DB/config serialization order.
+fn edge_order(a: &RouteEdge, b: &RouteEdge) -> std::cmp::Ordering {
+    a.priority
+        .cmp(&b.priority)
+        .then_with(|| a.right.cmp(&b.right))
+        .then_with(|| a.upstream_model.cmp(&b.upstream_model))
+}
+
 /* ══════════════════════════════════════════════════════════════════
-   选路 API（contracts/03 §3）
-   ══════════════════════════════════════════════════════════════════ */
+选路 API（contracts/03 §3）
+══════════════════════════════════════════════════════════════════ */
 
 /// 选路上下文：粘性键 + 排除集（sub2api `SelectAccountForModelWithExclusions`
 /// 的 `excludedIDs` 对应物）。
@@ -173,6 +183,7 @@ pub struct Candidate {
     pub upstream_id: UpstreamId,
     /// 发上游前替换进 `JevRequest.model` 的值（边未配置时 = 调用方原 model）。
     pub upstream_model: String,
+    /// Entry-branch priority (the first edge selected for the public model).
     pub priority: i32,
     /// 审计用路径：命中的第一个 right 起，直到（含）终端上游 id。
     pub hops: Vec<NodeId>,
@@ -192,7 +203,7 @@ pub struct Router {
     /// 边表：`RwLock` 支撑 A7 admin `PUT /v1/admin/routes` 运行时热替换
     /// （无重启；已注册上游不受影响）。读路径全同步，guard 不跨 await。
     edges: std::sync::RwLock<Vec<RouteEdge>>,
-    upstreams: HashMap<UpstreamId, Box<dyn UpstreamAdapter>>,
+    upstreams: std::sync::RwLock<HashMap<UpstreamId, std::sync::Arc<dyn UpstreamAdapter>>>,
     /// sticky_key → 上次成功候选（session 粘性记忆）。
     sticky: std::sync::Mutex<HashMap<String, UpstreamId>>,
 }
@@ -204,7 +215,12 @@ impl Router {
     ) -> Self {
         Self {
             edges: std::sync::RwLock::new(edges),
-            upstreams,
+            upstreams: std::sync::RwLock::new(
+                upstreams
+                    .into_iter()
+                    .map(|(id, up)| (id, std::sync::Arc::from(up)))
+                    .collect(),
+            ),
             sticky: std::sync::Mutex::new(HashMap::new()),
         }
     }
@@ -225,7 +241,19 @@ impl Router {
 
     /// 挂载上游（能力注册制：id/capabilities 一律来自 adapter trait）。
     pub fn register(&mut self, up: Box<dyn UpstreamAdapter>) {
-        self.upstreams.insert(up.id().to_string(), up);
+        self.upstreams
+            .get_mut()
+            .expect("upstreams lock")
+            .insert(up.id().to_string(), std::sync::Arc::from(up));
+    }
+
+    pub fn replace_upstreams(&self, upstreams: Vec<Box<dyn UpstreamAdapter>>) {
+        let next = upstreams
+            .into_iter()
+            .map(|up| (up.id().to_string(), std::sync::Arc::from(up)))
+            .collect();
+        *self.upstreams.write().expect("upstreams lock") = next;
+        self.sticky.lock().expect("sticky lock").clear();
     }
 
     /// 热替换边表（A7 admin `PUT /v1/admin/routes`：整表替换、无重启）。
@@ -243,21 +271,29 @@ impl Router {
     /// - 无匹配边 → [`RouterError::UnknownModel`]（顶层转 404）
     /// - 匹配边全部悬空（right 既非已注册上游、又无出边）→ [`RouterError::UnknownUpstream`]
     /// - `ctx.exclude` 过滤；sticky=session + `ctx.sticky_key` 命中记忆 → 提到首位
-    pub fn plan(
-        &self,
-        model: &str,
-        ctx: &RouteCtx,
-    ) -> Result<Vec<PlanItem>, RouterError> {
+    pub fn plan(&self, model: &str, ctx: &RouteCtx) -> Result<Vec<PlanItem>, RouterError> {
         let edges = self.edges.read().expect("edges lock");
         let mut out: Vec<PlanItem> = Vec::new();
         let mut dangling: Vec<NodeId> = Vec::new();
         let mut any_match = false;
 
-        for e in edges.iter() {
+        let mut root_matches: Vec<&RouteEdge> = edges.iter().filter(|e| e.matches(model)).collect();
+        root_matches.sort_by(|a, b| edge_order(a, b));
+        for e in root_matches {
             if e.matches(model) {
                 any_match = true;
                 let mut path = Vec::new();
-                self.resolve(e, model, Vec::new(), None, &edges, &mut path, &mut out, &mut dangling);
+                self.resolve(
+                    e,
+                    model,
+                    e.priority,
+                    Vec::new(),
+                    None,
+                    &edges,
+                    &mut path,
+                    &mut out,
+                    &mut dangling,
+                );
             }
         }
 
@@ -275,21 +311,18 @@ impl Router {
         // exclude：排除集过滤（不计入失败语义，由调用方语义决定）
         out.retain(|it| !ctx.exclude.contains(&it.candidate.upstream_id));
 
-        // 同 left/跨边 priority 升序；稳定排序保留配置序
-        out.sort_by_key(|it| it.candidate.priority);
+        // `resolve` emits root branches and each branch's children in priority order.
+        // Do not flatten and re-sort by terminal-edge priority: that would let an
+        // alias's last hop reorder a higher-priority public branch behind a peer.
 
         // sticky：同 key 粘住上次成功的 sticky=session 候选（提到首位）
         if let Some(key) = &ctx.sticky_key {
-            let remembered = self
-                .sticky
-                .lock()
-                .unwrap()
-                .get(key)
-                .cloned();
+            let remembered = self.sticky.lock().unwrap().get(key).cloned();
             if let Some(up) = remembered {
-                if let Some(pos) = out.iter().position(|it| {
-                    it.sticky == Sticky::Session && it.candidate.upstream_id == up
-                }) {
+                if let Some(pos) = out
+                    .iter()
+                    .position(|it| it.sticky == Sticky::Session && it.candidate.upstream_id == up)
+                {
                     let it = out.remove(pos);
                     out.insert(0, it);
                 }
@@ -300,11 +333,7 @@ impl Router {
     }
 
     /// 契约形状的选路（contracts/03 §3 字面）：有序候选，不含策略字段。
-    pub fn select(
-        &self,
-        model: &str,
-        ctx: &RouteCtx,
-    ) -> Result<Vec<Candidate>, RouterError> {
+    pub fn select(&self, model: &str, ctx: &RouteCtx) -> Result<Vec<Candidate>, RouterError> {
         Ok(self
             .plan(model, ctx)?
             .into_iter()
@@ -329,6 +358,7 @@ impl Router {
         &self,
         edge: &RouteEdge,
         origin_model: &str,
+        root_priority: i32,
         hops_so_far: Vec<NodeId>,
         overlay: Option<String>,
         edges: &[RouteEdge],
@@ -347,12 +377,17 @@ impl Router {
         // upstream_model 沿路径叠加：靠后的 Some 覆盖靠前的
         let overlay = edge.upstream_model.clone().or(overlay);
 
-        if self.upstreams.contains_key(&right) {
+        if self
+            .upstreams
+            .read()
+            .expect("upstreams lock")
+            .contains_key(&right)
+        {
             out.push(PlanItem {
                 candidate: Candidate {
                     upstream_id: right.clone(),
                     upstream_model: overlay.unwrap_or_else(|| origin_model.to_string()),
-                    priority: edge.priority,
+                    priority: root_priority,
                     hops,
                 },
                 on_error: edge.on_error,
@@ -363,11 +398,12 @@ impl Router {
         }
 
         // 别名节点：按 exact left == right 展开（prefix 只在顶层对 model 匹配）
-        let children: Vec<RouteEdge> = edges
+        let mut children: Vec<RouteEdge> = edges
             .iter()
             .filter(|e| e.left == right && e.r#match == MatchMode::Exact)
             .cloned()
             .collect();
+        children.sort_by(edge_order);
         if children.is_empty() {
             dangling.push(right);
             path.pop();
@@ -377,6 +413,7 @@ impl Router {
             self.resolve(
                 child,
                 origin_model,
+                root_priority,
                 hops.clone(),
                 overlay.clone(),
                 edges,
@@ -391,7 +428,7 @@ impl Router {
     /* ── 兼容 / 装配视图 ─────────────────────────────────────── */
 
     /// 兼容包装：取 `select` 第一候选对应的 upstream（旧 1:1 语义）。
-    pub fn route(&self, model: &str) -> Result<&dyn UpstreamAdapter, RouterError> {
+    pub fn route(&self, model: &str) -> Result<std::sync::Arc<dyn UpstreamAdapter>, RouterError> {
         let cands = self.select(model, &RouteCtx::default())?;
         let first = cands
             .into_iter()
@@ -402,8 +439,12 @@ impl Router {
     }
 
     /// 按 id 取已注册上游（handler 逐候选调用）。
-    pub fn upstream(&self, id: &str) -> Option<&dyn UpstreamAdapter> {
-        self.upstreams.get(id).map(|b| b.as_ref())
+    pub fn upstream(&self, id: &str) -> Option<std::sync::Arc<dyn UpstreamAdapter>> {
+        self.upstreams
+            .read()
+            .expect("upstreams lock")
+            .get(id)
+            .cloned()
     }
 
     /// 所有对外可见的 model id（全部边的 left 去重排序；含 prefix 模式）。
@@ -423,8 +464,8 @@ impl Router {
 
     /// 所有上游的 capability 列表（用于 `/v1/models` 端点）。
     pub fn list_capabilities(&self) -> Vec<(String, String, Capabilities)> {
-        let mut v: Vec<(String, String, Capabilities)> = self
-            .upstreams
+        let upstreams = self.upstreams.read().expect("upstreams lock");
+        let mut v: Vec<(String, String, Capabilities)> = upstreams
             .iter()
             .map(|(id, up)| (id.clone(), up.id().to_string(), up.capabilities()))
             .collect();
@@ -472,15 +513,17 @@ impl Router {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   检环（DAG 约束 —— 配置加载时调用）
-   ══════════════════════════════════════════════════════════════════ */
+检环（DAG 约束 —— 配置加载时调用）
+══════════════════════════════════════════════════════════════════ */
 
 /// 对全部边构成的 left→right 有向图做 DFS 三色检环；发现环 →
 /// [`RouterError::Cycle`]（携带环路径）。配置加载时必须调用（contracts/03 §4）。
 pub fn check_acyclic(edges: &[RouteEdge]) -> Result<(), RouterError> {
     let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
     for e in edges {
-        adj.entry(e.left.as_str()).or_default().push(e.right.as_str());
+        adj.entry(e.left.as_str())
+            .or_default()
+            .push(e.right.as_str());
     }
 
     #[derive(Clone, Copy, PartialEq)]
@@ -571,9 +614,7 @@ mod tests {
         })
     }
 
-    fn ups(
-        ids: &[(&str, &'static [QuestionType])],
-    ) -> HashMap<String, Box<dyn UpstreamAdapter>> {
+    fn ups(ids: &[(&str, &'static [QuestionType])]) -> HashMap<String, Box<dyn UpstreamAdapter>> {
         ids.iter()
             .map(|(id, qts)| (id.to_string(), mock(id, *qts)))
             .collect()
@@ -644,7 +685,9 @@ mod tests {
             mapping,
             ups(&[("u-a", &[QuestionType::Choice, QuestionType::Score])]),
         );
-        let err = r.check_capability("m-a", &[QuestionType::Noul]).unwrap_err();
+        let err = r
+            .check_capability("m-a", &[QuestionType::Noul])
+            .unwrap_err();
         assert_eq!(err.http_status(), 422);
     }
 
@@ -720,10 +763,54 @@ mod tests {
         assert_eq!(c[0].upstream_id, "vercel");
         assert_eq!(c[0].hops, vec!["jev-fast", "vercel"]);
         assert_eq!(c[0].upstream_model, "typesafe-ai/jev");
-        assert_eq!(c[0].priority, 10); // 末跳边 priority
+        assert_eq!(c[0].priority, 5); // 入口分支 priority；各层内部顺序由 sibling priority 确定
 
         let plan = r.plan("jev", &RouteCtx::default()).unwrap();
         assert_eq!(plan[0].on_error, OnError::Next); // 末跳边策略
+    }
+
+    #[test]
+    fn multi_hop_priority_is_scoped_to_each_branch_and_not_storage_order() {
+        let edges = vec![
+            edge("jev-fast", "m1", 10),
+            edge("jev-fast", "alias", 7),
+            edge("alias", "m2", 10),
+            edge("alias", "m3", 5),
+        ];
+        let upstreams = ups(&[
+            ("m1", &[QuestionType::Noul]),
+            ("m2", &[QuestionType::Noul]),
+            ("m3", &[QuestionType::Noul]),
+        ]);
+        let mut full = edges;
+        let r = Router::new(
+            full.clone(),
+            ups(&[
+                ("m1", &[QuestionType::Noul]),
+                ("m2", &[QuestionType::Noul]),
+                ("m3", &[QuestionType::Noul]),
+            ]),
+        );
+        let expected = vec!["m3", "m2", "m1"];
+        let got: Vec<_> = r
+            .select("jev-fast", &RouteCtx::default())
+            .unwrap()
+            .into_iter()
+            .map(|c| c.upstream_id)
+            .collect();
+        assert_eq!(got, expected);
+
+        // A DB round-trip or UI serialization that permutes edges must not change
+        // branch priority or equal-priority tie order.
+        full.reverse();
+        let r = Router::new(full, upstreams);
+        let got: Vec<_> = r
+            .select("jev-fast", &RouteCtx::default())
+            .unwrap()
+            .into_iter()
+            .map(|c| c.upstream_id)
+            .collect();
+        assert_eq!(got, expected);
     }
 
     #[test]
@@ -878,11 +965,7 @@ mod tests {
     #[test]
     fn check_acyclic_rejects_cycle_reachable_from_query_start() {
         // 环挂在别名链中间也拒绝
-        let edges = vec![
-            edge("jev", "x", 1),
-            edge("x", "y", 1),
-            edge("y", "x", 1),
-        ];
+        let edges = vec![edge("jev", "x", 1), edge("x", "y", 1), edge("y", "x", 1)];
         assert!(check_acyclic(&edges).is_err());
     }
 

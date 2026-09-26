@@ -66,7 +66,7 @@ export function KeyForm({ onSave, onCancel }: Props) {
             borderRadius: 'var(--radius)',
             color: 'var(--text)',
           }}
-          aria-label="new api key (masked input only, no plaintext reveal)"
+          aria-label={t('key.newKey')}
         />
       </label>
       <button

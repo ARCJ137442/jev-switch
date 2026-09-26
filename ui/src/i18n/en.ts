@@ -3,7 +3,24 @@
  * 键 = 点分命名空间；值可用 {name} 占位符插值。
  * 品牌/HTTP 术语不译：Jev-Switch / Run Jev / POST / GET / qid / key / UNSAVED 机读位见 zh 对应键。
  */
+import { routingEn } from './routing';
+import { playgroundEn } from './playground';
+import { providersEn } from './providers';
+import { languageEn } from './language';
+import { dashboardEn } from './dashboard';
+import { questionEditorEn } from './questionEditor';
+import { accessEn } from './access';
+import { configFileEn } from './configFile';
+
 export const en = {
+  ...routingEn,
+  ...playgroundEn,
+  ...providersEn,
+  ...languageEn,
+  ...dashboardEn,
+  ...questionEditorEn,
+  ...accessEn,
+  ...configFileEn,
   /* common */
   'common.reload': 'Reload',
   'common.overwrite': 'Overwrite',
@@ -133,6 +150,7 @@ export const en = {
   'canvas.noEndpoint': 'no endpoint — drag here to create a same-name endpoint',
   'canvas.pinTitle': 'Pinned endpoint: ({id}) {model} — address × model × token fixed',
   'canvas.passTitle': 'Passthrough endpoint: model = caller input (local/* → local/qwen…)',
+  'canvas.inputModel': '* input model',
 
   /* playground page */
   'pg.heroLead':
@@ -151,7 +169,10 @@ export const en = {
   'tp.output': 'Output',
   'tp.model': 'Model',
   'tp.fromServer': 'from server',
-  'tp.idle': 'idle',
+  'tp.statusIdle': 'idle',
+  'tp.statusLoading': 'loading',
+  'tp.statusOk': 'ok',
+  'tp.statusError': 'error',
   'tp.questionsCount': '{n} question(s)',
   'tp.questionsUnknown': '? questions',
   'tp.running': 'Running…',
@@ -225,6 +246,7 @@ export const en = {
   'dash.uptimePrefix': 'uptime',
   'dash.localMode': 'local mode',
   'dash.cloudMode': 'cloud mode',
+  'dash.modeLabel': '{mode} mode',
   'dash.switchTo': 'Switch to {mode}',
   'dash.switching': '…',
   'dash.switchBtn': 'Switch →',

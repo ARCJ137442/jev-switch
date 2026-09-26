@@ -1,4 +1,4 @@
-﻿//! Jev 协议内核类型（P0-3 按 `docs/contracts/01-协议契约.md` 对齐）
+//! Jev 协议内核类型（P0-3 按 `docs/contracts/01-协议契约.md` 对齐）
 //!
 //! 真值基准：TypeSafe `/v1/systemone` + `jev-life/src/shared/types.ts`。
 //! 分层铁律（contracts/01 红线）：厂商方言**不得**进入本 crate —— 方言只活在
@@ -23,8 +23,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
 
 /* ══════════════════════════════════════════════════════════════════
-   判别值
-   ══════════════════════════════════════════════════════════════════ */
+判别值
+══════════════════════════════════════════════════════════════════ */
 
 /// 问题类型枚举（capability / `/v1/models` 广告用）。
 ///
@@ -63,8 +63,8 @@ pub enum NoulKind {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   请求
-   ══════════════════════════════════════════════════════════════════ */
+请求
+══════════════════════════════════════════════════════════════════ */
 
 /// Jev 决策请求（contracts/01 §2）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -108,9 +108,18 @@ pub type SystemOneRequest = JevRequest;
 )]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Question {
-    Choice { instructions: String, criteria: Criteria },
-    Score { instructions: String, criteria: Criteria },
-    Noul { instructions: String, criteria: Criteria },
+    Choice {
+        instructions: String,
+        criteria: Criteria,
+    },
+    Score {
+        instructions: String,
+        criteria: Criteria,
+    },
+    Noul {
+        instructions: String,
+        criteria: Criteria,
+    },
 }
 
 impl Question {
@@ -269,7 +278,10 @@ impl<'de> Deserialize<'de> for Question {
                 let arr = match criteria_val {
                     serde_json::Value::Array(a) => a,
                     other => {
-                        return custom_err(format!("expected array, received {}", json_kind(other)));
+                        return custom_err(format!(
+                            "expected array, received {}",
+                            json_kind(other)
+                        ));
                     }
                 };
                 let mut out = Vec::with_capacity(arr.len());
@@ -334,8 +346,8 @@ impl<'de> Deserialize<'de> for Question {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   响应
-   ══════════════════════════════════════════════════════════════════ */
+响应
+══════════════════════════════════════════════════════════════════ */
 
 /// 单个问题的答案 —— 判别联合（contracts/01 §4）。
 ///
@@ -491,10 +503,18 @@ impl Serialize for Answer {
 )]
 pub struct Usage {
     // ts-rs：u64 默认映射 bigint；wire 是 JSON number —— 覆盖对齐运行时
-    #[serde(default, alias = "inputTokens", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        alias = "inputTokens",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub input_tokens: Option<u64>,
-    #[serde(default, alias = "outputTokens", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        alias = "outputTokens",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub output_tokens: Option<u64>,
     #[serde(
@@ -525,10 +545,7 @@ pub struct JevResponse {
     pub usage: Option<Usage>,
     /// 工具循环/重试/多候选实发次数；**读缺省按 1**（显式 null → None）。
     /// 双拼写宽容：别名 `upstreamCalls`（jev-life 驼峰）。
-    #[serde(
-        default = "default_upstream_calls",
-        alias = "upstreamCalls"
-    )]
+    #[serde(default = "default_upstream_calls", alias = "upstreamCalls")]
     pub upstream_calls: Option<u32>,
     /// 双拼写宽容读入；写出 snake_case。null ≠ 0。
     /// （ts-rs：u64 默认 → bigint，wire 是 JSON number —— 覆盖对齐运行时）
@@ -572,10 +589,7 @@ mod tests {
         assert_eq!(req.model, "laya-english");
         let q = req.questions.get("q").unwrap();
         assert_eq!(q.question_type_str(), "noul");
-        assert_eq!(
-            q.instructions(),
-            "is this a greeting?"
-        );
+        assert_eq!(q.instructions(), "is this a greeting?");
         // 上下文校验：noul → Bool 形态（而非 untagged 的 Map）
         assert_eq!(
             q.criteria(),
@@ -675,8 +689,7 @@ mod tests {
         }"#;
         let err = serde_json::from_str::<JevRequest>(noul_arr).unwrap_err();
         assert!(
-            err.to_string()
-                .contains("expected record, received array"),
+            err.to_string().contains("expected record, received array"),
             "unexpected: {err}"
         );
 
@@ -687,8 +700,7 @@ mod tests {
         }"#;
         let err = serde_json::from_str::<JevRequest>(choice_arr).unwrap_err();
         assert!(
-            err.to_string()
-                .contains("expected record, received array"),
+            err.to_string().contains("expected record, received array"),
             "unexpected: {err}"
         );
 
@@ -699,8 +711,7 @@ mod tests {
         }"#;
         let err = serde_json::from_str::<JevRequest>(score_rec).unwrap_err();
         assert!(
-            err.to_string()
-                .contains("expected array, received record"),
+            err.to_string().contains("expected array, received record"),
             "unexpected: {err}"
         );
 
@@ -793,7 +804,8 @@ mod tests {
     #[test]
     fn choice_answer_three_required_fields() {
         // §8 #3：choice 三字段必填
-        let ok = r#"{"type":"choice","choice":"A","probabilities":{"A":0.7,"B":0.3},"confidence":0.7}"#;
+        let ok =
+            r#"{"type":"choice","choice":"A","probabilities":{"A":0.7,"B":0.3},"confidence":0.7}"#;
         let a: Answer = serde_json::from_str(ok).unwrap();
         match &a {
             Answer::Choice {
@@ -808,8 +820,7 @@ mod tests {
             other => panic!("unexpected: {other:?}"),
         }
 
-        let missing_confidence =
-            r#"{"type":"choice","choice":"A","probabilities":{"A":1.0}}"#;
+        let missing_confidence = r#"{"type":"choice","choice":"A","probabilities":{"A":1.0}}"#;
         assert!(serde_json::from_str::<Answer>(missing_confidence).is_err());
 
         let missing_probs = r#"{"type":"choice","choice":"A","confidence":0.5}"#;
@@ -819,9 +830,10 @@ mod tests {
     #[test]
     fn score_answer_score_is_f64() {
         // §8 #3：score.score 为 f64（整数字面量也接受）
-        let a: Answer =
-            serde_json::from_str(r#"{"type":"score","score":1,"probabilities":{"1":1.0},"confidence":1.0}"#)
-                .unwrap();
+        let a: Answer = serde_json::from_str(
+            r#"{"type":"score","score":1,"probabilities":{"1":1.0},"confidence":1.0}"#,
+        )
+        .unwrap();
         match a {
             Answer::Score { score, .. } => assert_eq!(score, 1.0),
             other => panic!("unexpected: {other:?}"),
@@ -869,8 +881,8 @@ mod tests {
         assert_eq!(v.upstream_calls, Some(1));
 
         // 显式 null → None（区别于缺省）
-        let v: JevResponse = serde_json::from_str(r#"{"answers":{},"upstream_calls":null}"#)
-            .unwrap();
+        let v: JevResponse =
+            serde_json::from_str(r#"{"answers":{},"upstream_calls":null}"#).unwrap();
         assert_eq!(v.upstream_calls, None);
 
         // 双拼写（jev-life 驼峰）
@@ -881,8 +893,7 @@ mod tests {
     #[test]
     fn response_cost_usd_null_is_not_zero() {
         // §5：cost_usd null ≠ 0 —— 未知就是 null
-        let v: JevResponse =
-            serde_json::from_str(r#"{"answers":{},"cost_usd":null}"#).unwrap();
+        let v: JevResponse = serde_json::from_str(r#"{"answers":{},"cost_usd":null}"#).unwrap();
         assert_eq!(v.cost_usd, None);
 
         let v: JevResponse = serde_json::from_str(r#"{"answers":{},"cost_usd":0.0}"#).unwrap();
@@ -918,10 +929,7 @@ mod tests {
             v.extra.get("providerMetadata"),
             Some(&serde_json::json!({"src": "vercel"}))
         );
-        assert_eq!(
-            v.extra.get("upstream"),
-            Some(&serde_json::json!("vercel"))
-        );
+        assert_eq!(v.extra.get("upstream"), Some(&serde_json::json!("vercel")));
         let back = serde_json::to_value(&v).unwrap();
         assert_eq!(back["providerMetadata"]["src"], "vercel");
         assert_eq!(back["upstream"], "vercel");
@@ -930,18 +938,16 @@ mod tests {
     #[test]
     fn usage_dual_spelling_read_snake_write() {
         // §5：双拼写宽容读入、写出 snake_case
-        let camel: Usage = serde_json::from_str(
-            r#"{"inputTokens":10,"outputTokens":20,"reasoningTokens":5}"#,
-        )
-        .unwrap();
+        let camel: Usage =
+            serde_json::from_str(r#"{"inputTokens":10,"outputTokens":20,"reasoningTokens":5}"#)
+                .unwrap();
         assert_eq!(camel.input_tokens, Some(10));
         assert_eq!(camel.output_tokens, Some(20));
         assert_eq!(camel.reasoning_tokens, Some(5));
 
-        let snake: Usage = serde_json::from_str(
-            r#"{"input_tokens":10,"output_tokens":20,"reasoning_tokens":5}"#,
-        )
-        .unwrap();
+        let snake: Usage =
+            serde_json::from_str(r#"{"input_tokens":10,"output_tokens":20,"reasoning_tokens":5}"#)
+                .unwrap();
         assert_eq!(snake, camel);
 
         let out = serde_json::to_value(&snake).unwrap();

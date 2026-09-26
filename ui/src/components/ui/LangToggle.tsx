@@ -1,19 +1,13 @@
 import { Globe } from 'lucide-react';
-import { useI18n } from '../../i18n';
+import { useI18n, type MessageKey } from '../../i18n';
+import { supportedLanguages } from '../../i18n/languages';
 
-/**
- * 语言切换钮（块 3 建，块 5 抽共享组件）——
- * Shell 顶栏第二行 + 首页操作区两处同源渲染；
- * I18nProvider 状态驱动，多实例自动同步；显示当前语言，点击对切。
- */
+/** Locale selector generated from the registry of complete translations. */
 export function LangToggle() {
-  const { lang, toggleLang, t } = useI18n();
+  const { lang, setLang, t } = useI18n();
   return (
-    <button
-      type="button"
-      onClick={toggleLang}
-      aria-label={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
-      className="inline-flex h-8 min-w-8 items-center justify-center gap-1.5 px-2 transition-colors"
+    <label
+      className="inline-flex h-8 items-center gap-1.5 px-2 transition-colors"
       style={{
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
@@ -22,10 +16,22 @@ export function LangToggle() {
         fontSize: 'var(--text-sm)',
         fontWeight: 500,
       }}
-      title={lang === 'en' ? t('shell.langToZh') : t('shell.langToEn')}
     >
-      <Globe size={14} strokeWidth={2} />
-      <span>{lang === 'en' ? 'EN' : '中'}</span>
-    </button>
+      <Globe size={14} strokeWidth={2} aria-hidden="true" />
+      <span className="sr-only">{t('locale.language' as MessageKey)}</span>
+      <select
+        aria-label={t('locale.language' as MessageKey)}
+        value={lang}
+        onChange={(event) => setLang(event.currentTarget.value as typeof lang)}
+        className="cursor-pointer bg-transparent outline-none"
+        style={{ color: 'inherit', font: 'inherit' }}
+      >
+        {supportedLanguages.map((language) => (
+          <option key={language.code} value={language.code}>
+            {language.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

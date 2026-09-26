@@ -35,8 +35,8 @@ const FAKE_TOK: &str = "tok-test-rebind-aaaa";
 const FAKE_PW: &str = "pw-test-rebind-1";
 
 /* ══════════════════════════════════════════════════════════════════
-   夹具
-   ══════════════════════════════════════════════════════════════════ */
+夹具
+══════════════════════════════════════════════════════════════════ */
 
 fn temp_config(name: &str, content: &str) -> PathBuf {
     static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -178,7 +178,10 @@ async fn http_post(
 async fn assert_refused(base: &str, path: &str, what: &str) {
     match http_get(base, path, None).await {
         Ok((s, b)) => panic!("{what}: 期望连接拒绝，却拿到 {s}: {b}"),
-        Err(e) => assert!(e.contains("error"), "{what}: 期望 transport error，得到 {e}"),
+        Err(e) => assert!(
+            e.contains("error"),
+            "{what}: 期望 transport error，得到 {e}"
+        ),
     }
 }
 
@@ -226,8 +229,8 @@ fn same_port_pair(port: u16) -> PairDefaults {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ① local 态非 loopback peer → 403（显式 bind 兜底 —— 方案二残留保护）
-   ══════════════════════════════════════════════════════════════════ */
+① local 态非 loopback peer → 403（显式 bind 兜底 —— 方案二残留保护）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn local_mode_non_loopback_peer_is_403_over_real_tcp() {
@@ -258,12 +261,20 @@ async fn local_mode_non_loopback_peer_is_403_over_real_tcp() {
     let v: serde_json::Value = serde_json::from_str(&b).unwrap();
     let obj = v.as_object().expect("403 是对象");
     assert_eq!(obj.len(), 3, "错误体恰三键: {b}");
-    assert!(v["error"].as_str().unwrap().contains("local mode: loopback only"), "{b}");
+    assert!(
+        v["error"]
+            .as_str()
+            .unwrap()
+            .contains("local mode: loopback only"),
+        "{b}"
+    );
     assert_eq!(v["upstream"], serde_json::Value::Null, "{b}");
     assert_eq!(v["retryable"], false, "{b}");
 
     // admin 域同样 403（peer 兜底先于一切）
-    let (s, b) = http_get(&lan_base, "/v1/admin/providers", None).await.unwrap();
+    let (s, b) = http_get(&lan_base, "/v1/admin/providers", None)
+        .await
+        .unwrap();
     assert_eq!(s, 403, "admin LAN 也要 403: {b}");
     // health 探活不受 peer 限制（公开门）
     let (s, b) = http_get(&lan_base, "/health", None).await.unwrap();
@@ -284,7 +295,10 @@ async fn local_mode_non_loopback_peer_is_403_over_real_tcp() {
     assert_eq!(v["rebind"]["skipped"], "explicit bind", "{b}");
     assert_eq!(handle.bound(), before, "显式 bind 地址不动");
     let on_disk = std::fs::read_to_string(&path).unwrap();
-    assert!(on_disk.contains("bind = "), "显式 bind 应在配置中: {on_disk}");
+    assert!(
+        on_disk.contains("bind = "),
+        "显式 bind 应在配置中: {on_disk}"
+    );
     cleanup(&path);
 }
 
@@ -295,8 +309,8 @@ fn standard_plan_addr() -> PairDefaults {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ② PUT /listen 热 Rebind：旧端口 refused、新端口 200、auto 改回、bind 落盘
-   ══════════════════════════════════════════════════════════════════ */
+② PUT /listen 热 Rebind：旧端口 refused、新端口 200、auto 改回、bind 落盘
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn put_listen_hot_rebind_moves_port_without_restart() {
@@ -350,7 +364,11 @@ async fn put_listen_hot_rebind_moves_port_without_restart() {
     let (s, b) = http_get(&base_b, "/v1/admin/status", None).await.unwrap();
     assert_eq!(s, 200, "{b}");
     let v: serde_json::Value = serde_json::from_str(&b).unwrap();
-    assert_eq!(v["bind"], format!("127.0.0.1:{port_b}"), "status.bind 实时: {b}");
+    assert_eq!(
+        v["bind"],
+        format!("127.0.0.1:{port_b}"),
+        "status.bind 实时: {b}"
+    );
     assert_eq!(v["bind_explicit"], true, "PUT listen 显式化后: {b}");
     assert_eq!(v["mode"], "local", "{b}");
     // bind 显式落盘
@@ -374,7 +392,10 @@ async fn put_listen_hot_rebind_moves_port_without_restart() {
     let (s, b) = http_get(&base_a, "/health", None).await.unwrap();
     assert_eq!(s, 200, "auto 改回 A: {b}");
     let on_disk = std::fs::read_to_string(&path).unwrap();
-    assert!(!on_disk.contains("bind = "), "auto 应移除 bind 键: {on_disk}");
+    assert!(
+        !on_disk.contains("bind = "),
+        "auto 应移除 bind 键: {on_disk}"
+    );
     assert!(!handle.is_explicit(), "auto 后回到非显式");
     // status 回到 A + 显式标志复位
     let (s, b) = http_get(&base_a, "/v1/admin/status", None).await.unwrap();
@@ -386,8 +407,8 @@ async fn put_listen_hot_rebind_moves_port_without_restart() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ③ mode 翻转联动 Rebind（同端口成对默认 —— 阶段 2 优雅交接）+ 即时鉴权翻转
-   ══════════════════════════════════════════════════════════════════ */
+③ mode 翻转联动 Rebind（同端口成对默认 —— 阶段 2 优雅交接）+ 即时鉴权翻转
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn mode_flip_triggers_rebind_and_instant_auth_flip_real_tcp() {
@@ -437,7 +458,9 @@ async fn mode_flip_triggers_rebind_and_instant_auth_flip_real_tcp() {
     // 同请求即时翻转：loopback 无 token 401 / 带 token 200
     let (s, b) = http_get(&loop_base, "/v1/models", None).await.unwrap();
     assert_eq!(s, 401, "切后 401: {b}");
-    let (s, b) = http_get(&loop_base, "/v1/models", Some(FAKE_TOK)).await.unwrap();
+    let (s, b) = http_get(&loop_base, "/v1/models", Some(FAKE_TOK))
+        .await
+        .unwrap();
     assert_eq!(s, 200, "{b}");
 
     // cloud → local：需 admin 会话（防匿名拆锁）
@@ -490,8 +513,8 @@ async fn mode_flip_triggers_rebind_and_instant_auth_flip_real_tcp() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ④ try-bind 失败保旧：占用目标端口 → 500 + 旧端口继续服务 + 文件不写
-   ══════════════════════════════════════════════════════════════════ */
+④ try-bind 失败保旧：占用目标端口 → 500 + 旧端口继续服务 + 文件不写
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn try_bind_failure_keeps_old_listener_and_config() {
@@ -522,7 +545,10 @@ async fn try_bind_failure_keeps_old_listener_and_config() {
     .unwrap();
     assert_eq!(s, 500, "try-bind 失败 → 500（带病不上线）: {b}");
     let v: serde_json::Value = serde_json::from_str(&b).unwrap();
-    assert!(v["error"].as_str().unwrap().contains("rebind failed"), "{b}");
+    assert!(
+        v["error"].as_str().unwrap().contains("rebind failed"),
+        "{b}"
+    );
     assert_eq!(v.as_object().unwrap().len(), 3, "错误体三键: {b}");
 
     // 旧端口继续服务（一字未动）；文件未写 bind
@@ -549,12 +575,53 @@ async fn try_bind_failure_keeps_old_listener_and_config() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ⑤ 在途请求不中断：慢上游请求中途 Rebind → 仍 200 完成
-   ══════════════════════════════════════════════════════════════════ */
+⑤ 在途请求不中断：慢上游请求中途 Rebind → 仍 200 完成
+══════════════════════════════════════════════════════════════════ */
 
-/// 慢 fake 上游（sleep 600ms 后标准成功响应）。
+#[tokio::test]
+async fn overlapping_bind_failure_restores_old_listener_promptly() {
+    let port = ephemeral_port();
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let plan = ListenPlan {
+        addr,
+        explicit: false,
+        defaults: same_port_pair(port),
+    };
+    let (_state, handle, path) = start_server("overlap-restore", &local_cfg(), plan).await;
+    let before = std::fs::read_to_string(&path).unwrap();
+    // 文档保留地址未配置为本机接口。旧 wildcard 与目标同端口属于重叠域，
+    // 但释放旧 listener 仍不能使目标地址有效，必须走恢复旧地址的路径。
+    // 不依赖 Windows/Linux 对 wildcard 与具体 IP 端口共享规则相同。
+    let unavailable = format!("192.0.2.1:{port}");
+    assert!(
+        std::net::TcpListener::bind(&unavailable).is_err(),
+        "test address must not be assigned locally"
+    );
+    let base = format!("http://127.0.0.1:{port}");
+    let (status, body) = tokio::time::timeout(
+        Duration::from_secs(2),
+        http_put(
+            &base,
+            "/v1/admin/listen",
+            serde_json::json!({"addr":unavailable}),
+            None,
+        ),
+    )
+    .await
+    .expect("failed handoff must restore and reply without waiting for this request")
+    .unwrap();
+    assert_eq!(status, 500, "{body}");
+    assert_eq!(handle.bound(), addr);
+    assert_eq!(http_get(&base, "/health", None).await.unwrap().0, 200);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+    handle.shutdown().await.unwrap();
+    cleanup(&path);
+}
+
+/// 由测试显式放行的上游，证明 rebind 返回时原请求仍然在途。
 struct SlowFake {
-    delay: Duration,
+    entered: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
 }
 
 #[async_trait::async_trait]
@@ -572,7 +639,8 @@ impl UpstreamAdapter for SlowFake {
         }
     }
     async fn evaluate(&self, _req: JevRequest) -> Result<JevResponse, JevError> {
-        tokio::time::sleep(self.delay).await;
+        self.entered.notify_one();
+        self.release.notified().await;
         serde_json::from_str(r#"{"answers":{}}"#).map_err(|e| JevError::BadResponse {
             upstream_id: "slow".into(),
             message: e.to_string(),
@@ -595,8 +663,11 @@ async fn in_flight_request_survives_rebind() {
         sticky: Default::default(),
         on_error: Default::default(),
     }]);
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
     reg.register(Box::new(SlowFake {
-        delay: Duration::from_millis(600),
+        entered: entered.clone(),
+        release: release.clone(),
     }));
 
     let plan = ListenPlan {
@@ -607,12 +678,24 @@ async fn in_flight_request_survives_rebind() {
             cloud: addr_a,
         },
     };
-    let (_state, _handle, path) =
+    let (state, handle, path) =
         start_server_with_registry("inflight", reg, &local_cfg(), plan).await;
+    // `/v1/systemone` now serves only configured public endpoints. This TCP
+    // lifecycle test owns the fake `jev` endpoint, so seed it explicitly.
+    {
+        let conn = state.db_conn.lock().unwrap();
+        jev_switch_daemon::db::endpoints::create(&conn, "jev", "follow_global", true).unwrap();
+        state.service_endpoints.write().unwrap().insert(
+            "jev".into(),
+            jev_switch_daemon::db::endpoints::get_by_id(&conn, "jev")
+                .unwrap()
+                .unwrap(),
+        );
+    }
     let base_a = format!("http://127.0.0.1:{port_a}");
     let base_b = format!("http://127.0.0.1:{port_b}");
 
-    // 发一个要跑 ~600ms 的 systemone
+    // 发一个显式暂停在上游的 systemone。
     let body = serde_json::json!({
         "model": "jev",
         "state": "hi",
@@ -625,17 +708,29 @@ async fn in_flight_request_survives_rebind() {
         async move { http_post(&base, "/v1/systemone", body).await }
     });
 
-    // 请求在途（150ms 后）执行 Rebind —— 旧 serve 停 accept 但必须等在途收尾
-    tokio::time::sleep(Duration::from_millis(150)).await;
-    let (s, b) = http_put(
-        &base_a,
-        "/v1/admin/listen",
-        serde_json::json!({"addr": format!("127.0.0.1:{port_b}")}),
-        None,
+    tokio::time::timeout(Duration::from_secs(2), entered.notified())
+        .await
+        .expect("request reached upstream");
+    // 切换不应等待这个请求，更不能等待切换请求自己退出旧服务。
+    let (s, b) = tokio::time::timeout(
+        Duration::from_secs(2),
+        http_put(
+            &base_a,
+            "/v1/admin/listen",
+            serde_json::json!({"addr": format!("127.0.0.1:{port_b}")}),
+            None,
+        ),
     )
     .await
+    .expect("rebind response must not wait for old connections to drain")
     .unwrap();
     assert_eq!(s, 200, "rebind 本身成功: {b}");
+    assert!(
+        !in_flight.is_finished(),
+        "old upstream request must still be running"
+    );
+    assert_refused(&base_a, "/health", "旧监听已停止接收").await;
+    release.notify_one();
 
     // 在途请求仍 200 完成（不因换监听被掐）
     let result = in_flight.await.expect("join in-flight").expect("transport");
@@ -644,12 +739,124 @@ async fn in_flight_request_survives_rebind() {
     // 新端口接管
     let (s, b) = http_get(&base_b, "/health", None).await.unwrap();
     assert_eq!(s, 200, "rebind 后新端口: {b}");
+    handle.shutdown().await.unwrap();
     cleanup(&path);
 }
 
+#[tokio::test]
+async fn same_port_mode_handoff_responds_before_drain_timeout() {
+    let port = ephemeral_port();
+    let pair = same_port_pair(port);
+    let plan = ListenPlan {
+        addr: pair.local,
+        explicit: false,
+        defaults: pair,
+    };
+    let (_state, handle, path) = start_server("prompt-mode", &local_with_pw_cfg(), plan).await;
+    let base = format!("http://127.0.0.1:{port}");
+    let (status, body) = tokio::time::timeout(
+        Duration::from_secs(2),
+        http_put(
+            &base,
+            "/v1/admin/mode",
+            serde_json::json!({"mode":"cloud"}),
+            None,
+        ),
+    )
+    .await
+    .expect("same-port mode switch must acknowledge the released listener promptly")
+    .unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(handle.bound(), pair.cloud);
+    assert_eq!(http_get(&base, "/v1/models", None).await.unwrap().0, 401);
+    handle.shutdown().await.unwrap();
+    cleanup(&path);
+}
+
+#[tokio::test]
+async fn retired_listener_cancels_unfinished_stream_at_drain_deadline() {
+    use axum::{
+        response::sse::{Event, Sse},
+        routing::get,
+        Router,
+    };
+    use std::convert::Infallible;
+    struct DropSignal(Arc<tokio::sync::Notify>);
+    impl Drop for DropSignal {
+        fn drop(&mut self) {
+            self.0.notify_one();
+        }
+    }
+
+    let dropped = Arc::new(tokio::sync::Notify::new());
+    let app = Router::new().route(
+        "/stream",
+        get({
+            let dropped = dropped.clone();
+            move || {
+                let guard = DropSignal(dropped.clone());
+                async move {
+                    let stream = futures_util::stream::unfold(
+                        (guard, false),
+                        |(guard, started)| async move {
+                            if started {
+                                std::future::pending::<()>().await;
+                            }
+                            Some((
+                                Ok::<_, Infallible>(Event::default().data("open")),
+                                (guard, true),
+                            ))
+                        },
+                    );
+                    Sse::new(stream)
+                }
+            }
+        }),
+    );
+    let addr = "127.0.0.1:0".parse().unwrap();
+    let slot = Arc::new(std::sync::OnceLock::new());
+    let handle = listen::start(
+        app,
+        ListenPlan {
+            addr,
+            explicit: false,
+            defaults: PairDefaults {
+                local: addr,
+                cloud: addr,
+            },
+        },
+        &slot,
+    )
+    .await
+    .unwrap();
+    let mut response = reqwest::get(format!("http://{}/stream", handle.bound()))
+        .await
+        .unwrap();
+    assert!(response
+        .chunk()
+        .await
+        .unwrap()
+        .unwrap()
+        .starts_with(b"data: open"));
+    let previous = handle.bound();
+    handle.rebind(addr).await.unwrap();
+    assert_ne!(handle.bound(), previous);
+    assert!(tokio::net::TcpStream::connect(previous).await.is_err());
+
+    // 在真实连接建立与换端口后推进虚拟时钟，不实际等待十秒。
+    tokio::time::pause();
+    tokio::time::advance(listen::DRAIN_TIMEOUT + Duration::from_millis(1)).await;
+    tokio::time::timeout(Duration::from_secs(1), dropped.notified())
+        .await
+        .expect("retired connection body must be dropped at the deadline");
+    tokio::time::resume();
+    drop(response);
+    handle.shutdown().await.unwrap();
+}
+
 /* ══════════════════════════════════════════════════════════════════
-   ⑥ PUT /password 真实 TCP 矩阵（cloud：会话 / LAN 无会话 / loopback 无会话）
-   ══════════════════════════════════════════════════════════════════ */
+⑥ PUT /password 真实 TCP 矩阵（cloud：会话 / LAN 无会话 / loopback 无会话）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn put_password_real_tcp_auth_matrix() {
@@ -774,8 +981,8 @@ enabled = true
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ⑦ oneshot 基座冒烟（listen 槽缺失路径：PUT listen → 503）
-   ══════════════════════════════════════════════════════════════════ */
+⑦ oneshot 基座冒烟（listen 槽缺失路径：PUT listen → 503）
+══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
 async fn put_listen_without_supervisor_is_503() {

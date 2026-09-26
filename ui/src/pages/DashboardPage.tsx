@@ -1,36 +1,37 @@
 import { useEffect, useState } from 'react';
 import {
+  AdminApiError,
   getStatus,
   listProviders,
   listRoutes,
   probeProvider,
-  putMode,
   type AdminProvider,
   type AdminStatus,
   type Route,
 } from '../api/admin';
 import { useServerStatus } from '../app/Shell';
-import { useToast } from '../app/feedback';
-import { useI18n } from '../i18n';
+import { useI18n, type MessageKey } from '../i18n';
+import { InstanceSettings } from '../components/settings/InstanceSettings';
+import { AccessDashboard } from '../components/access/AccessDashboard';
+import { useAuth } from '../auth/AuthContext';
 
 /**
  * Dashboard（v2.0 · 设计稿 docs/design/UI-REDESIGN-v2.md §2）
  *
  * 取代旧 HomePage 的「配置页」定位，改为控制台仪表盘：
- * ① 状态速览 —— daemon / mode+bind / providers 健康 / routes 摘要，图形优先
- * ② 就地操作 —— mode 一键切（无二次确认框）、健康自动探测
+ * ① 状态速览 —— daemon / mode+bind / providers 可达性 / routes 摘要，图形优先
+ * ② 就地操作 —— 实例设置在本页折叠展开；探测仅表示可达性
  * ③ 活动流水 —— 最近请求（后端 /v1/admin/logs 未落地前为占位空态）
  *
  * 数据源均为真实接口：getStatus / listProviders / listRoutes / probeProvider。
  */
 
-type Health = 'ok' | 'slow' | 'fail' | 'off' | 'unknown';
+type Reachability = 'reachable' | 'unreachable' | 'disabled' | 'unknown';
 
-const HEALTH_COLOR: Record<Health, string> = {
-  ok: 'var(--success)',
-  slow: 'var(--warning)',
-  fail: 'var(--danger)',
-  off: 'var(--text-subtle)',
+const REACHABILITY_COLOR: Record<Reachability, string> = {
+  reachable: 'var(--success)',
+  unreachable: 'var(--danger)',
+  disabled: 'var(--text-subtle)',
   unknown: 'var(--text-subtle)',
 };
 
@@ -45,17 +46,28 @@ function fmtUptime(sec: number): string {
 
 export function DashboardPage() {
   const { t } = useI18n();
-  const { toast } = useToast();
+  const auth = useAuth();
   const server = useServerStatus();
 
   const [status, setStatus] = useState<AdminStatus | null>(null);
   const [providers, setProviders] = useState<AdminProvider[] | null>(null);
   const [routes, setRoutes] = useState<Route[] | null>(null);
-  const [health, setHealth] = useState<Record<string, { state: Health; ms: number | null }>>({});
-  const [switching, setSwitching] = useState(false);
+  const [health, setHealth] = useState<Record<string, { state: Reachability; ms: number | null }>>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [loadError, setLoadError] = useState<'auth' | 'failed' | null>(null);
+  const [refresh, setRefresh] = useState(0);
+  const copy = (key: string, vars?: Record<string, string | number>) => t(key as MessageKey, vars);
 
   /* 初始加载 —— 首次挂载时拉取所有数据 */
   useEffect(() => {
+    setStatus(null);
+    setProviders(null);
+    setRoutes(null);
+    setHealth({});
+    setLoadError(null);
+    if (auth.isReadOnly) {
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -72,15 +84,16 @@ export function DashboardPage() {
       } catch (err) {
         if (!cancelled) {
           setStatus(null);
-          setProviders([]);
-          setRoutes([]);
+          setProviders(null);
+          setRoutes(null);
+          setLoadError(err instanceof AdminApiError && (err.status === 401 || err.status === 403) ? 'auth' : 'failed');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [auth.identity, auth.isReadOnly, refresh]);
 
   /* 健康自动探测 —— 不再要求用户手点 Probe（审查报告 §功能盲区） */
   useEffect(() => {
@@ -90,7 +103,7 @@ export function DashboardPage() {
       for (const p of providers) {
         if (cancelled) return;
         if (!p.enabled) {
-          setHealth((h) => ({ ...h, [p.id]: { state: 'off', ms: null } }));
+          setHealth((h) => ({ ...h, [p.id]: { state: 'disabled', ms: null } }));
           continue;
         }
         try {
@@ -99,12 +112,12 @@ export function DashboardPage() {
           setHealth((h) => ({
             ...h,
             [p.id]: {
-              state: !r.ok ? 'fail' : r.latency_ms >= 1000 ? 'slow' : 'ok',
+              state: r.ok ? 'reachable' : 'unreachable',
               ms: r.latency_ms,
             },
           }));
         } catch {
-          if (!cancelled) setHealth((h) => ({ ...h, [p.id]: { state: 'fail', ms: null } }));
+          if (!cancelled) setHealth((h) => ({ ...h, [p.id]: { state: 'unknown', ms: null } }));
         }
       }
     };
@@ -116,32 +129,9 @@ export function DashboardPage() {
     };
   }, [providers]);
 
-  /* mode 一键切：无二次确认框（设计原则 P1·就地操作） */
-  const switchMode = async () => {
-    if (!status || switching) return;
-    const next = status.mode === 'local' ? 'cloud' : 'local';
-    setSwitching(true);
-    try {
-      const res = await putMode({ mode: next, admin_password: null });
-      const rb = res.rebind;
-      toast(
-        'ok',
-        'skipped' in rb
-          ? `mode → ${res.mode} · rebind skipped: ${rb.skipped}`
-          : `mode → ${res.mode} · ${rb.from} → ${rb.to}`,
-      );
-      const st = await getStatus();
-      setStatus(st.status);
-    } catch (e) {
-      toast('danger', (e as Error).message);
-    } finally {
-      setSwitching(false);
-    }
-  };
-
   const daemonUp = server.status === 'ok';
   const totalCount = providers?.length ?? 0;
-  const okCount = Object.values(health).filter((h) => h.state === 'ok').length;
+  const reachableCount = Object.values(health).filter((h) => h.state === 'reachable').length;
   const prefixCount = routes?.filter((r) => r.match === 'prefix').length ?? 0;
   const exactCount = routes?.filter((r) => r.match === 'exact').length ?? 0;
 
@@ -163,16 +153,34 @@ export function DashboardPage() {
     padding: '0.5rem 0.875rem',
   };
 
+  if (auth.isReadOnly) {
+    return (
+      <div className="page-container dashboard-container mx-auto">
+        <h1 className="mb-6 font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
+          {t('shell.navDashboard')}
+        </h1>
+        <AccessDashboard />
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="page-container dashboard-container mx-auto">
       <h1 className="mb-6 font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
         {t('shell.navDashboard')}
       </h1>
 
+      {loadError && (
+        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3" style={{ ...card, color: 'var(--text-muted)' }}>
+          <span>{copy(loadError === 'auth' ? 'overview.authRequired' : 'overview.loadFailed')}</span>
+          <button type="button" style={btn} onClick={() => setRefresh((value) => value + 1)}>{copy('overview.retry')}</button>
+        </div>
+      )}
+
       {/* ① 状态速览 */}
-      <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid gap-3 sm:mb-6 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         {/* daemon */}
-        <section className="fade-in p-5" style={card}>
+        <section className="fade-in p-4 sm:p-5" style={card}>
           <div className="mb-2 flex items-center gap-2.5">
             <span
               className={daemonUp ? '' : 'status-danger'}
@@ -194,24 +202,14 @@ export function DashboardPage() {
           </div>
         </section>
 
-        {/* mode + bind：一键切 */}
-        <section className="fade-in p-5" style={card}>
+        {/* mode + bind：设置在 Dashboard 内部展开，避免跳出当前概览 */}
+        <section className="fade-in p-4 sm:p-5" style={card}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="font-semibold capitalize" style={{ fontSize: 'var(--text-lg)' }}>
-              {status?.mode ?? '—'} mode
+              {status?.mode ? t('dash.modeLabel', { mode: status.mode }) : '—'}
             </span>
-            <button
-              type="button"
-              onClick={() => void switchMode()}
-              disabled={switching || status === null}
-              style={{ ...btn, color: 'var(--accent)', padding: '0.3rem 0.6rem' }}
-              title={
-                status
-                  ? t('dash.switchTo', { mode: status.mode === 'local' ? 'cloud' : 'local' })
-                  : undefined
-              }
-            >
-              {switching ? t('dash.switching') : t('dash.switchBtn')}
+            <button type="button" onClick={() => setSettingsOpen(true)} style={{ ...btn, color: 'var(--accent)', padding: '0.3rem 0.6rem' }}>
+              {copy('instance.manage')}
             </button>
           </div>
           <div style={{ ...cardLabel, fontFamily: 'var(--font-mono)' }} className="tabular">
@@ -224,8 +222,8 @@ export function DashboardPage() {
           )}
         </section>
 
-        {/* providers 健康 */}
-        <a href="#/providers" className="fade-in card-hover block p-5" style={card}>
+        {/* provider 连通性探测（不是推理健康检查） */}
+        <a href="#/providers" className="fade-in card-hover block p-4 sm:p-5" style={card}>
           <div className="mb-2 flex items-center gap-2">
             <span className="flex items-center gap-1" aria-hidden>
               {(providers ?? []).slice(0, 4).map((p) => {
@@ -233,12 +231,11 @@ export function DashboardPage() {
                 return (
                   <span
                     key={p.id}
-                    className={st === 'slow' || st === 'fail' ? 'status-warning' : ''}
                     style={{
                       width: 8,
                       height: 8,
                       borderRadius: '50%',
-                      background: HEALTH_COLOR[st],
+                      background: REACHABILITY_COLOR[st],
                       display: 'inline-block',
                     }}
                   />
@@ -246,7 +243,7 @@ export function DashboardPage() {
               })}
             </span>
             <span className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
-              {providers === null ? '—' : t('dash.healthy', { ok: okCount, total: totalCount })}
+              {providers === null ? '—' : copy('overview.reachableCount', { reachable: reachableCount, total: totalCount })}
             </span>
           </div>
           <div className="space-y-1">
@@ -259,7 +256,7 @@ export function DashboardPage() {
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: HEALTH_COLOR[h?.state ?? 'unknown'],
+                      background: REACHABILITY_COLOR[h?.state ?? 'unknown'],
                       display: 'inline-block',
                       flexShrink: 0,
                     }}
@@ -268,9 +265,12 @@ export function DashboardPage() {
                   <span style={{ fontFamily: 'var(--font-mono)' }}>{p.id}</span>
                   {h?.ms !== null && h?.ms !== undefined && (
                     <span className="tabular" style={{ color: 'var(--text-subtle)' }}>
-                      {h.ms}ms
+                      {copy('overview.probeLatency', { ms: h.ms })}
                     </span>
                   )}
+                  <span style={{ color: 'var(--text-subtle)' }}>
+                    {copy(`overview.${h?.state ?? 'unknown'}`)}
+                  </span>
                 </div>
               );
             })}
@@ -279,7 +279,7 @@ export function DashboardPage() {
         </a>
 
         {/* routes 摘要 */}
-        <a href="#/routing" className="fade-in card-hover block p-5" style={card}>
+        <a href="#/routing" className="fade-in card-hover block p-4 sm:p-5" style={card}>
           <div className="mb-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
             {routes === null ? '—' : t('dash.routes', { n: routes.length })}
           </div>
@@ -292,26 +292,15 @@ export function DashboardPage() {
         </a>
       </div>
 
-      {/* ② 活动流水（后端 /v1/admin/logs 未落地 → 诚实空态，不塞假数据） */}
-      <section className="fade-in mb-6 p-5" style={card}>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="font-semibold" style={{ fontSize: 'var(--text-xl)' }}>
-            {t('dash.recentActivity')}
-          </h2>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-            {t('dash.needsApi')}
-          </span>
-        </div>
-        <div
-          className="flex flex-col items-center justify-center gap-2 py-10 text-center"
-          style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}
-        >
-          <span>{t('dash.historyUnavailable')}</span>
-          <a href="#/playground" style={{ color: 'var(--accent)' }}>
-            {t('dash.runTestRequest')}
-          </a>
-        </div>
-      </section>
+      <InstanceSettings
+        status={status}
+        onStatusChange={setStatus}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
+
+      {/* ② Token 管理、调用归属与真实活动数据仍留在 Dashboard 内，不增加主导航。 */}
+      <AccessDashboard />
 
       {/* ③ 快捷操作 */}
       <div className="fade-in flex flex-wrap gap-3">

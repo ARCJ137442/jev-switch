@@ -25,6 +25,7 @@ import type { NoulKind } from './generated/NoulKind';
 import type { Question } from './generated/Question';
 import type { UpstreamCapabilityEntry } from './generated/UpstreamCapabilityEntry';
 import type { Usage } from './generated/Usage';
+import { getCallerToken as getMemoryCallerToken } from './auth/callerSession';
 
 export type {
   Answer,
@@ -46,6 +47,8 @@ export type {
  * 端口与 base 的单一来源（single source of truth）。
  * ui/src 内任何展示/请求端点都必须从这里派生，禁止再写死字面量。
  */
+import { resolveApiBase } from './api/base';
+
 export const PORT = 11435;
 export const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -54,12 +57,9 @@ const DEFAULT_BASE = BASE;
 export function getBase(): string {
   if (typeof window !== 'undefined') {
     const fromGlobal = (window as unknown as { __JEV_BASE__?: string }).__JEV_BASE__;
-    if (typeof fromGlobal === 'string' && fromGlobal.length > 0) return fromGlobal;
-    // #43 同源托管：页面由 daemon 自己服务（端口 11435 = 本 daemon）→ 空 base
-    // = 相对路径 = 当前源。否则 cloud 态远程浏览器会把 API 打到**它自己的**
-    // 127.0.0.1:11435（本地 dev 5173 不命中此分支，仍走 DEFAULT_BASE）。
-    // 反代到 443/80 等其它端口 → 运行时设 `window.__JEV_BASE__`（见 docs/deployment.md）。
-    if (window.location.port === String(PORT)) return '';
+    // 正式构建始终随托管源走，不能以11435端口猜测是否由daemon提供。
+    // Vite开发环境仍默认指向本机daemon；显式运行时override优先。
+    return resolveApiBase(window.location.href, Boolean(import.meta.env?.DEV), fromGlobal, DEFAULT_BASE);
   }
   return DEFAULT_BASE;
 }
@@ -68,23 +68,24 @@ export function getBase(): string {
    #43 cloud 态调用 token（双 token 分权之「/v1 调用 token」）：
    有则附带 `Authorization: Bearer …`，无则一个头都不加 —— **local 态零打扰**
    （不设 token 的现状请求逐字节不变）。
-   取值优先级：`window.__JEV_TOKEN__` → `localStorage['jev_token']`。
+   Call token is supplied by the in-memory AuthContext; it is never persisted.
    admin 会话是另一枚 token，见 api/admin.ts（不共用）。
    ══════════════════════════════════════════════════════════════════ */
 
 export function getCallToken(): string | null {
-  if (typeof window !== 'undefined') {
-    const fromGlobal = (window as unknown as { __JEV_TOKEN__?: string }).__JEV_TOKEN__;
-    if (typeof fromGlobal === 'string' && fromGlobal.length > 0) return fromGlobal;
+  if (typeof window !== 'undefined' && !legacyCallTokenCleanupDone) {
     try {
-      const stored = window.localStorage.getItem('jev_token');
-      if (stored && stored.length > 0) return stored;
+      // Remove the legacy persisted caller credential; new caller sessions are memory-only.
+      window.localStorage.removeItem('jev_token');
     } catch {
-      // localStorage 不可用（隐私模式等）→ 视为未设
+      // Storage may be unavailable in private contexts.
     }
+    legacyCallTokenCleanupDone = true;
   }
-  return null;
+  return getMemoryCallerToken();
 }
+
+let legacyCallTokenCleanupDone = false;
 
 /** 有调用 token 才出 `Authorization` 头（cloud）；local 态恒为空对象。 */
 function callAuthHeaders(): Record<string, string> {
@@ -93,10 +94,8 @@ function callAuthHeaders(): Record<string, string> {
 }
 
 /**
- * health 只认 JSON 新形状（H1 收口）：`{"status":"ok","version":"0.1.0"}`，
- * 形状 = 生成类型 `HealthBody`（contracts/05 §2 恰两键）。
- * status === "ok" 才算健康；非 JSON / 其余 status 一律抛错
- * （旧纯文本 `jev-switch MVP` 兼容分支已删）。
+ * Verify the public daemon identity and endpoint-gateway API revision.
+ * A listener returning HTTP 200 alone may be an old demo or another application.
  */
 export async function fetchHealth(): Promise<HealthBody> {
   const res = await fetch(`${getBase()}/health`, { headers: callAuthHeaders() });
@@ -108,9 +107,12 @@ export async function fetchHealth(): Promise<HealthBody> {
     throw new Error('health: non-JSON body');
   }
   if (!body || typeof body !== 'object') throw new Error('health: unexpected body');
-  const { status, version } = body as { status?: unknown; version?: unknown };
+  const { status, version, product, api_revision, build_revision } = body as Partial<HealthBody>;
   if (status !== 'ok') throw new Error(`health: status=${String(status)}`);
-  return { status: 'ok', version: typeof version === 'string' ? version : '' };
+  if (product !== 'jev-switch' || api_revision !== 1 || typeof version !== 'string') {
+    throw new Error('health: incompatible or unrecognized Jev-Switch daemon');
+  }
+  return { status, version, product, api_revision, build_revision: typeof build_revision === 'string' ? build_revision : null };
 }
 
 /**
@@ -131,25 +133,29 @@ export class SystemOneError extends Error {
   readonly status: number;
   readonly upstream: string | null;
   readonly retryable: boolean;
+  readonly requestId: string | null;
   constructor(
     message: string,
     status: number,
     upstream: string | null = null,
     retryable = false,
+    requestId: string | null = null,
   ) {
     super(message);
     this.name = 'SystemOneError';
     this.status = status;
     this.upstream = upstream;
     this.retryable = retryable;
+    this.requestId = requestId;
   }
 }
 
-export async function postSystemOne(req: JevRequest): Promise<JevResponse> {
+export async function postSystemOne(req: JevRequest, signal?: AbortSignal): Promise<JevResponse> {
   const res = await fetch(`${getBase()}/v1/systemone`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...callAuthHeaders() },
     body: JSON.stringify(req),
+    signal,
   });
   const text = await res.text();
   let body: unknown;
@@ -167,6 +173,7 @@ export async function postSystemOne(req: JevRequest): Promise<JevResponse> {
           res.status,
           typeof eb.upstream === 'string' ? eb.upstream : null,
           eb.retryable === true,
+          res.headers.get('x-jev-request-id'),
         );
       }
     }

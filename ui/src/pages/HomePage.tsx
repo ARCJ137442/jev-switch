@@ -206,7 +206,7 @@ export function HomePage() {
 
   const panelHead = (title: string, cap?: React.ReactNode) => (
     <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-      <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
+      <span className="text-sm font-semibold text-inkMuted">
         {title}
       </span>
       {cap}
@@ -231,11 +231,11 @@ export function HomePage() {
     <div className="mx-auto max-w-7xl space-y-4 px-6 py-8">
       {/* 页头 */}
       <div className="flex items-baseline justify-between">
-        <h1 className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted">
+        <h1 className="text-sm font-semibold text-inkMuted">
           {t('shell.navHome')}
         </h1>
         {st?.source === 'mock' && (
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+          <span className="text-xs text-inkMuted">
             {t('home.mockStatus')}
           </span>
         )}
@@ -247,31 +247,31 @@ export function HomePage() {
         <section className="overflow-hidden rounded-card border border-border bg-panel xl:col-span-2">
           {panelHead(
             t('home.systemCard'),
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+            <span className="text-xs text-inkSubtle">
               GET /v1/admin/status
             </span>,
           )}
           <div className="divide-y divide-border">
             <div className="grid grid-cols-[110px_1fr] items-center gap-3 px-4 py-2.5">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">daemon</span>
+              <span className="text-xs text-inkMuted">daemon</span>
               <StatusBadge tone={daemonTone} aria-live="polite">
                 {daemonLabel}
               </StatusBadge>
             </div>
             <div className="grid grid-cols-[110px_1fr] items-center gap-3 px-4 py-2.5 font-mono text-xs tabular">
-              <span className="text-[10px] uppercase tracking-widest text-inkMuted">
+              <span className="text-xs text-inkMuted">
                 {t('home.version')}
               </span>
               <span className="text-ink">{st ? `v${st.version}` : '—'}</span>
             </div>
             <div className="grid grid-cols-[110px_1fr] items-center gap-3 px-4 py-2.5 font-mono text-xs tabular">
-              <span className="text-[10px] uppercase tracking-widest text-inkMuted">
+              <span className="text-xs text-inkMuted">
                 {t('home.uptime')}
               </span>
               <span className="text-ink">{st ? fmtUptime(st.uptime_s, t) : '—'}</span>
             </div>
             <div className="grid grid-cols-[110px_1fr] items-center gap-3 px-4 py-2.5">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+              <span className="text-xs text-inkMuted">
                 {t('home.mode')}
               </span>
               <span className="flex flex-wrap items-center gap-2">
@@ -298,7 +298,7 @@ export function HomePage() {
                   <button
                     type="button"
                     onClick={openPasswordGuide}
-                    className="h-7 rounded-ctl border border-border bg-panel px-2 font-mono text-[10px] uppercase tracking-widest text-ink transition-colors hover:border-primaryBright hover:bg-soft"
+                    className="h-7 rounded-ctl border border-border bg-panel px-2 text-xs text-ink transition-colors hover:border-primaryBright hover:bg-soft"
                   >
                     {t('home.setPassword')}
                   </button>
@@ -306,7 +306,7 @@ export function HomePage() {
               </span>
             </div>
             <div className="grid grid-cols-[110px_1fr] items-center gap-3 px-4 py-2.5 font-mono text-xs">
-              <span className="text-[10px] uppercase tracking-widest text-inkMuted">
+              <span className="text-xs text-inkMuted">
                 {t('home.bind')}
               </span>
               <span className="truncate text-ink tabular">{st?.bind ?? '—'}</span>
@@ -327,7 +327,7 @@ export function HomePage() {
         >
           {panelHead(
             t('shell.navProviders'),
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted tabular">
+            <span className="text-xs text-inkMuted tabular">
               {providers.data
                 ? t('prov.enabledCount', { n: enabledCount, total: totalCount })
                 : '—'}
@@ -364,7 +364,7 @@ export function HomePage() {
               ))
             )}
             {moreProviders > 0 && (
-              <div className="px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+              <div className="px-4 py-2 text-xs text-inkMuted">
                 {t('home.moreRows', { n: moreProviders })}
               </div>
             )}
@@ -378,7 +378,7 @@ export function HomePage() {
         >
           {panelHead(
             t('shell.navRouting'),
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted tabular">
+            <span className="text-xs text-inkMuted tabular">
               {routes.data ? `${routes.data.length} edges` : '—'}
             </span>,
           )}
@@ -394,7 +394,7 @@ export function HomePage() {
                 })
               )}
             </p>
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-inkMuted transition-colors group-hover:text-primary">
+            <p className="mt-2 text-xs text-inkMuted transition-colors group-hover:text-primary">
               {t('shell.navRouting')} →
             </p>
           </div>
@@ -405,7 +405,7 @@ export function HomePage() {
       <section className="overflow-hidden rounded-card border border-border bg-panel">
         {panelHead(
           t('home.runCard'),
-          <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+          <span className="text-xs text-inkSubtle">
             POST /v1/systemone
           </span>,
         )}
@@ -427,7 +427,7 @@ export function HomePage() {
           {panelHead(
             t('home.modeSection'),
             st ? (
-              <span className="font-mono text-[10px] uppercase tracking-widest text-primary">
+              <span className="text-xs text-primary">
                 {st.mode}
               </span>
             ) : undefined,
@@ -452,7 +452,7 @@ export function HomePage() {
                       setDialogErr(null);
                     }}
                     className={
-                      'h-9 min-w-24 rounded-ctl border px-4 font-mono text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ' +
+                      'h-9 min-w-24 rounded-ctl border px-4 text-xs font-semibold transition-colors disabled:opacity-50 ' +
                       (active
                         ? 'border-primaryFill bg-primaryFill text-white'
                         : armed
@@ -464,7 +464,7 @@ export function HomePage() {
                   </button>
                 );
               })}
-              <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+              <span className="text-xs text-inkMuted">
                 {modeTone ? t('home.modeSection') : ''}
               </span>
             </div>
@@ -493,7 +493,7 @@ export function HomePage() {
               </div>
             )}
 
-            <p className="font-mono text-[10px] leading-relaxed uppercase tracking-widest text-inkMuted">
+            <p className="text-xs leading-relaxed text-inkMuted">
               {t('home.modeHint')}
             </p>
           </div>
@@ -503,7 +503,7 @@ export function HomePage() {
         <section className="overflow-hidden rounded-card border border-border bg-panel">
           {panelHead(
             t('home.listenSection'),
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkSubtle">
+            <span className="text-xs text-inkSubtle">
               PUT /v1/admin/listen
             </span>,
           )}
@@ -562,7 +562,7 @@ export function HomePage() {
                 </button>
               </div>
             )}
-            <p className="font-mono text-[10px] leading-relaxed uppercase tracking-widest text-inkMuted">
+            <p className="text-xs leading-relaxed text-inkMuted">
               {t('home.listenHint')}
             </p>
           </div>
@@ -574,7 +574,7 @@ export function HomePage() {
           <div className="flex flex-wrap items-center gap-3 px-4 py-4">
             <ThemeToggle />
             <LangToggle />
-            <span className="font-mono text-[10px] uppercase tracking-widest text-inkMuted">
+            <span className="text-xs text-inkMuted">
               {t('home.appearanceHint')}
             </span>
           </div>
@@ -605,7 +605,7 @@ export function HomePage() {
           >
             <h2
               id="home-pw-title"
-              className="font-mono text-[10px] font-semibold uppercase tracking-widest text-inkMuted"
+              className="text-sm font-semibold text-inkMuted"
             >
               {t('home.setPassword')}
             </h2>

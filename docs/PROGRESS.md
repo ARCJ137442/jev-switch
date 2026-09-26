@@ -112,7 +112,7 @@ H:\A137442\Develop\AI\Jev\Jev-Switch\        ← GitHub: ARCJ137442/jev-switch (
 |---|---|---|
 | Rust 后端 + axum + reqwest-rustls | 04- §2.3 | ✅ 落地 |
 | React 前端 + Vite + Tailwind | 06- §阶段 7 | ✅ 落地（subAgent B 实现） |
-| Vercel evaluation-model `noul↔boolean` 翻译层 | 03- §2.4 | ✅ 落地（35c5d65） |
+| Vercel AI Gateway TypeSafe HTTP adapter（完整 Jev body/response + usage） | 官方 TypeSafe API；03- §2.4 | ✅ 已实现并有 wiremock 回归；真实安装版请求 404 待候选复测 |
 | `family=4` undici Agent（IPv4 only） | jev-decision-lab 实测 | 已记入 03- §3.3（**未实装**，MVP 留给用户环境 DNS） |
 | config.toml 多上游配置 | 06- §阶段 5 + 02- §3.3 | ✅ 落地（35c5d65） |
 | Router 静态 model→upstream 映射 | 06- §阶段 6 | ✅ 落地 |

@@ -8,8 +8,9 @@
 
 | 事 | 命令 |
 |---|---|
-| 后端测试 | `cargo test --manifest-path rs/Cargo.toml` |
+| 后端测试 | `cargo test --manifest-path rs/Cargo.toml --workspace` → 81 passed |
 | 启动后端 | `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"; cargo run --manifest-path rs/Cargo.toml` → 监听 `127.0.0.1:11435` |
+| 前端开发服务 | `npm run dev --prefix ui` → http://127.0.0.1:5173 |
 | 前端检查 / 构建 | `npm run lint --prefix ui` / `npm run build --prefix ui` |
 | 健康检查 | `curl http://127.0.0.1:11435/health` |
 | SSE 实时流 | `curl -N http://127.0.0.1:11435/v1/admin/events` |
@@ -19,10 +20,12 @@
 
 | 触发时机 | 动作 | 产物 |
 |---------|------|------|
-| 每次 push | 自动测试（cargo test + npm run lint + npm run build） | CI 通过/失败状态 |
+| 每次 push | 自动测试（cargo test --workspace + npm run lint + npm run build） | CI 通过/失败状态 |
 | 打 tag（如 `v0.6.0`） | 自动构建并发版 | Windows Tauri APP (.msi) + Docker 镜像 |
 
 **发版流程**: `git tag v0.6.0` → `git push origin v0.6.0` → GitHub Actions 自动构建 → Release 页出现 msi 和 docker 镜像
+
+**workflows 位置**: `.github/workflows/ci.yml` + `.github/workflows/release.yml` ✅ 已配置
 
 ## 权限模型速查
 
@@ -54,7 +57,11 @@
 | P0/P1/P2 意见清单 + 验收 | `docs/07-REVIEW` §7 |
 | 协议 / 扩展 / 路由 / 密钥 / HTTP / 前端细则 | `docs/contracts/00-INDEX` → 01–06 |
 | UI 重构设计稿（三页架构） | `docs/design/UI-REDESIGN-v2.md` |
-| 完整实施计划（后端 SSE + 权限系统 + 用户叙事 + CI/CD） | `docs/design/IMPLEMENTATION-PLAN.md` |
+| 路由可视化交互规范（磁吸、拖拽、端口、撤销） | `docs/design/ROUTING-INTERACTION-SPEC-v2.md` |
+| 国际化设计（词条结构、扩展方案） | `docs/design/I18N-DESIGN.md` + `docs/I18N-GUIDE.md` |
+| 发版（三处版本号门禁、流水线结构、排查表） | `docs/RELEASE.md` |
+| 完整实施计划（后端 SSE + 权限系统 + 用户叙事） | `docs/design/IMPLEMENTATION-PLAN.md` |
+| 端到端验证报告（v0.5.1） | `docs/E2E-VERIFICATION-REPORT.md` |
 | 索引 / 快照 / 叙事匹配 | `docs/README`、`docs/PROGRESS`、`docs/09` |
 
 ## 踩坑警示

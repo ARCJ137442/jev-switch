@@ -5,17 +5,17 @@
 //! - **Listen 层** = 本模块：独立 supervisor task，唯一职责 = 持有当前 listener +
 //!   serve task，接受热替换命令（`Rebind` / `Shutdown`）。
 //!
-//! ## Rebind 时序（try-bind → 优雅退场 → spawn）
+//! ## Rebind 时序（try-bind → 停 accept 确认 → 切换；连接独立排空）
 //!
 //! 1. **先 try-bind 新地址**（绝大多数情形 —— 端口/IP 不重叠时）：
 //!    失败 → 返回错误给调用方，**旧监听原样保留**（带病不上线）；
-//!    成功 → spawn 新 `axum::serve(app, …).with_graceful_shutdown(cancel)` 任务
-//!    → 取消旧 serve（**停 accept、在途请求跑完**；`DRAIN_TIMEOUT` 超时兜底
-//!    `abort()` 强杀）→ 更新共享 `Arc<RwLock<SocketAddr>>`。
+//!    成功 → 关闭旧 listener 并确认 → spawn 新服务 → 更新共享地址并返回。
+//!    已接受连接独立优雅排空，超过 `DRAIN_TIMEOUT` 才取消连接任务；切换请求
+//!    本身属于旧连接，不能先等它结束再回复切换成功。
 //! 2. **同端口重叠例外**（local⇄cloud 成对默认同为 `:11435`，仅 IP 不同 ——
 //!    Windows/POSIX 上新 bind 会被旧监听挡住，无法先 try-bind）：
-//!    优雅退场旧 serve → try-bind → 成功 spawn；失败 → **恢复绑定旧地址**
-//!    并返回错误（旧地址刚释放，恢复必成；仍失败则报 `restore failed` 臁目）。
+//!    关闭旧 listener 并确认 → try-bind → 成功 spawn；失败 → **恢复绑定旧地址**
+//!    并返回错误；如旧地址被其他进程抢占而无法恢复，报告 `restore failed`。
 //!
 //! 粒度声明：**任务级**（tokio task + socket，零进程重启、零内核重建）。
 //! 进程级独立小网关（故障隔离场景）不在本期实现 —— 见 deployment.md
@@ -25,21 +25,26 @@
 //! 由 auth 中间件 peer 校验兜底（见 `auth::require_*`）。
 
 use crate::config::RunMode;
-use axum::Router;
+use axum::{extract::ConnectInfo, Extension, Router};
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder,
+    service::TowerToHyperService,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::net::TcpListener;
-use tokio::sync::{mpsc, oneshot, Notify};
-use tokio::task::JoinHandle;
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::task::{JoinHandle, JoinSet};
 
-/// 旧 serve 优雅退场兜底时长：超时（在途请求卡死）→ `abort()` 强杀。
+/// 已接受连接的排空上限；不作为 rebind 响应的等待预算。
 pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
 
 /* ══════════════════════════════════════════════════════════════════
-   错误
-   ══════════════════════════════════════════════════════════════════ */
+错误
+══════════════════════════════════════════════════════════════════ */
 
 #[derive(Debug, Error)]
 pub enum ListenError {
@@ -54,7 +59,9 @@ pub enum ListenError {
         source: std::io::Error,
     },
     /// 同端口交接失败且恢复旧地址也失败（ 臁目：服务可能中断）。
-    #[error("bind {addr} failed ({source}); CRITICAL: restore {prev} also failed: {restore_source}")]
+    #[error(
+        "bind {addr} failed ({source}); CRITICAL: restore {prev} also failed: {restore_source}"
+    )]
     RestoreFailed {
         addr: String,
         prev: String,
@@ -65,8 +72,8 @@ pub enum ListenError {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   成对默认（mode ⇄ 地址；测试注入自定义对避免撞 11435）
-   ══════════════════════════════════════════════════════════════════ */
+成对默认（mode ⇄ 地址；测试注入自定义对避免撞 11435）
+══════════════════════════════════════════════════════════════════ */
 
 /// 成对默认地址对（未显式 bind 时：mode 翻转的 Rebind 目标 / `addr=auto` 目标）。
 #[derive(Debug, Clone, Copy)]
@@ -104,8 +111,8 @@ pub struct ListenPlan {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   命令通道
-   ══════════════════════════════════════════════════════════════════ */
+命令通道
+══════════════════════════════════════════════════════════════════ */
 
 enum Cmd {
     Rebind {
@@ -118,8 +125,8 @@ enum Cmd {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ListenHandle —— 供 main / admin handler 克隆持有（mpsc::Sender 可多克隆）
-   ══════════════════════════════════════════════════════════════════ */
+ListenHandle —— 供 main / admin handler 克隆持有（mpsc::Sender 可多克隆）
+══════════════════════════════════════════════════════════════════ */
 
 /// Listen 层句柄（挂 `AppState.listen`；`Clone` = 指针克隆）。
 #[derive(Clone)]
@@ -179,55 +186,105 @@ impl ListenHandle {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   启动 / supervisor 循环
-   ══════════════════════════════════════════════════════════════════ */
+启动 / supervisor 循环
+══════════════════════════════════════════════════════════════════ */
 
 /// 当前 serve 资源（supervisor task 独占持有）。
 struct Serving {
     addr: std::net::SocketAddr,
-    shutdown: Arc<Notify>,
+    stop_accept: Option<oneshot::Sender<()>>,
+    listener_closed: Option<oneshot::Receiver<()>>,
     task: JoinHandle<()>,
 }
 
 impl Serving {
-    /// 优雅退场：取消 accept 循环（在途请求继续）→ 超时 abort 兜底。
-    async fn stop(&mut self) {
-        self.shutdown.notify_one();
-        match tokio::time::timeout(DRAIN_TIMEOUT, &mut self.task).await {
-            Ok(_) => {} // graceful 完成（含在途请求收尾）
-            Err(_) => {
-                tracing::warn!(addr = %self.addr, "serve drain timeout — force abort");
-                self.task.abort();
-                let _ = (&mut self.task).await; // 收割，防僵尸
-            }
+    /// 只等监听套接字确实释放；已接受的连接由服务任务独立排空。
+    async fn stop_accepting(&mut self) -> Result<(), ListenError> {
+        if let Some(stop) = self.stop_accept.take() {
+            let _ = stop.send(());
         }
+        if let Some(closed) = self.listener_closed.take() {
+            closed.await.map_err(|_| ListenError::Stopped)?;
+        }
+        Ok(())
+    }
+
+    async fn stop(&mut self) {
+        let _ = self.stop_accepting().await;
+        let _ = (&mut self.task).await;
     }
 }
 
-/// spawn 一个 serve 任务：`into_make_service_with_connect_info`（peer 校验需要
-/// `ConnectInfo<SocketAddr>`）+ `with_graceful_shutdown(Notify)`。
-fn spawn_serve(
-    listener: TcpListener,
-    app: Router,
-) -> (Arc<Notify>, JoinHandle<()>) {
-    let shutdown = Arc::new(Notify::new());
-    let signal = shutdown.clone();
+/// 保留 axum 的 Router/ConnectInfo 与 Hyper 连接语义，单独确认 listener 释放。
+/// JoinSet 持有每条连接，超时取消不会遗留 SSE 等无限响应任务。
+fn spawn_serve(listener: TcpListener, app: Router) -> Serving {
+    let addr = listener.local_addr().expect("bound listener address");
+    let (stop_accept, mut stop) = oneshot::channel();
+    let (closed, listener_closed) = oneshot::channel();
     let task = tokio::spawn(async move {
-        let svc = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
-        let result = axum::serve(listener, svc)
-            .with_graceful_shutdown(async move { signal.notified().await })
-            .await;
-        if let Err(e) = result {
-            tracing::error!(error = %e, "serve task exited with error");
+        let server = Builder::new(TokioExecutor::new());
+        let (drain, _) = watch::channel(false);
+        let mut connections = JoinSet::new();
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut stop => break,
+                _ = connections.join_next(), if !connections.is_empty() => {},
+                accepted = listener.accept() => {
+                    let (stream, peer) = match accepted {
+                        Ok(accepted) => accepted,
+                        Err(error) => {
+                            tracing::warn!(%addr, %error, "listener accept failed");
+                            tokio::select! {
+                                _ = &mut stop => break,
+                                _ = tokio::time::sleep(Duration::from_millis(100)) => continue,
+                            }
+                        }
+                    };
+                    let service = TowerToHyperService::new(app.clone().layer(Extension(ConnectInfo(peer))));
+                    let connection = server.serve_connection_with_upgrades(TokioIo::new(stream), service).into_owned();
+                    let mut draining = drain.subscribe();
+                    connections.spawn(async move {
+                        tokio::pin!(connection);
+                        let result = tokio::select! {
+                            result = &mut connection => result,
+                            _ = draining.changed() => {
+                                connection.as_mut().graceful_shutdown();
+                                connection.await
+                            }
+                        };
+                        if let Err(error) = result {
+                            tracing::debug!(%peer, %error, "HTTP connection closed with error");
+                        }
+                    });
+                }
+            }
         }
+        drop(listener);
+        let _ = drain.send(true);
+        let _ = closed.send(());
+        if tokio::time::timeout(DRAIN_TIMEOUT, async {
+            while connections.join_next().await.is_some() {}
+        })
+        .await
+        .is_err()
+        {
+            tracing::warn!(%addr, "connection drain timeout — cancelling remaining connections");
+            connections.abort_all();
+        }
+        while connections.join_next().await.is_some() {}
     });
-    (shutdown, task)
+    Serving {
+        addr,
+        stop_accept: Some(stop_accept),
+        listener_closed: Some(listener_closed),
+        task,
+    }
 }
 
 /// 新旧地址是否在「绑不进彼此」的重叠域（同端口 + IP 相等或任一侧 unspecified）。
 fn binds_overlap(a: std::net::SocketAddr, b: std::net::SocketAddr) -> bool {
-    a.port() == b.port()
-        && (a.ip() == b.ip() || a.ip().is_unspecified() || b.ip().is_unspecified())
+    a.port() == b.port() && (a.ip() == b.ip() || a.ip().is_unspecified() || b.ip().is_unspecified())
 }
 
 /// supervisor 主循环：持有当前 serve 资源，串行处理命令（一次只做一件事 ——
@@ -238,19 +295,24 @@ async fn run_supervisor(
     mut current: Serving,
     bound: Arc<RwLock<std::net::SocketAddr>>,
 ) {
+    let mut draining = Vec::new();
     while let Some(cmd) = rx.recv().await {
+        draining.retain(|task: &JoinHandle<()>| !task.is_finished());
         match cmd {
             Cmd::Rebind { addr, reply } => {
                 let from = current.addr;
                 let result = if addr == from {
                     Ok((from, addr)) // 同值幂等（含 PUT listen 钉住当前地址的场景）
                 } else {
-                    rebind(&mut current, app.clone(), addr, &bound).await
+                    rebind(&mut current, app.clone(), addr, &bound, &mut draining).await
                 };
                 let _ = reply.send(result);
             }
             Cmd::Shutdown { reply } => {
                 current.stop().await;
+                for task in draining {
+                    let _ = task.await;
+                }
                 let _ = reply.send(());
                 return;
             }
@@ -258,6 +320,19 @@ async fn run_supervisor(
     }
     // 所有句柄 drop（无人再发命令）→ 顺手停 serve，防孤儿任务
     current.stop().await;
+    for task in draining {
+        let _ = task.await;
+    }
+}
+
+fn replace_serving(
+    current: &mut Serving,
+    listener: TcpListener,
+    app: Router,
+    draining: &mut Vec<JoinHandle<()>>,
+) {
+    let previous = std::mem::replace(current, spawn_serve(listener, app));
+    draining.push(previous.task);
 }
 
 async fn rebind(
@@ -265,35 +340,26 @@ async fn rebind(
     app: Router,
     addr: std::net::SocketAddr,
     bound: &Arc<RwLock<std::net::SocketAddr>>,
+    draining: &mut Vec<JoinHandle<()>>,
 ) -> Result<(std::net::SocketAddr, std::net::SocketAddr), ListenError> {
     let from = current.addr;
     // 阶段 1：先 try-bind（不重叠地址 = 零停机换端口）
     match TcpListener::bind(addr).await {
         Ok(listener) => {
-            let (shutdown, task) = spawn_serve(listener, app);
-            current.stop().await; // 旧 serve 优雅退场（在途跑完）
-            *current = Serving {
-                addr,
-                shutdown,
-                task,
-            };
-            *bound.write().expect("bound addr lock") = addr;
-            Ok((from, addr))
+            current.stop_accepting().await?;
+            replace_serving(current, listener, app, draining);
+            *bound.write().expect("bound addr lock") = current.addr;
+            Ok((from, current.addr))
         }
-        Err(e) if binds_overlap(addr, from) => {
+        Err(_) if binds_overlap(addr, from) => {
             // 阶段 2：同端口成对切换（127.0.0.1 ⇄ 0.0.0.0:同端口）——
-            // 旧监听物理占位，必须先优雅退场再 bind。
-            current.stop().await;
+            // 旧监听物理占位，释放 listener 后即可绑定，不等在途请求。
+            current.stop_accepting().await?;
             match TcpListener::bind(addr).await {
                 Ok(listener) => {
-                    let (shutdown, task) = spawn_serve(listener, app);
-                    *current = Serving {
-                        addr,
-                        shutdown,
-                        task,
-                    };
-                    *bound.write().expect("bound addr lock") = addr;
-                    Ok((from, addr))
+                    replace_serving(current, listener, app, draining);
+                    *bound.write().expect("bound addr lock") = current.addr;
+                    Ok((from, current.addr))
                 }
                 Err(e2) => {
                     // 恢复旧地址（刚释放，应当必成）
@@ -301,12 +367,7 @@ async fn rebind(
                         "rebind failed — restoring previous listener");
                     match TcpListener::bind(from).await {
                         Ok(listener) => {
-                            let (shutdown, task) = spawn_serve(listener, app);
-                            *current = Serving {
-                                addr: from,
-                                shutdown,
-                                task,
-                            };
+                            replace_serving(current, listener, app, draining);
                             Err(ListenError::Bind {
                                 addr: addr.to_string(),
                                 source: e2,
@@ -339,12 +400,16 @@ pub async fn start(
     plan: ListenPlan,
     slot: &Arc<std::sync::OnceLock<ListenHandle>>,
 ) -> Result<ListenHandle, ListenError> {
-    let listener = TcpListener::bind(plan.addr).await.map_err(|source| ListenError::Bind {
-        addr: plan.addr.to_string(),
-        source,
-    })?;
+    let listener = TcpListener::bind(plan.addr)
+        .await
+        .map_err(|source| ListenError::Bind {
+            addr: plan.addr.to_string(),
+            source,
+        })?;
     let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>(8);
-    let bound = Arc::new(RwLock::new(plan.addr));
+    let bound = Arc::new(RwLock::new(
+        listener.local_addr().expect("bound listener address"),
+    ));
     let handle = ListenHandle {
         cmd_tx,
         bound: bound.clone(),
@@ -353,12 +418,7 @@ pub async fn start(
     };
     // 先入 slot 再开 serve：杜绝「已监听但句柄未就绪」窗口
     let _ = slot.set(handle.clone());
-    let (shutdown, task) = spawn_serve(listener, app.clone());
-    let current = Serving {
-        addr: plan.addr,
-        shutdown,
-        task,
-    };
+    let current = spawn_serve(listener, app.clone());
     tokio::spawn(run_supervisor(cmd_rx, app, current, bound));
     Ok(handle)
 }

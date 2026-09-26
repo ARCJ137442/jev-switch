@@ -2,9 +2,6 @@
 
 /**
  * GET/PUT 响应视图 —— **字段集即红线 2 字面**：无 `api_key`。
+ * `api_key_masked` 仅返回 `sk-****a1b2` 一类掩码；没有有效 key 时返回空串，需结合 `api_key_set` 判断。
  */
-export type ProviderView = { id: string, kind: string, base: string, enabled: boolean, 
-/**
- * 掩码形态 `sk-****a1b2`；无有效 key 时为 `""`（配 `api_key_set=false` 看）。
- */
-api_key_masked: string, api_key_set: boolean, };
+export type ProviderView = { id: string, name?: string | null, account?: string | null, kind: string, base: string, models: Array<string>, enabled: boolean, api_key_masked: string, api_key_set: boolean, };

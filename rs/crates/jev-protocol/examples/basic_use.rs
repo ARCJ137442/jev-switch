@@ -45,9 +45,9 @@ fn main() {
     );
 
     /* ── 2) 构造 JevResponse / NoulAnswer，演示 noul_probability() ───
-       夹具 0.69 对齐 P0-2 验收（{"type":"boolean","probability":0.69} → 0.69，
-       不是历史 bug 的硬编码 0.95）。此处用官方键 `noul`；Vercel 方言键
-       `probability` 同样保留，读取顺序冻结为 probability > noul。 */
+    夹具 0.69 对齐 P0-2 验收（{"type":"boolean","probability":0.69} → 0.69，
+    不是历史 bug 的硬编码 0.95）。此处用官方键 `noul`；Vercel 方言键
+    `probability` 同样保留，读取顺序冻结为 probability > noul。 */
     let noul = NoulAnswer {
         kind: NoulKind::Noul,
         noul: Some(0.69),
@@ -59,11 +59,11 @@ fn main() {
     let resp = JevResponse {
         model: Some("laya-english".to_string()),
         answers,
-        usage: None,                // 无用量信息 = None（null ≠ 0）
-        upstream_calls: Some(1),    // 实发次数；读缺省按 1
+        usage: None,             // 无用量信息 = None（null ≠ 0）
+        upstream_calls: Some(1), // 实发次数；读缺省按 1
         latency_ms: None,
-        cost_usd: None,             // 未知就是 null（契约：null ≠ 0）
-        extra: BTreeMap::new(),     // providerMetadata 等上游余量（flatten）
+        cost_usd: None,         // 未知就是 null（契约：null ≠ 0）
+        extra: BTreeMap::new(), // providerMetadata 等上游余量（flatten）
     };
     println!(
         "JevResponse:\n{}",

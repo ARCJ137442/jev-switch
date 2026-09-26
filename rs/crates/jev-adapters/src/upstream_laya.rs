@@ -20,7 +20,11 @@ use std::time::Duration;
 
 /// Laya 自报能力表（与 A4 硬编码表逐字段一致 —— 本地不重试行为保持）。
 pub const LAYA_CAPABILITIES: Capabilities = Capabilities {
-    question_types: &[QuestionType::Choice, QuestionType::Score, QuestionType::Noul],
+    question_types: &[
+        QuestionType::Choice,
+        QuestionType::Score,
+        QuestionType::Noul,
+    ],
     has_confidence: true,
     has_usage: false,
     noul_via_boolean: false,
@@ -30,22 +34,32 @@ pub const LAYA_CAPABILITIES: Capabilities = Capabilities {
 pub struct LayaUpstream {
     id: String,
     base: String,
+    api_key: Option<String>,
     http: Client,
 }
 
 impl LayaUpstream {
     pub fn new(base: String) -> Result<Self, JevError> {
+        Self::new_with_id("laya".into(), base, None)
+    }
+
+    pub fn new_with_id(
+        id: String,
+        base: String,
+        api_key: Option<String>,
+    ) -> Result<Self, JevError> {
         let http = Client::builder()
             .timeout(Duration::from_secs(60))
             .connect_timeout(Duration::from_secs(5))
             .build()
             .map_err(|e| JevError::Config {
-                upstream_id: "laya".into(),
+                upstream_id: id.clone(),
                 message: format!("reqwest build failed: {e}"),
             })?;
         Ok(Self {
-            id: "laya".into(),
+            id,
             base,
+            api_key,
             http,
         })
     }
@@ -70,25 +84,26 @@ impl UpstreamAdapter for LayaUpstream {
         })?;
 
         // 2. POST 到 Laya
-        let resp = self
+        let mut builder = self
             .http
             .post(&self.base)
             .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    JevError::Timeout {
-                        upstream_id: self.id.clone(),
-                    }
-                } else {
-                    JevError::Network {
-                        upstream_id: self.id.clone(),
-                        message: e.to_string(),
-                    }
+            .json(&body);
+        if let Some(key) = self.api_key.as_deref().filter(|key| !key.is_empty()) {
+            builder = builder.bearer_auth(key);
+        }
+        let resp = builder.send().await.map_err(|e| {
+            if e.is_timeout() {
+                JevError::Timeout {
+                    upstream_id: self.id.clone(),
                 }
-            })?;
+            } else {
+                JevError::Network {
+                    upstream_id: self.id.clone(),
+                    message: e.to_string(),
+                }
+            }
+        })?;
 
         let status = resp.status();
         let raw_bytes = resp.bytes().await.map_err(|e| JevError::Network {
