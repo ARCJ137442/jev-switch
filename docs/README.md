@@ -1,8 +1,8 @@
 # Jev-Switch 文档索引
 
-> **本仓库**：`https://github.com/ARCJ137442/jev-switch`（private）  
+> **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
-> **当前核实状态（2026-09-26 11:51，北京时间）**：P1–P4 产品与 Web 能力已实现并分项验；正式 AppData 有公开 Laya/Vercel 成功记录，直连上游持久追踪已加入当前源码与测试，但仍待当前运行版验证。Windows 当前批次 MSI、NSIS、便携程序已生成，WiX 引用的壳、daemon、HTML/JS/CSS 哈希逐项与便携输入一致；最新便携目录为 `E:\tmp\jev-switch-portable-final-20260926-115041-986`。Jev 未运行，11435 空闲，Laya `18767` 仍运行，AppData 17 条历史保留。环境没有 Docker CLI，故未重跑 Docker 验收；便携冷启动、真实调用追踪、Tauri WebView/托盘与 P6 最新截图、发布收尾仍待完成。详见[联调记录](verification/2026-09-24-entry-gateway-integration.md)；历史结论只适用于各自版本与覆盖范围。
+> **当前核实状态（2026-09-26）**：P1–P4 已实现并分项验收；Release dry-run 的 Windows MSI、NSIS 和便携 ZIP 均通过构建与哈希核对。便携版复用现有 AppData；当前证据包含 2 家上游、9 条路由、7 个公开入口和 34 条调用记录，Laya 三种入口比较与 Vercel 公开入口的既有成功记录均已对齐 UI、request ID 和 SQLite trace。本轮不重复发送 Laya 请求。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。Release 版本按当前四处一致字段选择 `0.1.0`；本次文档与截图整理、CI 收口后将推送 `v0.1.0` tag 触发正式 Release。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
 > **当前施工入口**：[入口网关认知对齐、决策与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。便携运行时需整体保留壳、sidecar 与 UI 资源，配置仍从正式 AppData 读取；可用 `scripts/build-windows-release.ps1` 重建 MSI/NSIS 与便携包。总计划 §3/§3.1 记录决定及八条批注，§7/§8 和文末最新增量记录当前验收状态。
 
 ## 核心定位（一句话）
@@ -13,7 +13,7 @@
 
 | 文件 | 内容 | 状态 |
 |---|---|---|
-| **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **本轮用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收门槛** | **当前施工入口；P1–P4 已验，P5/P6 未收口** |
+| **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **本轮用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收门槛** | **当前施工入口；P1–P4 已验；P5 有用户截图与 Hide/Restore 证据，候选 Exit/恢复边界仍开放；P6 正式发布收口中** |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
 | [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 当前工作树已实现并分项验证；最新版安装验收待 P5 |
 | [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 多目标执行/直连持久追踪已实现；最新版 UI 验收待 P5 |
@@ -42,7 +42,9 @@
 | `design/UI-REDESIGN-v2.md` | 历史 UI 导航与视觉草图 | 冲突以最新计划为准 |
 | `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 已补两端语义，交互待完整验收 |
 | `design/I18N-DESIGN.md` | **国际化与可扩展语言列表** | 基础机制存在，覆盖与扩展待验收 |
-| `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | workflow 已配置便携 ZIP；本轮候选包尚未发布 |
+| `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | workflow 配置 MSI/NSIS/便携 ZIP；当前 `v0.1.0` 正式发布收口中 |
+| [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 公开筛选的 v0.1.0 界面图册 |
+| [AWESOME-JEV-ISSUE-BODY.md](AWESOME-JEV-ISSUE-BODY.md) | Awesome Jev 投稿文案草稿与隐私/限制说明 | 待 Release 完成后核对链接并投稿；尚未向外部仓库提交 |
 | `design/IMPLEMENTATION-PLAN.md` | 旧 SSE、权限、统计实施计划 | 专项目标保留，按最新计划重验 |
 | `E2E-VERIFICATION-REPORT.md` | 旧端到端验证声明 | 不能替代当前版本实测，结合目标重评阅读 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |

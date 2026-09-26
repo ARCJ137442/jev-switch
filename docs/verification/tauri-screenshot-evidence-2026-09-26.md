@@ -1,8 +1,8 @@
 # Tauri 正式窗口截图证据（2026-09-26）
 
-用户提供的原图归档在 `tauri-user-evidence-2026-09-26/`。该目录由仓库 `.gitignore` 排除，避免把截图中的脱敏凭据片段或演示数据推入公开仓库。不要将其直接复制进 README、Release 或公开 issue；如需公开展示，先取得不含凭据、真实端点和非公开演示内容的干净截图。
+用户提供的原图归档在 `tauri-user-evidence-2026-09-26/`。该目录由仓库 `.gitignore` 排除。按用户后续要求，本轮复核后将五张不含凭据的产品界面图整理到公开图册；Providers 原图仍留在本机，因为画面保留了脱敏 key 前后缀和真实接入地址。
 
-以下文件名只对应本机忽略目录中的验收副本；图片本身不随 Git 仓库交付。Dashboard 截图经过公开安全性筛选后，以原始字节复制到 `docs/images/jev-switch-dashboard.png` 并嵌入 README；哈希与内部归档 `01-dashboard.png` 相同。其他图仅保留本机，不在公开文档中链接。
+以下文件名对应本机忽略目录中的原图；Dashboard、活动摘要、Routing 入口/DAG 与 Playground 图以原始字节复制到 `docs/images/` 并列入 [公开图册](../screenshots.md)。截图用于展示产品界面，不替代 Release build manifest、窗口逻辑像素或 DPI 验收证据。
 
 ## 证据范围
 
@@ -16,12 +16,12 @@ Providers 页的“尚未探测”反映本页的手动 Probe 记录；Dashboard
 
 | 本机文件 | 证明内容 | 公开安全性 |
 |---|---|---|
-| `01-dashboard.png` | Dashboard、首窗紧凑布局、服务与路由概况 | 可供内部核对；公开前仍需按项目发布规范复核 |
-| `02-dashboard-activity.png` | 请求 ID、入口/路径、状态、耗时、tokens；原始 JSON 折叠 | 含运行记录标识，暂按内部材料保管 |
+| `01-dashboard.png` | Dashboard、首窗紧凑布局、服务与路由概况 | 已公开于 README 与截图图册 |
+| `02-dashboard-activity.png` | 请求 ID、入口/路径、状态、耗时、tokens；原始 JSON 折叠 | 已公开于截图图册；只展示摘要，不包含请求正文或密钥 |
 | `03-providers-internal.png` | Laya/Vercel 接入卡、模型和状态 | **不可公开**：虽已遮蔽 key 主体，仍露出前缀/后缀片段及真实上游地址 |
-| `04-routing-endpoints.png` | Routing 入口页及 7 张启用入口卡片 | 内部核对；公开前需确认端点 ID 可公开 |
-| `05-routing-dag.png` | 对外入口到路由节点再到提供商模型端口的 DAG | 内部核对；含真实/当前配置标识与上游地址 |
-| `06-playground-comparison.png` | 两个对外入口共享输入、并排显示结构化结果与用量 | 内部核对；含演示输入，不直接用于公开宣传 |
+| `04-routing-endpoints.png` | Routing 入口页及启用入口卡片 | 已公开于截图图册；展示项目示例 ID 与调用计数 |
+| `05-routing-dag.png` | 对外入口到路由节点再到提供商模型端口的 DAG | 已公开于截图图册；无 API key，URL 仅显示本地回环及公开 Vercel 服务 |
+| `06-playground-comparison.png` | 两个对外入口共享输入、并排显示结构化结果与用量 | 已公开于截图图册；使用演示场景，原始响应仍折叠 |
 
 SHA-256（用于确认本机归档未被替换）：
 

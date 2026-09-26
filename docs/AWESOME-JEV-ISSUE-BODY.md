@@ -1,66 +1,26 @@
-**Project:** https://github.com/ARCJ137442/jev-switch (Rust + TypeScript, MIT)
+# Awesome Jev submission draft
 
-**Suggested section:** Tools & Infrastructure
+**Target:** [AbdelStark/awesome-typesafe-jev](https://github.com/AbdelStark/awesome-typesafe-jev)
 
-**Relationship:** I'm the author (ARCJ137442)
+**Suggested category:** Client libraries and integrations (verify the current category label when preparing the PR)
 
-**What Jev-Switch does:** A local multi-upstream router for Jev protocol — native Jev entry point × upstream switching × bridging. Rust axum backend + React control panel, targeting both local and cloud deployment modes.
+**Status:** Ready for post-release review; not submitted.
 
-**Core positioning:** Lightweight, local/cloud dual-compatible, fast configuration & highly integratable Jev router. Focuses on performance and user-friendliness (UI & config fluency). Fills the niche for "lightweight Jev routing" as large relay stations become bloated.
+## Proposed one-line entry
 
-**Key Features:**
+> [Jev-Switch](https://github.com/ARCJ137442/jev-switch) — A Rust-and-React Jev gateway that routes typed `/v1/systemone` calls across configurable providers through an editable multi-hop DAG, with a Tauri desktop console, Docker deployment, and a side-by-side Playground.
 
-1. **Visual Routing Configuration** — Circuit board metaphor: drag connections between API entry points (left) and upstream provider models (right), just like soldering wires on a circuit board
-2. **Hot Mode Switching** — Switch between `local` (loopback-only, password-free) and `cloud` (0.0.0.0, token-based) modes without restarting
-3. **Heterogeneous Upstream Support** — Route across Vercel AI Gateway, local Laya daemon, or any future Jev-compatible provider
-4. **Real-time Dashboard** — Status overview, provider health monitoring, route summary
-5. **Token-based Access Control** — Single admin + API token hierarchy for team sharing
+## Review notes for the submission
 
-**Primitives:** All Jev SystemOne primitives (Choice, Score, Noul) via upstream protocol translation
+- **Public project:** the repository is public and has a README, runnable source, CI, and a Windows release workflow. Add the final `v0.1.0` Release link here after the tag workflow succeeds: https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0
+- **License:** MIT OR Apache-2.0; see [`LICENSE-MIT`](../LICENSE-MIT) and [`LICENSE-APACHE`](../LICENSE-APACHE).
+- **Jev use:** the gateway accepts Jev-native `POST /v1/systemone` requests and routes them to configured Jev-capable upstreams. The shipped adapters currently cover Vercel AI Gateway and Laya.
+- **Data boundary:** `local` means the daemon runs on the user's machine and normally binds loopback; it can still send requests to a remote configured upstream. In local mode, provider configuration/credentials and call metadata are stored in local app data; gateway history does not persist request bodies or model answers. In cloud mode, caller requests reach the gateway host, which stores its metadata and forwards the request to the selected upstream.
+- **Limitations:** this is a Jev gateway, not an OpenAI- or Anthropic-compatible chat API; built-in upstream adapters are limited to Vercel and Laya. The desktop release currently targets Windows; macOS/Linux desktop packaging, code signing, and an incremental updater are not included.
+- **Screenshots:** the public-safe UI gallery is [`docs/screenshots.md`](../screenshots.md). The Providers screenshot remains private because it includes a masked credential fragment and a configured upstream address.
 
-**Tech Stack:**
-- Backend: Rust (axum 0.7, jev-protocol, jev-core)
-- Frontend: React + TypeScript (Vite, shadcn-inspired design tokens)
-- Deployment: Standalone binary + Docker (auto-build on tag)
+## Proposed pull request
 
-**Screenshots:**
+**Title:** Add Jev-Switch gateway integration
 
-**Dashboard Page** — Status overview with mode/bind display, provider health cards, route summary
-![Dashboard](https://raw.githubusercontent.com/ARCJ137442/jev-switch/main/docs/design/previews/dashboard-screenshot.png)
-
-**Routing Page** — Visual circuit board: drag to connect models to upstream endpoints
-![Routing](https://raw.githubusercontent.com/ARCJ137442/jev-switch/main/docs/design/previews/routing-screenshot.png)
-
-**Providers Page** — Manage upstream providers, probe health, configure API keys
-![Providers](https://raw.githubusercontent.com/ARCJ137442/jev-switch/main/docs/design/previews/providers-screenshot.png)
-
-**Playground Page** — Test Jev calls interactively with form/JSON input
-![Playground](https://raw.githubusercontent.com/ARCJ137442/jev-switch/main/docs/design/previews/playground-screenshot.png)
-
-**Architecture:**
-- `jev-protocol` crate: Jev protocol types & validation
-- `jev-core` crate: Router + upstream trait + protocol translation
-- `jev-adapters` crate: Laya/Vercel adapters
-- `jev-switch-daemon` crate: axum HTTP server + admin API
-
-**Runbook:**
-```bash
-# Start backend
-export JEV_SWITCH_CONFIG=rs/providers.example.toml
-cargo run --manifest-path rs/Cargo.toml
-# → Listening on 127.0.0.1:11435
-
-# Frontend (optional, daemon serves built UI from ui/dist)
-cd ui && npm run dev
-```
-
-**Jev call site:**
-- Entry: `POST /v1/systemone` (contracts/01-protocol.md)
-- Routing: `jev-core/src/router.rs` → weighted upstream selection → protocol translation
-- Failover: `on_error=next` cascades through priority-sorted upstreams
-
-**Verification:** All 15 backend tests pass. Full E2E verification report: [docs/E2E-VERIFICATION-REPORT.md](https://github.com/ARCJ137442/jev-switch/blob/main/docs/E2E-VERIFICATION-REPORT.md)
-
-**One-sentence summary:** A lightweight local/cloud Jev router with visual circuit-board routing config, hot mode switching, and heterogeneous upstream bridging — Rust backend + React UI, fills the niche between bloated relay stations and DIY scripts.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+Submit the one-line entry under the verified category after the `v0.1.0` Release page contains the final assets. Keep the upstream contribution to the list's requested concise format; use the README and screenshot gallery as supporting links rather than expanding the list entry into a project review.

@@ -6,6 +6,8 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 
 ![Jev Switch Tauri dashboard](docs/images/jev-switch-dashboard.png)
 
+更多 Dashboard 活动、入口路由图与演练场界面见[截图图册](docs/screenshots.md)。
+
 ## 特性
 
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
@@ -117,4 +119,4 @@ Licensed under **MIT OR Apache-2.0**：
 
 同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID 与 SQLite route trace 对齐。该实例的 Vercel 公开入口也实测 HTTP 200；远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对，Docker cloud 持久化和 CI 测试也有通过记录。
 
-桌面验收仍有边界：当前工具没有 Tauri MCP，原生应用 inventory 为空，因此本批便携包的原生窗口尺寸、WebView 截图和托盘 Hide/Restore/Exit 未直接验收。用户此前人工确认的安装版 Hide/Restore 仍按其实际范围记录。README 中的 Dashboard 截图已通过安全筛查；其余含非公开配置或演示资料的用户截图只用于本机核验，不公开。正式 GitHub Release 尚未创建。最新计划、证据、未完成项见[实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)与[便携版运行验收记录](docs/verification/portable-runtime-acceptance-2026-09-26.md)。
+桌面验收边界：你提供了 v0.1.0 Tauri 界面截图，并人工确认“关窗留托盘、点菜单恢复窗口”通过；这证明当时实例的 Hide/Restore，不扩写成托盘 Exit、精确构建哈希或冷启动恢复。公开图册收录 Dashboard、活动摘要、Routing 入口/DAG 和 Playground；Providers 原图因含脱敏 key 前后缀及真实接入地址而仅保留本机。当前 Release 会按与程序一致的 `v0.1.0` 版本发布；以[GitHub Releases](https://github.com/ARCJ137442/jev-switch/releases)显示的实际状态和资产为准。最新计划、证据与未完成项见[实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[便携版运行验收记录](docs/verification/portable-runtime-acceptance-2026-09-26.md)。

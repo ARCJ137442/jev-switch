@@ -1,9 +1,11 @@
 # Jev-Switch 文档仓库 — gitignore
 
-# 等 Rust 项目实装后再加 build artifacts
-# target/
-# node_modules/
-# .venv/
+# 构建产物与本地依赖
+/target/
+**/target/
+node_modules/
+ui/dist/
+.venv/
 
 # OS / 编辑器
 .DS_Store
@@ -13,7 +15,8 @@ Thumbs.db
 
 # 密钥 / 本地配置（绝不进仓库）
 .env
-.env.local
+.env.*
+!.env.example
 *.key
 *secret*
 
