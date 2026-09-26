@@ -4,6 +4,8 @@
 
 最新证据见文末发布准备、Windows 同版本隔离联调、三屏几何、NSIS 实装与 MSI 机器级实装检查点。旧段中的“当前/最新/待验证”均限于该段记录时点，不能覆盖后续证据。P1–P4 的实现与 Web 产品范围已收口；Windows 内核独立 Web 联调、三屏首窗几何、解包包冷启动、NSIS currentUser 实装，以及 MSI perMachine 实装与安装版启动均有实测。隔离 Tauri 壳现已在真实安装版 daemon 上复用并加载本地 UI；实际 MSI 主壳完整生命周期、托盘退出及真实 Vercel 上游调用仍待验。P5/P6 未收口。
 
+> **历史记录说明（2026-09-27）：**上段状态是本记录形成时的阶段性结论，后续 v0.1.0 发布与收尾证据已改变其中的“待验/未收口”状态。不要将这份逐时记录单独用于判断当前完成度；当前发布边界、剩余事项和验收依据以[入口网关认知对齐与实施计划](../design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[发版说明](../RELEASE.md)为准。以下各节保留当时的时间线证据。
+
 ## 已实现并定向验证的前端内容
 
 - Routing 已接入对外入口卡片/编辑器与调用 DAG。左侧对外入口、中间路由节点、右侧按接入配置分组的模型端口；支持拖动、磁吸、双端重连、属性编辑、插入/删除中间节点、完整文档撤销/重做与键盘接线。仍需完成全部真实交互回归。
@@ -978,7 +980,7 @@ Providers 页显示两项启用的接入配置、添加/ TOML 导入/编辑操�
 
 新加的 `scripts/package-portable.ps1 -Destination <new directory>` 在本机成功运行，生成 `E:\tmp\jev-switch-portable-20260926-verified`。portable `jev-switch.exe` SHA-256 `6078248DC7FAB50D3EA755B413A3D6DCF85CC419C0F34E0D90B6FF2C77B92B63`；`build-manifest.json` 比对 sidecar/daemon 与静态资源 hash；目录包含壳、sidecar、`resources/ui/dist`、sibling `ui/dist` 和运行说明。便携目录与 MSI 清单引用同一组 build outputs；它是文件夹式运行时，不是自包含单文件 exe。
 
-为给便携实例让出 `127.0.0.1:11435`，停止了本轮此前启动的旧安装 Tauri PID 51424 与 daemon PID 46508；AppData 配置/DB 保留、历史仍 17 行，Laya `127.0.0.1:18767` PID 79984 仍运行，`5173`/`11435` 无监听。启动便携 `jev-switch.exe` 的系统自动审批返回 `blocked by policy`，故本轮没有启动新程序或发出新的 Laya 请求，也没有换用其他执行方式。Tauri MCP 不在本会话工具中，CUA 原生应用清单为空。用户可双击 [便携运行说明](</E:/tmp/jev-switch-portable-20260926-verified/RUN-PORTABLE.txt>) 与 [jev-switch.exe](</E:/tmp/jev-switch-portable-20260926-verified/jev-switch.exe>)；启动后待验 health、加载资源、真实直连 request ID 与 Dashboard/SQLite 关联、原生窗口和托盘。P5/P6 未完成。
+为给便携实例让出 `127.0.0.1:11435`，停止了本轮此前启动的旧安装 Tauri PID 51424 与 daemon PID 46508；AppData 配置/DB 保留、历史仍 17 行，Laya `127.0.0.1:18767` PID 79984 仍运行，`5173`/`11435` 无监听。启动便携 `jev-switch.exe` 的系统自动审批返回 `blocked by policy`，故本轮没有启动新程序或发出新的 Laya 请求，也没有换用其他执行方式。Tauri MCP 不在本会话工具中，CUA 原生应用清单为空。该记录当时提及的便携运行说明和 `jev-switch.exe` 路径为 `E:/tmp/jev-switch-portable-20260926-verified/RUN-PORTABLE.txt` 与 `E:/tmp/jev-switch-portable-20260926-verified/jev-switch.exe`；它们是本机临时产物路径，不是仓库文件链接。启动后待验 health、加载资源、真实直连 request ID 与 Dashboard/SQLite 关联、原生窗口和托盘。P5/P6 未完成。
 
 ## 2026-09-26 12:33：用户启动便携版、Laya/Vercel 路由与 Docker cloud 回归
 
