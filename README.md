@@ -113,6 +113,8 @@ Licensed under **MIT OR Apache-2.0**：
 
 ## 当前验收状态
 
-**状态截至 2026-09-26 17:45（北京时间）。** P1–P4 产品/Web 能力已实现并分项验证。便携版 `jev-26` 本地 Laya 请求返回 HTTP 200，AppData 中有成功记录和安全 route trace。只读 AppData 核对为 2 个提供商、9 条路由、7 个公开入口和 26 条调用历史。调用历史以请求 ID、入口、路由、状态、耗时和 token 用量为主，原始 JSON 折叠显示。用户提供的六张截图覆盖 Dashboard、Providers、Routing 入口/DAG 与双入口 Playground；Dashboard 已通过安全筛选，原图字节一致地复制到 README。其余截图继续作为本机验收资料保存：Providers 图含脱敏 key 片段和真实上游地址，Playground 图含演示输入，不直接公开。
+**状态截至 2026-09-26 21:30（北京时间）。** P1–P4 产品与 Web 能力已实现并分项验收。Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。当前 AppData 保留 2 个提供商、9 条路由、7 个公开入口和 33 条调用历史。调用历史以 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数作为摘要，原始 JSON 收在折叠详情中。
 
-P5 已有真实 Laya/Vercel 路由与演练场调用、请求历史、窗口几何及原生 WebView 布局测试证据。当前源码的 Docker 镜像已构建并通过 cloud 模式探活、UI 同源访问、未认证管理请求拒绝，以及替换容器后的提供商快照恢复测试。17:41 同批 Windows MSI、NSIS 和便携候选已生成，构建清单中的壳、daemon、UI 资源和安装包哈希均已复核；该新候选尚未冷启动，旧便携实例仍占用单实例端口。用户此前确认的托盘关窗/恢复只适用于当时实例；新候选的托盘点击、完整退出后重启与 AppData 恢复仍待核实。当前工具中没有 Tauri MCP，Computer Use 也不能操作原生托盘；隔离生命周期测试不替代实机点击。其他五张原图保存在本机忽略目录，过期设计预览不作当前发布截图。工作树变更尚未逐项审阅，也未提交；P5/P6 仍未完成，其他页面的安全公开截图、提交、远端 CI 与 Release workflow 验证待收口。完整状态与证据边界见[实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[目标重评](docs/OPUS5-GOAL-REASSESSMENT.md)。
+同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID `jev-28` 至 `jev-33` 与 SQLite route trace 对齐。远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对；Docker cloud 持久化和 CI 测试也有通过记录。
+
+桌面验收仍有边界：当前工具没有 Tauri MCP，原生应用 inventory 为空，因此本批便携包的原生窗口尺寸、WebView 截图和托盘 Hide/Restore/Exit 未直接验收。用户此前人工确认的安装版 Hide/Restore 仍按其实际范围记录。README 中的 Dashboard 截图已通过安全筛查；其余含非公开配置或演示资料的用户截图只用于本机核验，不公开。正式 GitHub Release 尚未创建。最新计划、证据、未完成项见[实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)与[便携版运行验收记录](docs/verification/portable-runtime-acceptance-2026-09-26.md)。
