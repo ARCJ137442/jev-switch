@@ -15,7 +15,7 @@
 - `rs/Cargo.toml` 的 `[workspace.package].version`
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
-每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 README 和已发布能力一致。当前内置上游适配器为 Vercel/Laya；TypeSafe 官方与 OpenRouter 支持尚在最高优先级路线图中。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。内置上游适配器目前为 Vercel/Laya；TypeSafe 官方与 OpenRouter 尚未接入，是路线图最高优先级事项。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
 
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
@@ -168,6 +168,6 @@ Settings → Actions → General → Workflow permissions → **Read and write**
 
 ## 尚未做
 
-- macOS / Linux 桌面打包（当前正式发行仅提供 Windows 桌面包；后续支持范围与排期以 [ROADMAP](../ROADMAP.md) 为准）
+- macOS / Linux 桌面打包（v0.1.0 当前仅发布 Windows 桌面版；暂无排期）
 - 代码签名与公证
 - Tauri updater 增量更新

@@ -45,9 +45,12 @@
 | `contracts/05-HTTP契约.md` | `/v1/*` 形状 + 错误体 + CORS | 定稿 |
 | `contracts/06-前端交互契约.md` | CC Switch 范式 + 三页 IA | 定稿 |
 | [contracts/07-入口网关修订.md](contracts/07-入口网关修订.md) | 接入配置、统一持久化、入口 API、直接上游调用及 UI 修订 | 契约参考；v0.1.0 的实现和验收边界见当前主计划 |
-| **`design/01-frontend-design-sim.md`** | **前端与交互设计稿**（模拟 `/frontend-design` 流程，作者 Mimo-V2.6-Pro） | 定稿 |
+| `design/01-frontend-design-sim.md` | 早期前端与交互设计模拟稿（作者 Mimo-V2.6-Pro） | 历史视觉参考；当前页面结构以主计划和截图为准 |
+| `design/02-竞标方案.md` | 早期 A/B/C 视觉方案比较 | 历史预览，不代表当前 UI |
+| `design/DATABASE-MIGRATION-PLAN.md` | 初版 SQLite 迁移方案（作者 Claude Opus 4.8） | 旧状态“待实施”已过期；迁移现状以主计划和契约为准 |
+| `design/ICON-SYSTEM-DESIGN.md` | 初版图标系统方案（作者 Claude Opus 4.8） | 历史设计；当前能力见 README，显示偏好候选见 ROADMAP |
 | `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 设计规范参考；原稿阶段状态已过期，当前实现/验收以主计划为准 |
-| `design/I18N-DESIGN.md` | **国际化与可扩展语言列表** | 基础机制存在，覆盖与扩展待验收 |
+| `design/I18N-DESIGN.md` | **国际化与可扩展语言列表**（作者 Claude Opus 4.8；GPT-6 Luna 实施记录） | 2026-09-24 状态快照；当前已提供语言见 README，新增语言方向见 ROADMAP |
 | `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | `v0.1.0` 已发布 MSI/NSIS/便携 ZIP 与 Docker 镜像 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 公开筛选的 v0.1.0 界面图册 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
