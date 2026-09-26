@@ -64,6 +64,8 @@ meta（版本门禁）
 `src-tauri/` 工程的服务身份与产物解析回归，再构建安装包。两工程各用自己的
 `target/`，不会把正在运行的 daemon 当构建输出覆盖。
 
+Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle 文件。便携运行目录按 workflow run ID/attempt 唯一命名；上传 ZIP 写在 workspace 根目录，避免命中缓存中的旧目标目录，同时保持 Release 附件名稳定。
+
 桌面壳只接入 `/health` 中 `product=jev-switch`、`api_revision=1` 且版本与壳一致的
 内核。CI 将提交 SHA 写入 `JEV_BUILD_REVISION`，用于关联运行产物；它不包含密钥。
 没有身份字段的旧 Demo 不能因 HTTP 200 而被新版壳误接入。
