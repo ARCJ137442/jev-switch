@@ -4,10 +4,12 @@
 **整理：GPT-6 Astra / Codex；演练场专项修订：GPT-6 Luna**<br>
 **状态（2026-09-26，v0.1.0 已发布）：**P1–P4 产品能力已实现并有分项验收；P4 在同一 Release dry-run 便携实例上跑通公开↔公开、直连↔直连、公开↔直连三种比较，各两列 HTTP 200，request ID `jev-28` 至 `jev-33` 与 SQLite 路由 trace 对齐。同一实例的既有 Vercel 请求 `jev-34` 返回 HTTP 200，trace 对齐，Dashboard 显示 Laya/Vercel 2/2 可达；按用户指示，本阶段未追加 Laya 请求。便携壳与 daemon 来自同一 dry-run 包，health 为 0.1.0、build revision `f850d3f`，UI 资源哈希一致；既有 AppData 与 34 条历史保留。用户提供的 v0.1.0 Tauri 截图现整理为安全公开图册，并人工确认当时安装版“关窗留托盘、点菜单恢复”通过；这不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。P5 只认这些证据覆盖的范围。正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已通过版本/Rust/UI/Tauri 门禁，发布 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。首次 Release run `36249016862` 暴露 Cargo target 缓存中的旧便携目录与打包器 no-overwrite 保护冲突；修复为按 run/attempt 隔离目录后，`36250114541` 全 job 成功。
 
+> **发布后状态校正（2026-09-27；GPT-6 Luna xhigh / OpenAI Codex，AI 协助）：**上方为当前网关产品验收摘要。P1–P4 与 v0.1.0 Release 已收口；P5 可确认范围包括用户提交的 Dashboard、活动、Providers、Routing 与 Playground 截图，以及用户人工确认的安装版 Hide/Restore。精确 Release 壳的托盘 Exit、完整退出再启动后的数据恢复和跨 DPI/多屏原生截图仍未取得证据，不以旧运行时或浏览器视图代替。P6 的公开截图整理、发布包检查、Release 发布与远端 CI 已完成。早期增量中的“P5/P6 未完成”均是其记录时点的结论；以本节摘要及其后续具名证据为准。当前阶段是发布后公开文档校准和两份 Awesome PR 跟进，不在本阶段实现路线图功能；未来方向只见根目录 [ROADMAP](../../ROADMAP.md)。
+
 **历史检查点（15:59，后续已更新）：**15:55 候选此前已按单一脚本构建、冷启动并完成真实 Laya 请求追踪；用户后来报告窗口已关闭，但进程只读检查显示其实际驻留托盘并占用 11435。由于缺少 Computer Use 原生控制与 Tauri MCP，当时没有强杀或改用其它桌面通道。旧实例退出与 Release dry-run 便携包冷启动现已在 §20:48 完成；六张截图和先前 Hide/Restore 人工证据的范围仍见 §19:48。**
 **来源：**接续 Claude Opus 5 会话 `afa3590a-4356-4af4-a2a7-f46b180dfc20` 后，用户的五项问题反馈、八条批注，以及本轮 `super-questioning` / `popup-ask` 的完整回答。原目标与运行证据见 [目标重评](../OPUS5-GOAL-REASSESSMENT.md)。
 
-本文是本轮后续施工的计划入口。涉及两侧入口定义、提供商卡片粒度、DAG、演练场范围、多语言与执行顺序的冲突，以本文记录的最新用户决定为准。旧文档保留其历史证据；未被本轮改变的协议不变量与已批准专项继续有效。**计划定稿、配置 API 存在、页面能构建，都不能等同于产品验收完成。**
+本文是产品决策、实现范围及验收边界的主计划。涉及两侧入口定义、提供商卡片粒度、DAG、演练场范围、多语言与执行顺序的冲突，以本文记录的最新用户决定为准。带时间戳的历史增量保留当时证据，不得覆盖本页最新状态。旧文档保留其历史证据；未被本轮改变的协议不变量与已批准专项继续有效。**计划定稿、配置 API 存在、页面能构建，都不能等同于产品验收完成。**
 
 ## 1. 产品本质与边界
 

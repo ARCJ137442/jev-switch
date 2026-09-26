@@ -7,7 +7,7 @@
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **当前核实状态（2026-09-27）**：正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已由 tag 流水线发布，含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。Release gate 的 Rust、UI、Tauri 与版本检查通过。验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。Laya 不重复实测。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
-> **当前施工入口**：[入口网关认知对齐、决策与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。便携运行时需整体保留壳、sidecar 与 UI 资源，配置仍从正式 AppData 读取；可用 `scripts/build-windows-release.ps1` 重建 MSI/NSIS 与便携包。总计划 §3/§3.1 记录决定及八条批注，§7/§8 和文末最新增量记录当前验收状态。
+> **当前产品基线与维护阶段**：网关实施及验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；v0.1.0 已发布。本阶段工作为发布后公开文档校准和两份 Awesome PR 跟进，不继续实现未排期路线图功能。便携运行时需整体保留壳、sidecar 与 UI 资源，配置仍从正式 AppData 读取；可用 `scripts/build-windows-release.ps1` 重建 MSI/NSIS 与便携包。总计划 §3/§3.1 记录决定及八条批注，顶部发布后状态与对应证据节记录现行验收边界。
 
 ## 核心定位（一句话）
 
@@ -23,19 +23,19 @@
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
 | [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
 | [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
-| `01-Jev-Switch-原始计划书-DeepSeek.md` | DeepSeek 原始计划书（4 条需求 + 调研 + MVP + 风险） | baseline |
-| `02-Jev-Switch-新版计划书.md` | v2.1：5 类上游 + 桥接模式 + M1–M7 | 历史愿景，不能整体重启 |
-| `03-上游类别与协议兼容矩阵.md` | C1–C5 字段矩阵 + Vercel noul→boolean | 已写 |
-| `04-架构设计-from-sys1-借鉴.md` | Rust workspace 三 crate + React + Tauri | 已写 |
-| `05-从-jev-life-超越的设计点.md` | 相对 jev-life 的 5 个超越点 | 已写 |
-| `06-MVP-实现计划.md` | M0 十一步施工清单 | 已执行（见 PROGRESS） |
-| `PROGRESS.md` | `v0.1.0-mvp` 进度快照与实测 | 封存 |
-| **`07-REVIEW-v0.1.0-mvp.md`** | **全方位评审**（作者 **Mimo-V2.6-Pro**） | **定稿** |
-| **`08-CONTRACT-功能特性契约与施工计划.md`** | **对齐定稿 Q1–Q6 + 施工计划**（作者 **Mimo-V2.6-Pro**） | **定稿** |
-| `09-用户叙事评估报告-MiMo.md` | 10 叙事 vs v0.1.0 匹配度 + 三标记（openai-compat 不做 / fallback·shadow 待讨论 / 端口 11435 已做）（作者 **MiMo mimo-v2.6-flash**） | 已存档 |
+| `01-Jev-Switch-原始计划书-DeepSeek.md` | DeepSeek 原始计划书（4 条需求 + 调研 + MVP + 风险） | 历史基线 |
+| `02-Jev-Switch-新版计划书.md` | v2.1：5 类上游 + 桥接模式 + M1–M7 | 历史愿景，不作为当前范围 |
+| `03-上游类别与协议兼容矩阵.md` | C1–C5 字段矩阵 + Vercel noul→boolean | 历史矩阵；当前适配范围见 README/ROADMAP |
+| `04-架构设计-from-sys1-借鉴.md` | Rust workspace 三 crate + React + Tauri | 历史架构草案 |
+| `05-从-jev-life-超越的设计点.md` | 相对 jev-life 的 5 个超越点 | 历史设计方向 |
+| `06-MVP-实现计划.md` | M0 十一步施工清单 | 已封存；执行记录见 PROGRESS |
+| `PROGRESS.md` | `v0.1.0-mvp` 进度快照与实测 | 封存的 MVP 历史快照 |
+| **`07-REVIEW-v0.1.0-mvp.md`** | **全方位评审**（作者 **Mimo-V2.6-Pro**） | **历史评审记录** |
+| **`08-CONTRACT-功能特性契约与施工计划.md`** | **对齐定稿 Q1–Q6 + 施工计划**（作者 **Mimo-V2.6-Pro**） | **历史契约/施工计划；最新边界见当前主计划** |
+| `09-用户叙事评估报告-MiMo.md` | 10 叙事 vs v0.1.0 匹配度 + 三标记（openai-compat 不做 / fallback·shadow 待讨论 / 端口 11435 已做）（作者 **MiMo mimo-v2.6-flash**） | 历史评估 |
 | `10-v0.5.0-验收报告.md` | 全量 DoD 复跑 + **P2-7 CDP 12/12**（第九节 + 截图归档 `design/screenshots-v0.5.0/`） | 历史版本验收 |
-| `11-提供商与模型接口路由.md` | 三元组、复合卡片内多模型及历史实证 | 同地址多账号旧限制已被本轮裁决更新 |
-| `12-路线收缩与三线作战计划.md` | **双态战略（本地可路由·云端可中转）** + 冻结清单 + UI/Docker/Tauri 三线计划 | 范围基线，结合后来批准专项阅读 |
+| `11-提供商与模型接口路由.md` | 三元组、复合卡片内多模型及历史实证 | 历史设计与证据；现行语义见契约和主计划 |
+| `12-路线收缩与三线作战计划.md` | **双态战略（本地可路由·云端可中转）** + 冻结清单 + UI/Docker/Tauri 三线计划 | 历史范围基线，后续明确决定优先 |
 | [design/IMPLEMENTATION-PLAN.md](design/IMPLEMENTATION-PLAN.md) | 早期完整实施草案与当时的计划假设 | 历史参考，已由当前主计划和发版手册取代；其中旧版本/tag 指令不可执行 |
 | **[contracts/00-INDEX.md](contracts/00-INDEX.md)** | **六份基线契约与本轮入口网关修订的入口** | **历史基线保留；最新实现状态见当前主计划** |
 | `contracts/01-协议契约.md` | Jev 内核类型与不变量 | 定稿 |
@@ -44,9 +44,9 @@
 | `contracts/04-密钥与防偷.md` | 明文 toml + 防偷红线 | 定稿 |
 | `contracts/05-HTTP契约.md` | `/v1/*` 形状 + 错误体 + CORS | 定稿 |
 | `contracts/06-前端交互契约.md` | CC Switch 范式 + 三页 IA | 定稿 |
-| [contracts/07-入口网关修订.md](contracts/07-入口网关修订.md) | 接入配置、统一持久化、入口 API、直接上游调用及 UI 修订 | 当前工作树实现与回归已完成；最新安装版运行验收待 P5 |
+| [contracts/07-入口网关修订.md](contracts/07-入口网关修订.md) | 接入配置、统一持久化、入口 API、直接上游调用及 UI 修订 | 契约参考；v0.1.0 的实现和验收边界见当前主计划 |
 | **`design/01-frontend-design-sim.md`** | **前端与交互设计稿**（模拟 `/frontend-design` 流程，作者 Mimo-V2.6-Pro） | 定稿 |
-| `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 已补两端语义，交互待完整验收 |
+| `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 设计规范参考；原稿阶段状态已过期，当前实现/验收以主计划为准 |
 | `design/I18N-DESIGN.md` | **国际化与可扩展语言列表** | 基础机制存在，覆盖与扩展待验收 |
 | `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | `v0.1.0` 已发布 MSI/NSIS/便携 ZIP 与 Docker 镜像 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 公开筛选的 v0.1.0 界面图册 |
