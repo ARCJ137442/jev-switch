@@ -52,3 +52,15 @@ history row:    id 27, HTTP 200, route trace present
 当前可用 Computer Use 原生 inventory 返回 `apps=[]`，`listWindows` 不可用；当前工具集也没有 Tauri MCP。故本轮没有取得这批便携 Tauri 壳的原生窗口截图，亦没有操作其托盘菜单。用户对先前安装版“关窗留托盘、点击托盘恢复”的人工验证，依然只证明那次安装版的 Hide/Restore。该证据不外推为本批便携壳的 Hide/Restore/Exit 或退出后重启；应用本轮测试后保持运行。
 
 此记录仅包含脱敏的运行元数据，不包含 API key 或原始调用内容。
+
+## 21:30 同一 Release dry-run 便携包的三种入口比较
+
+在上面同一个仍运行的 Release dry-run 便携实例和 `%APPDATA%\\jev-switch` 中，分别通过 Playground 用同一份内置 Support Routing 输入完成三种比较。所有请求均只调用本地 Laya，没有使用 Vercel 或产生其调用费用；UI、request ID 与只读 SQLite `call_logs` / `route_trace_json` 逐项一致。数据库历史从 27 条增至 33 条，原有记录均保留。
+
+| 比较类型 | 两列结果与 request ID | 结果/追踪核验 |
+|---|---|---|
+| 公开入口 ↔ 公开入口 | `laya-english` (`jev-28`) ↔ `laya-multilingual` (`jev-29`) | 两列 HTTP 200，各调用一次 Laya；`failover` 策略分别解析到同名模型；109/106 输入 tokens，trace 均存在 |
+| 直连上游 ↔ 直连上游 | `laya/laya-english` (`jev-30`) ↔ `laya/laya-multilingual` (`jev-31`) | 两列 HTTP 200，各调用一次 Laya；`direct` 路径明确为 `laya → laya-english` / `laya → laya-multilingual`；109/106 输入 tokens，trace 均存在 |
+| 公开入口 ↔ 直连上游 | `laya-english` (`jev-32`) ↔ `laya/laya-multilingual` (`jev-33`) | 两列 HTTP 200，各调用一次 Laya；左列走 `failover` 入口策略，右列走 `direct`；109/106 输入 tokens，trace 均存在 |
+
+Playground 对以上结果都先展示目标类型、模型、request ID、实际路径、策略、回答摘要、耗时、usage 和上游次数，原始响应保持折叠。1280×720 浏览器画面中，直连与混合比较的两列卡片并排占用内容宽度；这是当前打包 daemon 所服务页面的浏览器 UI 实测，不扩写成原生 Tauri WebView 截图或 DPI 验收。用户此前的 Tauri 截图仍对应 §19:48 中说明的当时实例。
