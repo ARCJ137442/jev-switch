@@ -2,9 +2,9 @@
 
 **日期：2026-09-24（北京时间）**<br>
 **整理：GPT-6 Astra / Codex；演练场专项修订：GPT-6 Luna**<br>
-**状态（更新至 2026-09-26 20:04，北京时间）：**P1–P4 产品能力已实现并有分项验收；15:55 便携运行中的真实 Laya 请求、513 字节安全 route trace 和 26 条历史仍是有效证据，但该旧进程不能证明 19:06 `final2` 的冷启动。`final2` 与 CI 便携包的 manifest 均通过文件哈希核验；CI Release dry-run 已完整构建 MSI/NSIS/ZIP，artifact 下载后 8 项内容哈希与 manifest 全部匹配。截图覆盖 Dashboard、结构化活动、Providers、Routing 入口/DAG、双入口 Playground；托盘“关窗留托盘、恢复窗口”由用户人工确认，但不等于进程退出。当前 PID 68020/69348 仍来自 15:55 目录并占用 11435，故最新包的 WebView/数据恢复/托盘退出后重启仍待验。SQLite Unix 权限修复、Docker cloud 验收、Linux/Windows、UI、Tauri 与 Release workflow 门禁均已有通过证据；详情见 §19:48 及其后的最新补记。
+**状态（更新至 2026-09-26 20:48，北京时间）：**P1–P4 产品能力已实现并有分项验收。Release dry-run artifact 已实际冷启动：便携壳与 daemon 来自同一目录，daemon `/health` 为 0.1.0、build revision `f850d3f`，绑定 `127.0.0.1:11435`；该批 UI index/JS/CSS 在磁盘清单与运行服务间哈希一致。进程复用既有 `%APPDATA%\\jev-switch`：原有 Providers/Routes 及 26 条历史仍可读取，新增真实 Laya 请求为 `jev-27`；响应 HTTP 200，`laya-english → laya`，SQLite 活动记录保存了相同 request ID、usage 和 route trace。当前浏览器 Dashboard 也显示新记录的结构化摘要与折叠 JSON。Tauri MCP 不在当前工具集中，Computer Use 的原生应用列表为空；因此这次能证明便携进程与其 Web 资源/HTTP 行为，不能伪称取得了本批 Tauri 原生窗口截图或本批托盘全生命周期证据。用户之前对已安装版“关窗留托盘、点击托盘恢复”的人工确认仍按其真实范围记录。P5 整体仍待原生窗口/托盘验收；P6 的远端 Release dry-run、上传 artifact 与八项哈希校验已通过，公开展示素材与正式发布仍未完成。其他 SQLite Unix 权限修复、Docker cloud、Linux/Windows、UI、Tauri 与 Release workflow 门禁已有通过证据；详见 §19:48 与 §20:48。
 
-15:55 候选此前已按单一脚本构建、冷启动并完成真实 Laya 请求追踪；其 shell/daemon 哈希与对应清单一致。用户截图的 UI 资源与当前 `final2` 包相同，但截图不能证明 shell 来自新批次。用户本轮表示旧窗口已关闭；进程只读检查显示它实际仍驻留托盘，daemon 占用 11435。Computer Use 原生控制与 Tauri MCP 均不可用，不强杀进程或改用未授权桌面通道。最新 `final2` 的包哈希已逐项验证，但需要旧实例从托盘真正退出后再冷启动。六张原图留在 Git 忽略的本机目录，含脱敏 key 片段、运行标识和演示输入，不用于公开展示。P6 的 README/本机证据索引及安全 Dashboard 截图已完成；最终实例验收、变更集审查、提交/远端 CI 与发布制品验证仍待完成。**
+**历史检查点（15:59，后续已更新）：**15:55 候选此前已按单一脚本构建、冷启动并完成真实 Laya 请求追踪；用户后来报告窗口已关闭，但进程只读检查显示其实际驻留托盘并占用 11435。由于缺少 Computer Use 原生控制与 Tauri MCP，当时没有强杀或改用其它桌面通道。旧实例退出与 Release dry-run 便携包冷启动现已在 §20:48 完成；六张截图和先前 Hide/Restore 人工证据的范围仍见 §19:48。**
 **来源：**接续 Claude Opus 5 会话 `afa3590a-4356-4af4-a2a7-f46b180dfc20` 后，用户的五项问题反馈、八条批注，以及本轮 `super-questioning` / `popup-ask` 的完整回答。原目标与运行证据见 [目标重评](../OPUS5-GOAL-REASSESSMENT.md)。
 
 本文是本轮后续施工的计划入口。涉及两侧入口定义、提供商卡片粒度、DAG、演练场范围、多语言与执行顺序的冲突，以本文记录的最新用户决定为准。旧文档保留其历史证据；未被本轮改变的协议不变量与已批准专项继续有效。**计划定稿、配置 API 存在、页面能构建，都不能等同于产品验收完成。**
@@ -257,6 +257,7 @@ P6 最新截图、文档、提交推送与既定发布验证
 | [国际化设计](I18N-DESIGN.md) | 保留词典/类型约束，按 D10 更新语言选择与扩展要求；历史测试声明不作完成证明 |
 | [旧完整实施计划](IMPLEMENTATION-PLAN.md) | SSE、Token 分级、统计目标继续接续；旧导航草图与“完成”标记按本轮现状重新验收 |
 | [目标重评与运行证据](../OPUS5-GOAL-REASSESSMENT.md) | 保留历史联调结果，更新两类比较范围与运行清理后的状态 |
+| [便携版冷启动验收](../verification/portable-runtime-acceptance-2026-09-26.md) | 记录 Release dry-run 便携包、本地 Laya 请求、历史持久化及 UI 资源身份 |
 
 ## 7. 完成状态
 
@@ -265,13 +266,17 @@ P6 最新截图、文档、提交推送与既定发布验证
 - [x] 完成基础概念、卡片粒度、两类比较、规则内自动化等认知对齐。
 - [x] 删除本轮提问临时载荷并将决定落盘。
 - [x] 完成 P1–P4 的契约、产品实现与整合，以及本文已定义的 Web 产品范围验收；整版运行与桌面验收仍归 P5。
+- [x] P5 冷启动 Release dry-run 便携包；核对 shell/daemon 进程来源、health/version/build revision、11435 监听与服务端 UI 资源哈希。
+- [x] P5 在该包复用原 `%APPDATA%\\jev-switch` 的状态下，真实调用 `laya-english` 并在 HTTP 响应、SQLite 历史、Dashboard 结构化摘要中对齐 `jev-27` 与 route trace。
+- [ ] P5 由可用的原生 Tauri 窗口工具验本批窗口尺寸/页面截图，并由本批窗口完成 Hide/Restore/Exit 生命周期验证。
 - [ ] 完成 P5 同版本应用联调与验收。
 - [x] P6 获取并归档当前 Tauri 正式窗口的六张验收截图；敏感原图仅保留在本机 Git 忽略目录。
 - [x] P6 同步 README 当前验收状态并建立截图证据索引。
 - [x] P6 按单一脚本构建一批 Windows MSI、NSIS 与便携候选，并校验清单/载荷哈希。
-- [ ] 完成 P6 公开展示素材筛选、提交、远端 CI 与既定发布验证。
+- [x] P6 Release dry-run 远端 CI、Windows MSI/NSIS/便携 ZIP 构建与 artifact 上传；解包后八项制品 SHA-256 与 manifest 一致。
+- [ ] 完成 P6 公开展示素材筛选及正式发布；含敏感配置的截图继续只用于本机核验。
 
-P5 已有旧便携运行与真实 Laya/Vercel 调用、结构化请求历史、DAG/入口/比较页、Docker cloud 持久化、原生几何/DOM 和隔离生命周期测试证据。2026-09-26 15:19 的用户截图与托盘报告见下方检查点；15:59 检查点又补入当前 SQLite、门禁与新同批包核验。新包未冷启动，不能以旧进程与截图代替。P6 本机证据归档、README 状态和同批 MSI/NSIS/便携构建已完成；公开截图安全筛选、提交、远端 CI 与发布制品验证仍未完成。
+P5 已有旧便携运行与真实 Laya/Vercel 调用、结构化请求历史、DAG/入口/比较页、Docker cloud 持久化、原生几何/DOM 和隔离生命周期测试证据；20:48 又补入 CI artifact 便携包冷启动、当前 AppData 历史延续及 `jev-27` Laya route trace。原生 Tauri 窗口尺寸/截图和本批托盘生命周期仍未由当前工具直接验收。P6 本机截图证据索引、README 状态、同批 MSI/NSIS/便携构建、远端 dry-run CI 与 artifact 哈希核验已完成；干净公开素材筛选和正式发布仍待完成。
 
 ## 2026-09-26 15:19 用户提供的 Tauri 截图与托盘操作复核
 
@@ -820,3 +825,13 @@ Jeview 明确把每次完整请求和响应、以及明文 TypeSafe key 存入�
 - 文档收尾提交 `068a17c` 推送后触发的 CI run `36240061506` 已通过；当前 `main`/`origin/main` 指向 `068a17c`。
 - 最终进程复查仍看到旧便携 shell PID `68020`、daemon PID `69348`，两者来自 `jev-switch-20260926-155501-187`，daemon 仍监听 `127.0.0.1:11435`。因此用户所说“关掉”目前实际是关窗驻留托盘；这次对话可用的 Computer Use 只列出浏览器、原生 app 列表为空，工具目录里也无 Tauri MCP。没有发送强制终止信号。等待通过托盘菜单真正选择“退出”后，再确认端口释放，并在现有 `%APPDATA%` 数据目录下启动 `final2`；之后才可验收新版 WebView、配置/历史恢复、Laya 全链路追踪，以及新版实例上的托盘隐藏/恢复/退出。
 - 因新版独立冷启动和退出后恢复尚无证据，P5/P6 保持未完成。下一步明确为：旧实例退出 → 复核旧 PID 与 11435 → `final2` 冷启动 → 本地入口/模型路由与 Laya trace → 对照截图检查新版页面和数据恢复 → 记录最终验收截图。
+
+## 20:48 Release dry-run 便携包冷启动与 Laya 路由验收（2026-09-26，北京时间）
+
+- 用户确认旧实例已退出。重新检查时没有 Jev-Switch 进程，`11435` 无监听；启动 `E:\\tmp\\jev-switch-ci-portable-36238959899\\jev-switch.exe`，shell PID `47168`，daemon PID `59096`，二者 `ExecutablePath` 均来自该便携目录。daemon `/health` 返回 `status=ok`、version `0.1.0`、build revision `f850d3f8245217ae21e5a617d424ed27e45b4e1a`，端口仅由该目录 daemon 监听。
+- 对比 package manifest、便携文件和当前服务：shell、daemon、资源副本、UI `index.html` 的 SHA-256 全部相符；实际 HTTP 返回的 `index.html`、`/assets/index-rsyine2x.js`、`/assets/index-Cp7fxIgV.css` 分别与清单一致。与已下载 ZIP 内 MSI/NSIS 的八项同批哈希核验相结合，确认本轮联调使用的是该 Release dry-run artifact，而不是先前的 5173 Demo。
+- 进程沿用现有 `%APPDATA%\\jev-switch`。管理 API 仍读到启用的 Laya/Vercel 两份接入配置、7 个已启用入口、9 条路由；Vercel 凭据仍由 daemon 保管，任何明文均未输出。只读 SQLite 检查有 27 条调用记录，前 26 条保留；第 27 条 `jev-27` 为本次新增请求。
+- 通过便携 daemon `POST /v1/systemone`，以合成请求调用 `laya-english`。收到 HTTP 200、header 与 body 一致的 request ID `jev-27`、一个答案、一个上游调用、usage（49 input / 0 output）。响应与持久历史均记录 `selected_provider=laya`、`selected_model=laya-english`、`strategy=failover`、一条上游尝试及非空 route trace；`gateway_latency_ms=198`。新记录已显示在 Dashboard，阅读摘要把入口/路径、成功状态、耗时、token 和上游次数放在前面，“展开原始 JSON”仍折叠。
+- 使用 Codex In-app Browser 查看 11435 当前服务：Dashboard 在 405×655 浏览器视口下卡片自动堆叠；Routing 入口页显示 7 个入口，DAG 标签页显示同步状态与 9 条边；Providers 页读取到两份现有配置和模型。浏览器页面只是同一 daemon 服务的 CSS/DOM 检查，**不记作 Tauri 原生 WebView 截图**。当前 Computer Use inventory 为 `apps=[]`，且没有 Tauri MCP；不以 PowerShell/UI Automation 冒充窗口测量。用户先前提交的六张 Tauri 原图及安装版 Hide/Restore 人工确认仍由 §19:48 记录。
+- 新包不需要 MSI/NSIS，也未触发 UAC。应用保持运行，避免为验证关闭行为而清除当前 UI/服务状态。由于没有可用原生窗口/托盘输入，精确候选的首窗逻辑尺寸、原生 WebView 页面截图、托盘 Hide/Restore/Exit 和 Exit 后恢复留待以后有原生控制面时验证；P5 不因 API/资源通过而整体勾为完成。远端 workflow-dispatch 与 artifact 上传此前已通过；正式 GitHub Release 未创建。
+- 复核工作树只含既有未跟踪 `scripts/cdp-e2e.mjs` 与 `scripts/cdp-tiny.mjs`，未把它们加入证据提交。便携验收的可复核字段及 SHA-256 见 [单独运行记录](../verification/portable-runtime-acceptance-2026-09-26.md)。
