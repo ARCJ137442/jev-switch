@@ -807,4 +807,14 @@ Jeview 明确把每次完整请求和响应、以及明文 TypeSafe key 存入�
 - 169 个源码、测试、生成类型、计划与发布文档已形成一个本地提交；两个固定连 5173/9222 的一次性 CDP 检查脚本仍留在工作树，避免把旧预览辅助工具混进产品提交。工作树只剩这两个未跟踪的本机辅助脚本。
 - 针对上述源码重建 MSI、NSIS 与便携版，最终便携候选为 `src-tauri/target/release/bundle/portable/jev-switch-20260926-final2/`。manifest 的 shell、daemon、资源 daemon 副本、UI index、JS、CSS、MSI、NSIS 八项哈希全部逐项匹配；其中 shell `68AEAB08590A2299A980C5C178428F2B1F5FB9E25A41266B4BE9676F8504320C`、daemon `CB835925E7E4B932AC09319FDD01B9B4D5849814669FA531C0FC5654DCD54274`、MSI `F20B3BF71B4EB9271E2C149F4CCA19FE667D5685B4C8E7FE7155B79C3438ECEB`、NSIS `F9F8F6E6FB88D4F6AD50C0EEDA49B892A004B391845092F52988208366A2DFC6`；随包 daemon `--healthcheck` 返回 0。`final` 目录已存在时脚本拒绝覆盖，随后使用独立 `final2` 完成打包。MSI/NSIS 未安装、未触发 UAC。
 - 用户表示旧窗口已关闭；但只读复核仍见旧候选壳 PID 68020 与 daemon PID 69348，11435 仍由该 daemon 监听。此状态符合已实测的关窗驻留托盘行为。当前没有可用的 Tauri MCP，CUA 也没有原生窗口/托盘控制能力；因此尚未冷启动 `final2`。必须先从 Jev-Switch 托盘菜单执行「退出」，再核实 PID/11435 释放，随后在同一 `%APPDATA%` 下冷启动 `final2` 并验证真实 WebView、历史/配置恢复、托盘 Hide/Restore/Exit。不能把兼容健康探针、manifest 校验或先前实例人工操作记作该候选的桌面验收。
-- 本地提交后尚未 push，因此远端 CI/Release workflow 仍未验证。不能将 P5/P6 标记完成；final2 的独立进程冷启动和原生验收仍是下一阻塞点。
+- `f1670e7` 已推送到 `origin/main`。首次 Release dry-run 暴露 Windows job 在 fresh checkout 中先运行 Tauri `cargo test`、但尚未生成 `ui/dist` 的工作流缺陷；详见下方复测记录。
+
+## 19:48 发布 dry-run 修复、截图复核与 final2 运行状态（2026-09-26，北京时间）
+
+- 复核用户提供的六张截图并与本机证据记录 `docs/verification/tauri-screenshot-evidence-2026-09-26.md` 对齐：Dashboard 展示 2/2 可达与 9 条路由；活动列表把请求 ID、入口/路由、HTTP 结果、耗时、token 与上游次数放在可读摘要里，原始 JSON 折叠在次级展开区；Providers 展示 Laya/Vercel 配置和模型；Routing 同时展示入口卡片和入口→DAG→上游模型关系；Playground 展示两个公开入口并排跑同一份输入。Providers 页“尚未探测”与 Dashboard 自动探测状态口径不同，文档保留为后续 UX 澄清项。截图里的凭据片段、当前上游地址、端点标识和演示输入仍限制在本机归档；只有经筛查的 Dashboard 原图用于 README。
+- 用户人工确认“关窗留托盘、托盘恢复窗口”可用。这个行为只隐藏/恢复窗口，不代表进程退出；截图也不证明托盘退出后的冷启动与数据恢复。
+- 首次远端 Release dry-run `36238292319` 的 Linux/Rust、前端、Docker job 通过，Windows 在 `cargo test --manifest-path src-tauri/Cargo.toml --locked` 处失败。日志的直接原因是新 runner 没有 `ui/dist`，Tauri build script 因找不到 `..\\ui\\dist` 退出；本地旧构建产物曾掩盖这个缺失前置步骤。
+- `.github/workflows/release.yml` 现于 Windows Tauri 回归测试之前显式运行 `npm run build --prefix ui`。本机 UI production build、Tauri 回归测试（10 passed、6 ignored）及 workflow YAML 解析均通过。修复已提交并推送为 `f850d3f8245217ae21e5a617d424ed27e45b4e1a`（`fix: build UI before Tauri release tests`）。
+- 第二次 workflow-dispatch dry-run `36238959899` 全部成功：版本门禁、前端 lint/build、Rust 默认及 `ts-rs` 测试、Docker 构建、Windows sidecar/UI/Tauri 回归、MSI/NSIS 打包、同批便携 ZIP 组装与 artifact 上传均通过。手动 dry-run 跳过 ghcr 登录/推送和 GitHub Release 步骤；没有创建 tag、没有公开 Release，也没有安装 MSI/NSIS。
+- 最终进程复查仍看到旧便携 shell PID `68020`、daemon PID `69348`，两者来自 `jev-switch-20260926-155501-187`，daemon 仍监听 `127.0.0.1:11435`。因此用户所说“关掉”目前实际是关窗驻留托盘；这次对话可用的 Computer Use 只列出浏览器、原生 app 列表为空，工具目录里也无 Tauri MCP。没有发送强制终止信号。等待通过托盘菜单真正选择“退出”后，再确认端口释放，并在现有 `%APPDATA%` 数据目录下启动 `final2`；之后才可验收新版 WebView、配置/历史恢复、Laya 全链路追踪，以及新版实例上的托盘隐藏/恢复/退出。
+- 因新版独立冷启动和退出后恢复尚无证据，P5/P6 保持未完成。下一步明确为：旧实例退出 → 复核旧 PID 与 11435 → `final2` 冷启动 → 本地入口/模型路由与 Laya trace → 对照截图检查新版页面和数据恢复 → 记录最终验收截图。
