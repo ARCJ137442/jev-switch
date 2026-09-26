@@ -275,6 +275,7 @@ P6 最新截图、文档、提交推送与既定发布验证
 - [x] P6 按单一脚本构建一批 Windows MSI、NSIS 与便携候选，并校验清单/载荷哈希。
 - [x] P6 Release dry-run 远端 CI、Windows MSI/NSIS/便携 ZIP 构建与 artifact 上传；解包后八项制品 SHA-256 与 manifest 一致。
 - [ ] 完成 P6 公开展示素材筛选及正式发布；含敏感配置的截图继续只用于本机核验。
+- [ ] 全部目标验收完成后，正常退出便携版并清理 `E:\\tmp` 中确认属于本轮 Jev-Switch 的临时构建/解压文件；保留 `%APPDATA%\\jev-switch` 用户配置与调用历史，不触碰无关临时文件。
 
 P5 已有旧便携运行与真实 Laya/Vercel 调用、结构化请求历史、DAG/入口/比较页、Docker cloud 持久化、原生几何/DOM 和隔离生命周期测试证据；20:48 又补入 CI artifact 便携包冷启动、当前 AppData 历史延续及 `jev-27` Laya route trace。原生 Tauri 窗口尺寸/截图和本批托盘生命周期仍未由当前工具直接验收。P6 本机截图证据索引、README 状态、同批 MSI/NSIS/便携构建、远端 dry-run CI 与 artifact 哈希核验已完成；干净公开素材筛选和正式发布仍待完成。
 
@@ -834,4 +835,5 @@ Jeview 明确把每次完整请求和响应、以及明文 TypeSafe key 存入�
 - 通过便携 daemon `POST /v1/systemone`，以合成请求调用 `laya-english`。收到 HTTP 200、header 与 body 一致的 request ID `jev-27`、一个答案、一个上游调用、usage（49 input / 0 output）。响应与持久历史均记录 `selected_provider=laya`、`selected_model=laya-english`、`strategy=failover`、一条上游尝试及非空 route trace；`gateway_latency_ms=198`。新记录已显示在 Dashboard，阅读摘要把入口/路径、成功状态、耗时、token 和上游次数放在前面，“展开原始 JSON”仍折叠。
 - 使用 Codex In-app Browser 查看 11435 当前服务：Dashboard 在 405×655 浏览器视口下卡片自动堆叠；Routing 入口页显示 7 个入口，DAG 标签页显示同步状态与 9 条边；Providers 页读取到两份现有配置和模型。浏览器页面只是同一 daemon 服务的 CSS/DOM 检查，**不记作 Tauri 原生 WebView 截图**。当前 Computer Use inventory 为 `apps=[]`，且没有 Tauri MCP；不以 PowerShell/UI Automation 冒充窗口测量。用户先前提交的六张 Tauri 原图及安装版 Hide/Restore 人工确认仍由 §19:48 记录。
 - 新包不需要 MSI/NSIS，也未触发 UAC。应用保持运行，避免为验证关闭行为而清除当前 UI/服务状态。由于没有可用原生窗口/托盘输入，精确候选的首窗逻辑尺寸、原生 WebView 页面截图、托盘 Hide/Restore/Exit 和 Exit 后恢复留待以后有原生控制面时验证；P5 不因 API/资源通过而整体勾为完成。远端 workflow-dispatch 与 artifact 上传此前已通过；正式 GitHub Release 未创建。
+- 用户新增收尾要求：**全部目标完成后**，清理 `E:\\tmp` 中与本轮 Jev-Switch 构建、CI artifact 解压和便携运行相关的临时目录。执行前先正常退出便携 shell/daemon，只按确认过的精确路径清理；保留 `%APPDATA%\\jev-switch` 中真实配置、密钥存储和调用历史，并避开 `E:\\tmp` 内无关文件。该清理目前未执行，因为验收未结束且便携版仍在运行。
 - 复核工作树只含既有未跟踪 `scripts/cdp-e2e.mjs` 与 `scripts/cdp-tiny.mjs`，未把它们加入证据提交。便携验收的可复核字段及 SHA-256 见 [单独运行记录](../verification/portable-runtime-acceptance-2026-09-26.md)。
