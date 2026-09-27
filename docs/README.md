@@ -54,7 +54,7 @@
 | `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | `v0.1.0` 已发布 MSI/NSIS/便携 ZIP 与 Docker 镜像 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 公开筛选的 v0.1.0 界面图册 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
-| [verification/termux-build-deployment-2026-09-27.md](verification/termux-build-deployment-2026-09-27.md) | **Termux / Android arm64 构建、daemon 烟测与 CLI/TUI 后续方向** | GPT-5.6 Sol ultra 实测；运行时源代码固定到 `f1670e7`，报告文档固定到 `8b626c2`，不替代其他平台发布验收 |
+| [verification/termux-build-deployment-2026-09-27.md](verification/termux-build-deployment-2026-09-27.md) | **Termux / Android arm64 构建、daemon 烟测与 CLI/TUI 后续方向** | GPT-5.6 Sol ultra 实测；运行时源代码固定到 `f1670e7`，报告文档随后持续修订，不替代其他平台发布验收 |
 
 ## 阅读顺序（开发 Agent）
 
