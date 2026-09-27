@@ -2,7 +2,7 @@
 
 ## 范围与结论
 
-核验对象为 Jev-Switch `main` 的运行时源码基线 `8b626c2880091b04e66cb9b274a6c89318c9a04b`（提交时间 `2026-09-27T05:18:29+08:00`）；报告随后由文档提交 `6b01d0a1baffdd8a40d5db59a0720191fac8317f` 纳入 `main`，该提交不改变下述运行时结果。在 Termux / Android arm64 环境检查 Rust workspace 的联网与离线门禁、UI 门禁及运行部署边界。本文记录当前工作树实测，不把历史 CI、其他平台或本机生成物的结果外推到新 checkout。
+核验对象为 Jev-Switch `main` 的运行时源码基线 `8b626c2880091b04e66cb9b274a6c89318c9a04b`（提交时间 `2026-09-27T05:18:29+08:00`）；报告先由文档提交 `6b01d0a1baffdd8a40d5db59a0720191fac8317f` 纳入 `main`，随后由 `30f085a3bdb2114d95ace52dd40d88997b9e971d` 修正 warm-cache 离线证据和版本措辞，两个提交都不改变下述运行时结果。在 Termux / Android arm64 环境检查 Rust workspace 的联网与离线门禁、UI 门禁及运行部署边界。本文记录当前工作树实测，不把历史 CI、其他平台或本机生成物的结果外推到新 checkout。
 
 当前 Rust 与 UI 源码门禁均在本机通过。首次离线 Rust 尝试因本地索引缺少锁定的 `futures 0.3.34` 失败；联网门禁补齐缓存后，联网 workspace 测试和 `ts-rs` feature 测试均通过。UI 的 `node_modules` 在本次检查时存在，但该目录被 Git 忽略，不包含在 checkout 中；本次随后执行 `npm ci` 并复跑 UI 门禁，新环境仍应依据 `ui/package-lock.json` 执行该命令。本次没有验证 Tauri 桌面包、Docker 构建或真实 Jev 上游请求。
 
@@ -16,7 +16,7 @@
 | JavaScript | Node.js `v25.3.0`；npm `11.10.0` |
 | Docker | 未安装 |
 | 运行时源码基线 | `8b626c2880091b04e66cb9b274a6c89318c9a04b` |
-| 报告文档提交 | `6b01d0a1baffdd8a40d5db59a0720191fac8317f` |
+| 报告文档提交（当前） | `30f085a3bdb2114d95ace52dd40d88997b9e971d` |
 
 Rust workspace 在 `rs/`；Tauri 壳是 `src-tauri/` 下的独立 Cargo 工程。CI 的默认后端/前端门禁见 [ci.yml](../../.github/workflows/ci.yml)，发布版本同步检查位于 [release.yml](../../.github/workflows/release.yml)。当前四处应用版本字段均为 `0.1.0`：`ui/package.json`、`src-tauri/tauri.conf.json`、`rs/Cargo.toml` 与 `src-tauri/Cargo.toml`。锁文件分别为 `ui/package-lock.json`、`rs/Cargo.lock` 和 `src-tauri/Cargo.lock`。版本字段与本次被测运行时源码基线对齐；这不是一次版本升级或发布验收。
 
