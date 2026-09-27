@@ -117,12 +117,8 @@ Opus 5 的服务入口方向仍成立，但不能按“入口 CRUD 页面已完�
 
 ## 证据索引
 
-- [来源与source map](design/previews/runtime-audit/runtime-source-evidence.json)
-- [演练场控件与布局](design/previews/runtime-audit/playground-dom.json) / [实际单入口调用](design/previews/runtime-audit/playground-run.json)
-- [新内核隔离HTTP与重启](design/previews/runtime-audit/backend-evidence.json)
-- [Tauri页面与静态资源](design/previews/runtime-audit/tauri-dom.json) / [测试进程](design/previews/runtime-audit/tauri-process.json)
-- [5173路由](design/previews/runtime-audit/routing-live.png) / [5173演练场](design/previews/runtime-audit/playground-live.png)
-- [Tauri路由](design/previews/runtime-audit/tauri-routing.png) / [Tauri演练场](design/previews/runtime-audit/tauri-playground.png)
+- `docs/design/previews/runtime-audit/`：本机运行审计的未跟踪/被忽略证据目录，不随公开 checkout 提供；其中的 JSON、PNG 与进程记录不能作为仓库内可复核链接。
+- 可提交的当前验证入口见 [Termux 构建与部署核验](verification/termux-build-deployment-2026-09-27.md)、[便携运行验收](verification/portable-runtime-acceptance-2026-09-26.md) 和 [Tauri 截图证据](verification/tauri-screenshot-evidence-2026-09-26.md)。
 
 ## 2026-09-26 08:02：安装版现状复评
 

@@ -2,7 +2,7 @@
 
 ## 范围与结论
 
-核验对象为 Jev-Switch `main` 的运行时源码基线 `8b626c2880091b04e66cb9b274a6c89318c9a04b`（提交时间 `2026-09-27T05:18:29+08:00`）；报告初始文档提交为 `6b01d0a1baffdd8a40d5db59a0720191fac8317f`，`30f085a3bdb2114d95ace52dd40d88997b9e971d` 修正了 warm-cache 离线证据和版本措辞，后续文档提交只维护证据表述，不改变下述运行时结果。在 Termux / Android arm64 环境检查 Rust workspace 的联网与离线门禁、UI 门禁及运行部署边界。本文记录当前工作树实测，不把历史 CI、其他平台或本机生成物的结果外推到新 checkout。
+核验对象为 Jev-Switch `main` 的运行时源码基线 `f1670e79d61b3a1d0092c0e00dc5a9c88bb952c5`（提交时间 `2026-09-26T19:10:00+08:00`）；其后的 `8b626c2` 是 docs-only 提交，不改变被测运行时代码。报告初始文档提交为 `6b01d0a1baffdd8a40d5db59a0720191fac8317f`，`30f085a3bdb2114d95ace52dd40d88997b9e971d` 修正了 warm-cache 离线证据和版本措辞，后续文档提交只维护证据表述，不改变下述运行时结果。在 Termux / Android arm64 环境检查 Rust workspace 的联网与离线门禁、UI 门禁及运行部署边界。本文记录当前工作树实测，不把历史 CI、其他平台或本机生成物的结果外推到新 checkout。
 
 当前 Rust 与 UI 源码门禁均在本机通过。首次离线 Rust 尝试因本地索引缺少锁定的 `futures 0.3.34` 失败；联网门禁补齐缓存后，联网 workspace 测试和 `ts-rs` feature 测试均通过。UI 的 `node_modules` 在本次检查时存在，但该目录被 Git 忽略，不包含在 checkout 中；本次随后执行 `npm ci` 并复跑 UI 门禁，新环境仍应依据 `ui/package-lock.json` 执行该命令。本次没有验证 Tauri 桌面包、Docker 构建或真实 Jev 上游请求。
 
@@ -15,7 +15,7 @@
 | Rust | `rustc 1.93.1`，host `aarch64-linux-android`；`cargo 1.93.1`；未安装 `rustup` |
 | JavaScript | Node.js `v25.3.0`；npm `11.10.0` |
 | Docker | 未安装 |
-| 运行时源码基线 | `8b626c2880091b04e66cb9b274a6c89318c9a04b` |
+| 运行时源码基线 | `f1670e79d61b3a1d0092c0e00dc5a9c88bb952c5` |
 | 报告文档提交链 | 初始 `6b01d0a`；warm-cache 证据修正 `30f085a`；后续仅维护文档措辞 |
 
 Rust workspace 在 `rs/`；Tauri 壳是 `src-tauri/` 下的独立 Cargo 工程。CI 的默认后端/前端门禁见 [ci.yml](../../.github/workflows/ci.yml)，发布版本同步检查位于 [release.yml](../../.github/workflows/release.yml)。当前四处应用版本字段均为 `0.1.0`：`ui/package.json`、`src-tauri/tauri.conf.json`、`rs/Cargo.toml` 与 `src-tauri/Cargo.toml`。锁文件分别为 `ui/package-lock.json`、`rs/Cargo.lock` 和 `src-tauri/Cargo.lock`。版本字段与本次被测运行时源码基线对齐；这不是一次版本升级或发布验收。
@@ -80,9 +80,9 @@ Termux 环境未安装 `rustup`，因此本机工具链不是通过 rustup chann
 CLI/TUI 是后续产品方向，不是当前 `v0.1.0` 已实现能力；本机没有构建或试用 CLI/TUI。按当前 daemon 源码，建议分两步推进：
 
 1. 先做无状态 CLI 薄客户端，可从 `status`、`models`、`invoke`、`routes`、`events` 开始：分别复用 `GET /health` 与 `GET /v1/admin/status`、`GET /v1/models`、`POST /v1/systemone`、`GET/PUT /v1/admin/routes`、`GET /v1/admin/events`。事件页使用 `since`/`limit` 游标；输出支持 JSON 与便于终端阅读的表格。若命令最终命名为 `logs`，应明确它展示的是 daemon 持久化的调用活动/路由元数据，不是任意进程 stdout/stderr；后者目前没有通用日志读取 API。
-2. 再做 TUI，复用同一 HTTP client 与协议 DTO，展示入口和 DAG、调用状态、route trace、usage、latency、错误及历史。实时更新可评估 `GET /v1/admin/events/stream`，恢复/翻页使用 `GET /v1/admin/events` 的持久 ID 游标；caller-scoped 场景另有 `/v1/events/my` 与 `/v1/events/my/stream`。不要在 TUI 中复制路由、SQLite 或鉴权实现。
+2. 再做 TUI，复用同一 HTTP client 与协议 DTO，展示入口和 DAG、调用状态、route trace、usage、latency、错误及历史。实时更新可评估 `GET /v1/admin/events/stream`，但该管理员 SSE 使用内存 EventBus，重启后不能恢复断线期间的事件；恢复/翻页应使用 SQLite-backed `GET /v1/admin/events` 的持久 ID 游标。caller-scoped 场景另有 `/v1/events/my` 与 `/v1/events/my/stream`，其恢复语义需按调用者权限处理。不要在 TUI 中复制路由、SQLite 或鉴权实现。
 
-Termux 首期宜支持本机 daemon 与 loopback。远程/cloud 模式须遵循 daemon 现有调用 token/admin session 鉴权；不要把 token 放入命令行参数、shell history 或日志，也不要让 CLI/TUI 接管 provider key。CLI/TUI 可作为独立 Rust 客户端 crate/二进制接入 workspace，不把终端 UI 状态放进 `jev-core`。验收至少覆盖 local/cloud 鉴权、断线与重连、迟到响应、取消、事件游标续读、窄终端/resize、非 TTY 与无色输出、敏感字段脱敏。命令契约、配置存储和 TUI 框架仍待产品决策。
+Termux 首期宜支持本机 daemon 与 loopback。CLI 默认应为只读；`routes` 写入、provider/admin 配置和其他破坏性操作必须要求显式确认，并复用 daemon 的鉴权和审计边界。远程/cloud 模式须遵循 daemon 现有调用 token/admin session 鉴权；不要把 token 放入命令行参数、shell history 或日志，也不要让 CLI/TUI 接管 provider key。CLI/TUI 可作为独立 Rust 客户端 crate/二进制接入 workspace，不把终端 UI 状态放进 `jev-core`。验收至少覆盖 local/cloud 鉴权、断线与重连、迟到响应、取消、事件游标续读、窄终端/resize、非 TTY 与无色输出、敏感字段脱敏。命令契约、配置存储和 TUI 框架仍待产品决策。
 
 ## 未验证边界
 
