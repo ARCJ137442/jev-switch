@@ -24,6 +24,10 @@ Thumbs.db
 *.log
 .tmp/
 
+# Python 缓存与字节码
+__pycache__/
+*.py[cod]
+
 # Tauri 桌面壳（src-tauri 独立工程）构建产物与 sidecar 暂存二进制
 src-tauri/target/
 src-tauri/binaries/*.exe
