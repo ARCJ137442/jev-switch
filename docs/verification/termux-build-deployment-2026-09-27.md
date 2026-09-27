@@ -2,7 +2,7 @@
 
 ## 范围与结论
 
-核验对象为 Jev-Switch `main` 的 HEAD `8b626c2880091b04e66cb9b274a6c89318c9a04b`（提交时间 `2026-09-27T05:18:29+08:00`），在 Termux / Android arm64 环境检查 Rust workspace 的联网与离线门禁、UI 门禁及运行部署边界。本文记录当前工作树实测，不把历史 CI、其他平台或本机生成物的结果外推到新 checkout。
+核验对象为 Jev-Switch `main` 的运行时源码基线 `8b626c2880091b04e66cb9b274a6c89318c9a04b`（提交时间 `2026-09-27T05:18:29+08:00`）；报告随后由文档提交 `6b01d0a1baffdd8a40d5db59a0720191fac8317f` 纳入 `main`，该提交不改变下述运行时结果。在 Termux / Android arm64 环境检查 Rust workspace 的联网与离线门禁、UI 门禁及运行部署边界。本文记录当前工作树实测，不把历史 CI、其他平台或本机生成物的结果外推到新 checkout。
 
 当前 Rust 与 UI 源码门禁均在本机通过。首次离线 Rust 尝试因本地索引缺少锁定的 `futures 0.3.34` 失败；联网门禁补齐缓存后，联网 workspace 测试和 `ts-rs` feature 测试均通过。UI 的 `node_modules` 在本次检查时存在，但该目录被 Git 忽略，不包含在 checkout 中；本次随后执行 `npm ci` 并复跑 UI 门禁，新环境仍应依据 `ui/package-lock.json` 执行该命令。本次没有验证 Tauri 桌面包、Docker 构建或真实 Jev 上游请求。
 
@@ -15,9 +15,10 @@
 | Rust | `rustc 1.93.1`，host `aarch64-linux-android`；`cargo 1.93.1`；未安装 `rustup` |
 | JavaScript | Node.js `v25.3.0`；npm `11.10.0` |
 | Docker | 未安装 |
-| 仓库 HEAD | `8b626c2880091b04e66cb9b274a6c89318c9a04b` |
+| 运行时源码基线 | `8b626c2880091b04e66cb9b274a6c89318c9a04b` |
+| 报告文档提交 | `6b01d0a1baffdd8a40d5db59a0720191fac8317f` |
 
-Rust workspace 在 `rs/`；Tauri 壳是 `src-tauri/` 下的独立 Cargo 工程。CI 的默认后端/前端门禁见 [ci.yml](../../.github/workflows/ci.yml)，发布版本同步检查位于 [release.yml](../../.github/workflows/release.yml)。当前四处应用版本字段均为 `0.1.0`：`ui/package.json`、`src-tauri/tauri.conf.json`、`rs/Cargo.toml` 与 `src-tauri/Cargo.toml`。锁文件分别为 `ui/package-lock.json`、`rs/Cargo.lock` 和 `src-tauri/Cargo.lock`。版本字段与 HEAD 对齐；这不是一次版本升级或发布验收。
+Rust workspace 在 `rs/`；Tauri 壳是 `src-tauri/` 下的独立 Cargo 工程。CI 的默认后端/前端门禁见 [ci.yml](../../.github/workflows/ci.yml)，发布版本同步检查位于 [release.yml](../../.github/workflows/release.yml)。当前四处应用版本字段均为 `0.1.0`：`ui/package.json`、`src-tauri/tauri.conf.json`、`rs/Cargo.toml` 与 `src-tauri/Cargo.toml`。锁文件分别为 `ui/package-lock.json`、`rs/Cargo.lock` 和 `src-tauri/Cargo.lock`。版本字段与本次被测运行时源码基线对齐；这不是一次版本升级或发布验收。
 
 Termux 环境未安装 `rustup`，因此本机工具链不是通过 rustup channel 解析的 `stable` 安装；本次记录精确版本号，不宣称等同于 GitHub Actions 的 Ubuntu stable 工具链。
 
@@ -30,6 +31,7 @@ Termux 环境未安装 `rustup`，因此本机工具链不是通过 rustup chann
 | `cargo test --manifest-path rs/Cargo.toml --workspace --locked --offline`（首次） | 退出码 101；本地 crates.io 索引没有锁定的 `futures 0.3.34`，不是源码测试失败 |
 | `cargo test --manifest-path rs/Cargo.toml --workspace --locked` | 退出码 0；默认 workspace 测试全通过（218 个非 doc 测试） |
 | `cargo test --manifest-path rs/Cargo.toml --workspace --features ts-rs --locked` | 退出码 0；`ts-rs` feature 测试全通过（275 个非 doc 测试）。输出若干 serde alias 解析 warning，但无测试失败 |
+| `cargo test --manifest-path rs/Cargo.toml --workspace --locked --offline`（联网补齐后 warm-cache 重跑） | 退出码 0；本机缓存状态下 workspace 测试通过；这不是空缓存或可移植离线安装证据 |
 | `npm ci --prefix ui` | 退出码 0；安装 134 packages。npm 报告 2 个 audit vulnerabilities（1 moderate、1 high），本次未自动升级依赖 |
 | `git diff --exit-code -- ui/src/generated rs/crates/jev-protocol/bindings` | 退出码 0；生成类型无 tracked diff |
 | `cargo fmt --manifest-path rs/Cargo.toml --all -- --check` | 退出码 0 |
@@ -39,7 +41,7 @@ Termux 环境未安装 `rustup`，因此本机工具链不是通过 rustup chann
 
 ### Rust 门禁失败时的区分方式
 
-- `--offline` 失败并提示 crate/索引缺失，首先表示本地缓存不完整；在允许联网的环境预取依赖后再重跑。联网补齐后本次没有把完整 workspace 离线命令作为独立成功证据，因此不要把离线门禁写成已通过。
+- `--offline` 首次失败并提示 crate/索引缺失，表示本地缓存不完整；允许联网预取依赖后，本次完整 workspace 的 warm-cache `--offline` 重跑退出 0。该结果只证明当前缓存状态下可运行，不证明空缓存、首次安装或其他主机上的可移植离线门禁。
 - 默认联网命令失败于 DNS、TLS、代理、索引或 crate 下载，不能据此断言源码测试失败；应保留 Cargo 原始错误，先解决依赖获取，再检查测试结果。
 - `--locked` 失败提示 lockfile 需要更新，表示 manifest 与锁文件不一致；不要通过移除 `--locked` 掩盖 CI 漂移，应按项目流程更新并审阅 `rs/Cargo.lock`。
 - Android/Termux 通过只覆盖此 host 的源码编译与测试，不证明 Linux glibc、Windows、Tauri 桌面或容器镜像构建通过。
