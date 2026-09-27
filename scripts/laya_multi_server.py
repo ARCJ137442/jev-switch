@@ -40,15 +40,14 @@ import logging
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 # ---- 环境（必须在 import laya 之前设置，沿用既有服务） -----------------------
+from laya_runtime_config import apply_environment, resolve_snapshot
+
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
-os.environ.setdefault("HF_HOME", "E:/hf-cache")
-os.environ.setdefault("HUGGINGFACE_HUB_CACHE", "E:/hf-cache/hub")
-os.environ.setdefault("TMP", "E:/tmp")
-os.environ.setdefault("TEMP", "E:/tmp")
-os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+apply_environment()
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -56,8 +55,9 @@ from pydantic import BaseModel, Field
 import laya
 from laya import Router
 
-# 本机完整快照（三个 safetensors 齐全；revision 漂移不影响——路径直载零网络）
-SNAP = "E:/hf-cache/hub/models--convaiinnovations--laya/snapshots/1c5edc17a7acd8701df6fc341c0d179f1c62c982"
+# 本机完整快照（三个 safetensors 齐全；revision 漂移不影响——路径直载零网络）。
+# Linux/WSL 默认使用 ~/.cache/huggingface；JEV_LAYA_SNAPSHOT 可覆盖为任意绝对路径。
+SNAP = str(resolve_snapshot())
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(message)s")
@@ -93,10 +93,17 @@ def get_router() -> Router:
 def init_router(device: str) -> None:
     """构建 Router 并预载双权重（本地快照路径，零网络）。"""
     global _router
+    snapshot = Path(SNAP)
+    if not snapshot.is_dir():
+        raise RuntimeError(
+            f"Laya snapshot not found: {snapshot}. "
+            "Set JEV_LAYA_SNAPSHOT to a local model snapshot directory."
+        )
+    log.info("using Laya snapshot: %s", snapshot)
     models = {
-        "english": (SNAP, None),
-        "multilingual": (SNAP, "multilingual"),
-        "typed-decisions": (SNAP, "typed-decisions"),
+        "english": (str(snapshot), None),
+        "multilingual": (str(snapshot), "multilingual"),
+        "typed-decisions": (str(snapshot), "typed-decisions"),
     }
     log.info("initialising Router (local snapshot, preload english+multilingual) ...")
     t0 = time.perf_counter()
