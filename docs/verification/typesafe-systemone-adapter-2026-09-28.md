@@ -1,7 +1,7 @@
 # TypeSafe SystemOne Adapter Verification
 
-**Date:** 2026-09-28  
-**Scope:** Current source workspace; not included in the published v0.1.0 release.  
+**Date:** 2026-09-28
+**Scope:** Current source workspace; not included in the published v0.1.0 release.
 **Verification:** Local Rust tests with wiremock plus a separate local Jev-Switch → JevK5 GGUF bridge smoke. No official TypeSafe credential was configured; no cloud or billable API calls were made.
 
 ## Current Support
