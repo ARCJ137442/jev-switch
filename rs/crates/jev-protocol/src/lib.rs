@@ -646,6 +646,35 @@ fn default_upstream_calls() -> Option<u32> {
     Some(1)
 }
 
+/// Read provider latency reported as either integer or fractional milliseconds.
+///
+/// TypeSafe-compatible local servers commonly measure elapsed time as a float
+/// (`162.4`), while the public Jev contract stores the gateway value as an
+/// integer. Normalize at the protocol boundary so adapters do not each need a
+/// vendor-specific DTO just for timing precision.
+fn deserialize_optional_latency_ms<'de, D>(
+    deserializer: D,
+) -> Result<Option<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let Some(millis) = value.as_f64() else {
+        return Err(serde::de::Error::custom(
+            "latency_ms must be a non-negative number or null",
+        ));
+    };
+    if !millis.is_finite() || millis < 0.0 || millis > u64::MAX as f64 {
+        return Err(serde::de::Error::custom(
+            "latency_ms must be a finite non-negative number",
+        ));
+    }
+    Ok(Some(millis.round() as u64))
+}
+
 /// Jev 决策响应（contracts/01 §5）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(
@@ -665,7 +694,11 @@ pub struct JevResponse {
     pub upstream_calls: Option<u32>,
     /// 双拼写宽容读入；写出 snake_case。null ≠ 0。
     /// （ts-rs：u64 默认 → bigint，wire 是 JSON number —— 覆盖对齐运行时）
-    #[serde(default, alias = "latencyMs")]
+    #[serde(
+        default,
+        alias = "latencyMs",
+        deserialize_with = "deserialize_optional_latency_ms"
+    )]
     #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
     pub latency_ms: Option<u64>,
     /// null ≠ 0：未知就是 null —— 不 skip，显式写 null（契约字面）。
@@ -1099,6 +1132,20 @@ mod tests {
         // model/usage 为可选呈现 → absent
         assert!(out.get("model").is_none());
         assert!(out.get("usage").is_none());
+    }
+
+    #[test]
+    fn response_latency_accepts_fractional_milliseconds() {
+        let fractional: JevResponse =
+            serde_json::from_str(r#"{"answers":{},"latency_ms":162.4}"#).unwrap();
+        assert_eq!(fractional.latency_ms, Some(162));
+
+        let camel: JevResponse =
+            serde_json::from_str(r#"{"answers":{},"latencyMs":162.6}"#).unwrap();
+        assert_eq!(camel.latency_ms, Some(163));
+
+        let out = serde_json::to_value(&camel).unwrap();
+        assert_eq!(out["latency_ms"], 163);
     }
 
     #[test]
