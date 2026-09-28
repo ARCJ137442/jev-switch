@@ -1,6 +1,6 @@
 [package]
 name = "jev-adapters"
-description = "Jev-Switch 上游适配：Vercel AI Gateway + Laya 本地 Jev"
+description = "Jev-Switch 上游适配：Vercel AI Gateway + Laya + TypeSafe SystemOne"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

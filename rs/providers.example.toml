@@ -15,7 +15,7 @@
 #   - UI/API 只出 `api_key_masked`（如 sk-****a1b2），永无读回明文接口
 #   - admin PUT 写回会保留本文件其它段，但**注释不保留**（toml 往返限制）
 #
-# MVP 范围（M0）：2 provider + 模型路由 DAG（[[routes]]）+ 旧 [router] 兼容表。
+# 示例默认启用 Vercel + Laya；另含禁用的 TypeSafe 官方和本地-compatible 配置。
 #
 # ── 双态开关（#43 · docs/12 §一）────────────────────────────────────
 # mode 只管鉴权，**不涉及上游拓扑**（拓扑不区分：以内核所在位置访问上游）。
@@ -54,6 +54,21 @@ kind = "laya"
 base = "http://127.0.0.1:18765/v1/systemone"
 enabled = true
 
+# TypeSafe official API. Enable after setting TYPESAFE_API_KEY.
+# `base` is the complete endpoint URL, not just the host or `/v1` prefix.
+[providers.typesafe]
+kind = "typesafe"
+base = "https://api.typesafe.ai/v1/systemone"
+api_key_env = "TYPESAFE_API_KEY"
+enabled = false
+
+# A local model server can use the same adapter when it implements Jev
+# `POST /v1/systemone`. Local compatible endpoints may omit api_key.
+[providers.local-typesafe]
+kind = "typesafe"
+base = "http://127.0.0.1:8000/v1/systemone"
+enabled = false
+
 # ── Router 段（旧式，兼容保留）：model id → upstream id ──────────────
 # 每条 = 单条 match=exact 边（priority=0、on_error=next、sticky=none）。
 # 调用方 POST {"model": "laya-english", ...} 即走 Laya
@@ -67,6 +82,9 @@ enabled = true
 # 服务端 scripts/laya_multi_server.py 按 model id 分派 english / multilingual / router。
 "laya-multilingual" = "laya"
 "laya-router" = "laya"
+
+# Optional TypeSafe examples are disabled above until you configure the service.
+# For model IDs available to your official account, set upstream_model explicitly.
 
 # ── 模型路由 DAG（contracts/03 §2 [[routes]]）────────────────────────
 # 示例一：对外 id "jev" 双候选（同模型可切换）——
@@ -107,5 +125,23 @@ left = "jev-zh"
 match = "exact"
 right = "laya"
 upstream_model = "laya-multilingual"
+priority = 20
+on_error = "next"
+
+# Example official TypeSafe route; enable the provider and use an account model ID.
+[[routes]]
+left = "jev-typesafe"
+match = "exact"
+right = "typesafe"
+upstream_model = "jev-latest"
+priority = 20
+on_error = "next"
+
+# Example local SystemOne-compatible route; provider remains disabled until ready.
+[[routes]]
+left = "jev-local"
+match = "exact"
+right = "local-typesafe"
+upstream_model = "jev-local"
 priority = 20
 on_error = "next"

@@ -5,10 +5,11 @@
 //!
 //! - [`vercel_dto`]：Vercel 厂商 DTO（A5 从 jev-protocol 迁入）
 //! - [`vercel_protocol`]：Vercel 方言 `ProtocolAdapter`（原 core translate 重组）
-//! - [`upstream_vercel`] / [`upstream_laya`]：HTTP 上游（`UpstreamAdapter` 实现，
+//! - [`upstream_vercel`] / [`upstream_laya`] / [`upstream_typesafe`]：HTTP 上游（`UpstreamAdapter` 实现，
 //!   capability 注册制 —— 能力表在各家 adapter 内，不再查 `capabilities_of`）
 
 pub mod upstream_laya;
+pub mod upstream_typesafe;
 pub mod upstream_vercel;
 pub mod vercel_dto;
 pub mod vercel_protocol;

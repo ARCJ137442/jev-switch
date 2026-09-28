@@ -1,0 +1,38 @@
+# Local-model integration profile for Jev-Switch.
+#
+# Start the loopback services before using this profile:
+#   JevK5 GGUF TypeSafe bridge: 127.0.0.1:8766
+#   Laya multi-model SystemOne service: 127.0.0.1:18765
+#
+# This file contains no API keys and is separate from the default providers file.
+mode = "local"
+bind = "127.0.0.1:11439"
+
+[providers.jevk5]
+kind = "typesafe"
+base = "http://127.0.0.1:8766/v1/systemone"
+models = ["jevk5-9b-v0.3.3-q5"]
+enabled = true
+
+[providers.laya]
+kind = "laya"
+base = "http://127.0.0.1:18765/v1/systemone"
+models = ["laya-router"]
+enabled = true
+
+[[routes]]
+left = "jevk5-local"
+match = "exact"
+right = "jevk5"
+upstream_model = "jevk5-9b-v0.3.3-q5"
+priority = 10
+on_error = "next"
+
+[[routes]]
+left = "laya-local"
+match = "exact"
+right = "laya"
+upstream_model = "laya-router"
+priority = 20
+on_error = "next"
+

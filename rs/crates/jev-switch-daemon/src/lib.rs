@@ -47,7 +47,10 @@ use axum::{
     Json, Router,
 };
 use config::Config;
-use jev_adapters::{upstream_laya::LayaUpstream, upstream_vercel::VercelUpstream};
+use jev_adapters::{
+    upstream_laya::LayaUpstream, upstream_typesafe::TypeSafeUpstream,
+    upstream_vercel::VercelUpstream,
+};
 use jev_core::{
     adapter::{plain_ctx, Registry, UpstreamAdapter},
     redact::redact,
@@ -272,6 +275,18 @@ pub(crate) fn build_upstreams(config: &Config) -> Vec<Box<dyn UpstreamAdapter>> 
                     tracing::warn!(provider = %id, error = %error, "provider skipped: API key unavailable")
                 }
             },
+            "typesafe" => {
+                match TypeSafeUpstream::new_with_id(
+                    id.clone(),
+                    provider.base.clone(),
+                    config.effective_api_key(&id),
+                ) {
+                    Ok(adapter) => adapters.push(Box::new(adapter)),
+                    Err(error) => {
+                        tracing::warn!(provider = %id, error = %error, "upstream adapter init failed")
+                    }
+                }
+            }
             kind => {
                 tracing::warn!(provider = %id, kind = %kind, "provider skipped: unsupported adapter kind")
             }
@@ -912,6 +927,31 @@ mod tests {
         assert_eq!(ids, vec!["laya-account-a", "laya-account-b"]);
     }
 
+    #[test]
+    fn typesafe_adapter_kind_accepts_local_endpoint_without_api_key() {
+        let mut cfg = Config::default();
+        cfg.providers.insert(
+            "local-typesafe".into(),
+            config::ProviderConfig {
+                kind: "typesafe".into(),
+                base: "http://127.0.0.1:8000/v1/systemone".into(),
+                name: None,
+                account: None,
+                models: vec!["jev-local".into()],
+                api_key: None,
+                api_key_env: None,
+                enabled: true,
+            },
+        );
+
+        let adapters = build_upstreams(&cfg);
+        assert_eq!(adapters.len(), 1);
+        assert_eq!(adapters[0].id(), "local-typesafe");
+        assert!(adapters[0]
+            .capabilities()
+            .supports(jev_protocol::QuestionType::Score));
+    }
+
     /// contracts/05 §2 /health 形状快照：{status, version}，JSON。
     #[test]
     fn health_shape_snapshot() {
@@ -1099,10 +1139,10 @@ mod tests {
             "q".to_string(),
             Question::Noul {
                 instructions: "is greeting?".into(),
-                criteria: Criteria::Bool {
+                criteria: Some(Criteria::Bool {
                     r#true: "yes".into(),
                     r#false: "no".into(),
-                },
+                }),
             },
         );
         JevRequest {
