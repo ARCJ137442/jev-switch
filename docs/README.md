@@ -3,11 +3,13 @@
 > **TL;DR：**当前正式版为 `v0.1.0`。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。
+
+> **2026-09-28 adapter 状态：**当前源码增加 TypeSafe 官方及 TypeSafe-compatible SystemOne 上游；该实现尚未进入 v0.1.0 Release。契约测试与适用边界见[核对记录](verification/typesafe-systemone-adapter-2026-09-28.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **当前核实状态（2026-09-27）**：正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已由 tag 流水线发布，含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。Release gate 的 Rust、UI、Tauri 与版本检查通过。验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。Laya 不重复实测。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段**：网关实施及验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；v0.1.0 已发布。本阶段工作为发布后公开文档校准和两份 Awesome PR 跟进，不继续实现未排期路线图功能。便携运行时需整体保留壳、sidecar 与 UI 资源，配置仍从正式 AppData 读取；可用 `scripts/build-windows-release.ps1` 重建 MSI/NSIS 与便携包。总计划 §3/§3.1 记录决定及八条批注，顶部发布后状态与对应证据节记录现行验收边界。
+> **当前产品基线与维护阶段**：网关实施及 v0.1.0 验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准。2026-09-28 当前源码增量加入 TypeSafe 官方及本地-compatible SystemOne adapter，尚未发布；本轮离线证据见[核对记录](verification/typesafe-systemone-adapter-2026-09-28.md)。便携运行时需整体保留壳、sidecar 与 UI 资源，配置仍从正式 AppData 读取；可用 `scripts/build-windows-release.ps1` 重建 MSI/NSIS 与便携包。总计划 §3/§3.1 记录决定及八条批注，顶部发布后状态与对应证据节记录现行验收边界。
 
 ## 核心定位（一句话）
 
@@ -17,7 +19,8 @@
 
 | 文件 | 内容 | 状态 |
 |---|---|---|
-| **[../ROADMAP.md](../ROADMAP.md)** | **未来功能方向、优先级和可验收边界** | TypeSafe 官方/OpenRouter 适配器为最高优先级；不代表当前已实现或已排期 |
+| **[../ROADMAP.md](../ROADMAP.md)** | **未来功能方向、优先级和可验收边界** | OpenRouter 适配器为最高优先级；不代表已排期 |
+| [verification/typesafe-systemone-adapter-2026-09-28.md](verification/typesafe-systemone-adapter-2026-09-28.md) | TypeSafe 官方与本地-compatible SystemOne adapter 的当前实现、wiremock 证据和边界 | 源码/离线契约验证；不代表已发布或已做真实官方推理 |
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线说明与路线图各方向对应的具体用户旅程 | 早期场景已标为历史构想；第七、八节覆盖路线图中的未来体验提案，不表示已实现 |
 | **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **本轮用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收门槛** | **当前施工入口；P1–P4 已验；P5 有用户截图与 Hide/Restore 证据，候选 Exit/恢复边界仍开放；P6 v0.1.0 已发布** |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |

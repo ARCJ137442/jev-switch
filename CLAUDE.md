@@ -9,13 +9,13 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
   → 服务入口与路由策略
   → 可编辑调用路由 DAG
   → 提供商接入配置（地址 + 上游 key + 模型）
-  → 上游适配器（当前内置 Vercel、Laya）
+  → 上游适配器（当前内置 Vercel、Laya、TypeSafe SystemOne）
 ```
 
 - `local` 描述网关运行位置与默认监听方式，不代表离线；它仍可调用远程上游。云机器上的 `127.0.0.1` 指云机器自身。
 - 对外服务入口与上游提供商配置是两种不同对象；不要混淆网关调用 Token 和供应商 API key。
 - 仅提供 Jev 原生 `/v1/systemone` 接口；不实现 OpenAI/Anthropic 聊天格式兼容入口。
-- 当前内置上游适配器为 Vercel 与 Laya；TypeSafe 官方 API 和 OpenRouter 尚未实现，属于 [最高优先级路线图事项](ROADMAP.md)。不要将计划写成当前功能。
+- 当前内置上游适配器为 Vercel、Laya 与 TypeSafe SystemOne。TypeSafe adapter 支持官方 API 和提供相同 Jev `/v1/systemone` 格式的本地服务；普通 OpenAI/Anthropic chat completions 不属于该兼容范围。OpenRouter 尚未实现，见[路线图](ROADMAP.md)。
 - 上游 key 只由 daemon 持有；不得输出、写入公开文档、日志、测试产物或提交。管理 API 仅返回掩码状态。
 
 ## 开发与交付

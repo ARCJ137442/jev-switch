@@ -13,6 +13,8 @@
 
 本文是产品决策、实现范围及验收边界的主计划。涉及两侧入口定义、提供商卡片粒度、DAG、演练场范围、多语言与执行顺序的冲突，以本文记录的最新用户决定为准。带时间戳的历史增量保留当时证据，不得覆盖本页最新状态。旧文档保留其历史证据；未被本轮改变的协议不变量与已批准专项继续有效。**计划定稿、配置 API 存在、页面能构建，都不能等同于产品验收完成。**
 
+> **2026-09-28 上游适配增量：**当前源码新增通用 `typesafe` adapter，可连接官方 `POST https://api.typesafe.ai/v1/systemone` 和提供相同 Jev SystemOne 格式的本地服务；wiremock 已覆盖请求、鉴权、三类 answer、usage、Score legend 及 429/529 重试。无 billable live call，官方账号认证与模型可用性仍待实测；该增量未进入 v0.1.0 Release。普通 OpenAI/Anthropic chat API 与 OpenRouter 不在此实现内。完整边界见[核对记录](../verification/typesafe-systemone-adapter-2026-09-28.md)。
+
 ## 1. 产品本质与边界
 
 **Jev Switch 是在模型调用入口之间进行可配置转换的中间网关，承担入口聚合、自动化、智能化及可视化交互维护。**
@@ -855,3 +857,10 @@ Jeview 明确把每次完整请求和响应、以及明文 TypeSafe key 存入�
 - **版本边界：**2026-09-27 工作树新增的活动历史搜索、筛选、分页与逐跳 trace 展示属于发布后的源码，不在 `v0.1.0` 安装包、便携 ZIP 或 Docker 镜像中。相应测试与契约只说明当前源码状态；未发布前不得把它们写成 `v0.1.0` 已有能力。
 - **当前工作目标：**整理 README、Agent 入口、发版资料、主计划、用户旅程和路线图；向 `awesome-typesafe-jev` 与 `awesome-jev` 提交单条 README 投稿，并在 Git 忽略目录维护私有投稿正文和跟踪清单。该阶段不重新调用 Laya、不继续扩大网关功能，也不在清单实际收录前添加徽章。
 - 作者与 AI 披露：GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。
+
+## 2026-09-28 TypeSafe SystemOne 源码增量
+
+- 当前源码已加入 `typesafe` 上游 kind，使用配置中的完整 endpoint URL；官方地址为 `https://api.typesafe.ai/v1/systemone`，相同 Jev SystemOne 格式的本地服务可用同一 adapter。可选 key 只在配置时加入 Bearer header，供无鉴权的本地服务使用；官方 hosted API 仍需 key。
+- 协议层已扩展 instructions string/object/array、Choice criteria values string/object/array/null、Score levels string/object/array、可省略的 Noul criteria，以及 TypeSafe Score `legend` 保留。Vercel、Laya 与 TypeSafe 共用 Jev 请求类型；Vercel/Laya 透传行为仍须由回归测试保护。
+- 精确 method/path/auth/body、所有请求 union、三类 answer、usage、Score legend、429/529 retry 与 401 不重试均由本地 wiremock 覆盖。此增量未进入 v0.1.0 Release；没有发出 billable live call，官方凭据和账号可用模型尚未验证。Provider `/probe` 仍是 GET reachability check，不代表 POST 鉴权或 inference health。
+- 完整配置、验证命令与残余边界见[TypeSafe SystemOne adapter 核对记录](../verification/typesafe-systemone-adapter-2026-09-28.md)。OpenRouter adapter 仍未实现，路线图已按此拆分。
