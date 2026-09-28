@@ -24,6 +24,9 @@ pub struct VercelAnswer {
     /// score 题分值（契约 `Score.score: f64`；缺失则无法构成 Answer，报 502）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub score: Option<f64>,
+    /// TypeSafe-compatible gateways may return a score legend; preserve its wire shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legend: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub probabilities: Option<BTreeMap<String, f64>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

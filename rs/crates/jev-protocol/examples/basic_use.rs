@@ -27,11 +27,11 @@ fn main() {
     questions.insert(
         "q".to_string(),
         Question::Noul {
-            instructions: "is this a test?".to_string(),
-            criteria: Criteria::Bool {
-                r#true: "yes".to_string(),
-                r#false: "no".to_string(),
-            },
+            instructions: "is this a test?".into(),
+            criteria: Some(Criteria::Bool {
+                r#true: "yes".into(),
+                r#false: "no".into(),
+            }),
         },
     );
     let req = JevRequest {

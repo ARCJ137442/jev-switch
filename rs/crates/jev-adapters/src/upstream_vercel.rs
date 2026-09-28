@@ -152,10 +152,10 @@ mod tests {
             "q".to_string(),
             Question::Noul {
                 instructions: "test".into(),
-                criteria: Criteria::Bool {
+                criteria: Some(Criteria::Bool {
                     r#true: "y".into(),
                     r#false: "n".into(),
-                },
+                }),
             },
         );
         let req = JevRequest {
@@ -209,10 +209,10 @@ mod tests {
             "is_true".to_string(),
             Question::Noul {
                 instructions: "Is the statement true?".into(),
-                criteria: Criteria::Bool {
+                criteria: Some(Criteria::Bool {
                     r#true: "The statement is true.".into(),
                     r#false: "The statement is false.".into(),
-                },
+                }),
             },
         );
         let request = JevRequest {

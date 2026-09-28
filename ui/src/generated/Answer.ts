@@ -7,4 +7,4 @@
  * - 布尔族：[`Answer::Noul`]，概率即置信度 —— **没有 confidence 字段**
  * - 未知 `type` → 拒绝（禁 best-effort 平移）
  */
-export type Answer = { "type": "choice", choice: string, probabilities: { [key in string]: number }, confidence: number } | { "type": "score", score: number, probabilities: { [key in string]: number }, confidence: number } | { "type": "noul" | "boolean", noul?: number | null, probability?: number | null };
+export type Answer = { "type": "choice", choice: string, probabilities: { [key in string]: number }, confidence: number } | { "type": "score", score: number, legend?: unknown, probabilities: { [key in string]: number }, confidence: number } | { "type": "noul" | "boolean", noul?: number | null, probability?: number | null };

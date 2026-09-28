@@ -6,7 +6,7 @@
 //!
 //! 契约要点：
 //! - 对外 `Question.type ∈ {choice, score, noul}`；`boolean` 输入按 noul 语义归一（§1）
-//! - `criteria` 必填 + 按题型校验；缺失/错形态 → 本地 400（文案对齐上游，§6）
+//! - `criteria` 按 TypeSafe 形态校验；Choice/Score 必填，Noul 可省略
 //! - `Answer` 判别联合；布尔族**无 confidence**；choice/score 三字段必填（§4）
 //! - `NoulAnswer` 双键 `noul` 与 `probability` 并存保留（§4/§6）
 //! - 概率读取顺序冻结：`probability > noul >（适配层兜底）` → [`noul_probability`]
@@ -94,32 +94,72 @@ pub type SystemOneRequest = JevRequest;
 ///
 /// **反序列化即校验**（daemon 直接映射本地 400，不发上游）：
 /// - `type` ∈ {choice, score, noul, boolean}；未知 → 拒绝；`boolean` → 归一为 [`Question::Noul`]
-/// - `instructions` 必填非空
-/// - `criteria` 必填；按题型校验形态（choice→Map / score→List / noul→Bool），
-///   缺失文案对齐上游 `expected record, received undefined`
+/// - `instructions` 必填；接受 string / object / array
+/// - `criteria`：choice→Map、score→List 且 Noul 可省略；choice/score 值按官方 schema 校验
 ///
 /// 序列化恒写契约三判别值（`Noul` 写 `"noul"`；adapter 出站需要 `boolean` 方言时
 /// 在 outgoing 转换 —— 见 jev-core translate / 后续 ProtocolAdapter）。
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(::ts_rs::TS),
-    ts(export, export_to = "../../../../ui/src/generated/")
+    ts(
+        export,
+        export_to = "../../../../ui/src/generated/",
+        type = "{ \"type\": \"choice\", instructions: string | { [key in string]: unknown } | Array<unknown>, criteria: { [key in string]: string | { [key in string]: unknown } | Array<unknown> | null } } | { \"type\": \"score\", instructions: string | { [key in string]: unknown } | Array<unknown>, criteria: Array<string | { [key in string]: unknown } | Array<unknown>> } | { \"type\": \"noul\", instructions: string | { [key in string]: unknown } | Array<unknown>, criteria?: { [key in string]: unknown } }"
+    )
 )]
-#[serde(tag = "type", rename_all = "lowercase")]
 pub enum Question {
     Choice {
-        instructions: String,
+        instructions: Instructions,
         criteria: Criteria,
     },
     Score {
-        instructions: String,
+        instructions: Instructions,
         criteria: Criteria,
     },
     Noul {
-        instructions: String,
-        criteria: Criteria,
+        instructions: Instructions,
+        #[cfg_attr(feature = "ts-rs", ts(optional))]
+        criteria: Option<Criteria>,
     },
+}
+
+impl Serialize for Question {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let value = match self {
+            Question::Choice {
+                instructions,
+                criteria,
+            } => serde_json::json!({
+                "type": "choice",
+                "instructions": instructions,
+                "criteria": criteria,
+            }),
+            Question::Score {
+                instructions,
+                criteria,
+            } => serde_json::json!({
+                "type": "score",
+                "instructions": instructions,
+                "criteria": criteria,
+            }),
+            Question::Noul {
+                instructions,
+                criteria,
+            } => {
+                let mut value = serde_json::json!({
+                    "type": "noul",
+                    "instructions": instructions,
+                });
+                if let Some(criteria) = criteria {
+                    value["criteria"] = serde_json::json!(criteria);
+                }
+                value
+            }
+        };
+        value.serialize(serializer)
+    }
 }
 
 impl Question {
@@ -142,7 +182,7 @@ impl Question {
         }
     }
 
-    pub fn instructions(&self) -> &str {
+    pub fn instructions(&self) -> &Instructions {
         match self {
             Question::Choice { instructions, .. }
             | Question::Score { instructions, .. }
@@ -150,16 +190,69 @@ impl Question {
         }
     }
 
-    pub fn criteria(&self) -> &Criteria {
+    pub fn criteria(&self) -> Option<&Criteria> {
         match self {
-            Question::Choice { criteria, .. }
-            | Question::Score { criteria, .. }
-            | Question::Noul { criteria, .. } => criteria,
+            Question::Choice { criteria, .. } | Question::Score { criteria, .. } => Some(criteria),
+            Question::Noul { criteria, .. } => criteria.as_ref(),
         }
     }
 }
 
-/// `criteria` 三形态（contracts/01 §3）：Map（choice/noul）/ List（score 有序档位）/ Bool（noul 两键）。
+/// Instruction payload accepted by TypeSafe: a string, object, or array.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+#[serde(untagged)]
+pub enum Instructions {
+    Text(String),
+    Object(BTreeMap<String, serde_json::Value>),
+    Array(Vec<serde_json::Value>),
+}
+
+impl From<&str> for Instructions {
+    fn from(value: &str) -> Self {
+        Instructions::Text(value.to_string())
+    }
+}
+
+impl From<String> for Instructions {
+    fn from(value: String) -> Self {
+        Instructions::Text(value)
+    }
+}
+
+/// A criterion value accepted by TypeSafe Choice and Score criteria.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+#[serde(untagged)]
+pub enum CriterionValue {
+    Text(String),
+    Object(BTreeMap<String, serde_json::Value>),
+    Array(Vec<serde_json::Value>),
+    Null,
+}
+
+impl From<&str> for CriterionValue {
+    fn from(value: &str) -> Self {
+        CriterionValue::Text(value.to_string())
+    }
+}
+
+impl From<String> for CriterionValue {
+    fn from(value: String) -> Self {
+        CriterionValue::Text(value)
+    }
+}
+
+/// `criteria` wire shapes: Map (choice/noul), List (score), Bool (legacy noul),
+/// or Raw (preserved optional Noul criteria).
 ///
 /// 注意：standalone 反序列化按 untagged 顺序 Map 优先；**题型上下文内**的形态
 /// 校验由 [`Question`] 的手工 Deserialize 完成（同一 JSON 对 noul 归 `Bool`、
@@ -172,9 +265,13 @@ impl Question {
 )]
 #[serde(untagged)]
 pub enum Criteria {
-    Map(BTreeMap<String, String>),
-    List(Vec<String>),
-    Bool { r#true: String, r#false: String },
+    Map(BTreeMap<String, CriterionValue>),
+    List(Vec<CriterionValue>),
+    Bool {
+        r#true: CriterionValue,
+        r#false: CriterionValue,
+    },
+    Raw(serde_json::Value),
 }
 
 /// 上游对齐的错误文案（contracts/01 §6：`expected record, received undefined`）。
@@ -193,6 +290,17 @@ fn json_kind(v: &serde_json::Value) -> &'static str {
 
 fn custom_err<E: serde::de::Error, T>(msg: impl Into<String>) -> Result<T, E> {
     Err(E::custom(msg.into()))
+}
+
+fn parse_criterion<E: serde::de::Error>(
+    value: &serde_json::Value,
+    allow_null: bool,
+) -> Result<CriterionValue, E> {
+    let criterion = serde_json::from_value::<CriterionValue>(value.clone()).map_err(E::custom)?;
+    if !allow_null && matches!(criterion, CriterionValue::Null) {
+        return custom_err("null is not a valid score level");
+    }
+    Ok(criterion)
 }
 
 impl<'de> Deserialize<'de> for Question {
@@ -225,29 +333,25 @@ impl<'de> Deserialize<'de> for Question {
             }
         }
 
-        // ── instructions：必填非空（§3 不变量）──
-        let instructions: String = match obj.get("instructions") {
+        // ── instructions：必填，官方接受 string / object / array ──
+        let instructions_value = match obj.get("instructions") {
             None => return custom_err("missing field `instructions`"),
-            Some(serde_json::Value::String(s)) if s.is_empty() => {
-                return custom_err("instructions must be non-empty");
-            }
-            Some(serde_json::Value::String(s)) => s.clone(),
-            Some(other) => {
-                return custom_err(format!(
-                    "expected string for field `instructions`, received {}",
-                    json_kind(other)
-                ));
-            }
+            Some(value) => value,
         };
-
-        // ── criteria：必填 + 按题型校验形态（§3 不变量 / §6 文案）──
-        let criteria_val = match obj.get("criteria") {
-            None => return custom_err(CRITERIA_UNDEFINED),
-            Some(v) => v,
-        };
+        let instructions: Instructions = serde_json::from_value(instructions_value.clone())
+            .map_err(|_| {
+                serde::de::Error::custom(format!(
+                    "expected string, record, or array for field `instructions`, received {}",
+                    json_kind(instructions_value)
+                ))
+            })?;
+        // ── criteria：choice/score 必填且形态固定；Noul 可省略 ──
         let criteria = match ty {
             "choice" => {
-                // 形态：record（任意键 → 值必须是 string）
+                let criteria_val = obj
+                    .get("criteria")
+                    .ok_or_else(|| serde::de::Error::custom(CRITERIA_UNDEFINED))?;
+                // Choice: a record whose values are string/object/array/null.
                 let map = match criteria_val {
                     serde_json::Value::Object(m) => m,
                     other => {
@@ -259,22 +363,15 @@ impl<'de> Deserialize<'de> for Question {
                 };
                 let mut out = BTreeMap::new();
                 for (k, v) in map {
-                    match v {
-                        serde_json::Value::String(s) => {
-                            out.insert(k.clone(), s.clone());
-                        }
-                        other => {
-                            return custom_err(format!(
-                                "expected string, received {}",
-                                json_kind(other)
-                            ));
-                        }
-                    }
+                    out.insert(k.clone(), parse_criterion::<D::Error>(v, true)?);
                 }
                 Criteria::Map(out)
             }
             "score" => {
-                // 形态：有序数组
+                let criteria_val = obj
+                    .get("criteria")
+                    .ok_or_else(|| serde::de::Error::custom(CRITERIA_UNDEFINED))?;
+                // Score: ordered levels of string/object/array.
                 let arr = match criteria_val {
                     serde_json::Value::Array(a) => a,
                     other => {
@@ -286,44 +383,44 @@ impl<'de> Deserialize<'de> for Question {
                 };
                 let mut out = Vec::with_capacity(arr.len());
                 for v in arr {
-                    match v {
-                        serde_json::Value::String(s) => out.push(s.clone()),
-                        other => {
-                            return custom_err(format!(
-                                "expected string, received {}",
-                                json_kind(other)
-                            ));
-                        }
-                    }
+                    out.push(parse_criterion::<D::Error>(v, false).map_err(|_| {
+                        serde::de::Error::custom(format!(
+                            "expected string, record, or array for score level, received {}",
+                            json_kind(v)
+                        ))
+                    })?);
                 }
                 Criteria::List(out)
             }
-            // "noul" | "boolean"：形态恰为 {true, false} 两键 record（§3）
-            _ => {
-                let map = match criteria_val {
-                    serde_json::Value::Object(m) => m,
-                    other => {
-                        return custom_err(format!(
-                            "expected record, received {}",
-                            json_kind(other)
-                        ));
-                    }
-                };
-                let pick = |key: &'static str| -> Result<String, D::Error> {
-                    match map.get(key) {
-                        None => Err(serde::de::Error::custom(CRITERIA_UNDEFINED)),
-                        Some(serde_json::Value::String(s)) => Ok(s.clone()),
-                        Some(other) => Err(serde::de::Error::custom(format!(
-                            "expected string, received {}",
-                            json_kind(other)
-                        ))),
-                    }
-                };
-                Criteria::Bool {
-                    r#true: pick("true")?,
-                    r#false: pick("false")?,
+            // `noul` and `boolean`: criteria is optional; preserve provided JSON.
+            _ => match obj.get("criteria") {
+                None => {
+                    return Ok(Question::Noul {
+                        instructions,
+                        criteria: None,
+                    })
                 }
-            }
+                Some(value) => {
+                    let Some(map) = value.as_object() else {
+                        return custom_err(format!(
+                            "expected record for optional noul criteria, received {}",
+                            json_kind(value)
+                        ));
+                    };
+                    if map.len() == 2
+                        && map.contains_key("true")
+                        && map.contains_key("false")
+                        && map.values().all(serde_json::Value::is_string)
+                    {
+                        Criteria::Bool {
+                            r#true: map["true"].as_str().unwrap().into(),
+                            r#false: map["false"].as_str().unwrap().into(),
+                        }
+                    } else {
+                        Criteria::Raw(value.clone())
+                    }
+                }
+            },
         };
 
         // boolean 输入按 noul 语义归一（§1：对外判别值只有 choice|score|noul）
@@ -339,7 +436,7 @@ impl<'de> Deserialize<'de> for Question {
             // "noul" | "boolean"
             _ => Question::Noul {
                 instructions,
-                criteria,
+                criteria: Some(criteria),
             },
         })
     }
@@ -363,7 +460,7 @@ impl<'de> Deserialize<'de> for Question {
         export_to = "../../../../ui/src/generated/",
         // 手工 Serialize（非 serde derive）→ ts-rs 看不到 tag、默认生成错误的
         // 外部标签形状（{Choice:{…}}）。按 contracts/01 §4 wire 字面做**容器级覆盖**。
-        type = "{ \"type\": \"choice\", choice: string, probabilities: { [key in string]: number }, confidence: number } | { \"type\": \"score\", score: number, probabilities: { [key in string]: number }, confidence: number } | { \"type\": \"noul\" | \"boolean\", noul?: number | null, probability?: number | null }"
+        type = "{ \"type\": \"choice\", choice: string, probabilities: { [key in string]: number }, confidence: number } | { \"type\": \"score\", score: number, legend?: unknown, probabilities: { [key in string]: number }, confidence: number } | { \"type\": \"noul\" | \"boolean\", noul?: number | null, probability?: number | null }"
     )
 )]
 pub enum Answer {
@@ -376,6 +473,8 @@ pub enum Answer {
     },
     Score {
         score: f64,
+        /// TypeSafe score legend; kept opaque so upstream variants remain lossless.
+        legend: Option<serde_json::Value>,
         probabilities: BTreeMap<String, f64>,
         confidence: f64,
     },
@@ -419,9 +518,18 @@ struct AnswerChoiceDe {
     confidence: f64,
 }
 
+fn deserialize_present_json<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    serde_json::Value::deserialize(deserializer).map(Some)
+}
+
 #[derive(Deserialize)]
 struct AnswerScoreDe {
     score: f64,
+    #[serde(default, deserialize_with = "deserialize_present_json")]
+    legend: Option<serde_json::Value>,
     probabilities: BTreeMap<String, f64>,
     confidence: f64,
 }
@@ -448,6 +556,7 @@ impl<'de> Deserialize<'de> for Answer {
                     serde_json::from_value(value).map_err(serde::de::Error::custom)?;
                 Ok(Answer::Score {
                     score: de.score,
+                    legend: de.legend,
                     probabilities: de.probabilities,
                     confidence: de.confidence,
                 })
@@ -477,14 +586,21 @@ impl Serialize for Answer {
             }),
             Answer::Score {
                 score,
+                legend,
                 probabilities,
                 confidence,
-            } => serde_json::json!({
-                "type": "score",
-                "score": score,
-                "probabilities": probabilities,
-                "confidence": confidence,
-            }),
+            } => {
+                let mut answer = serde_json::json!({
+                    "type": "score",
+                    "score": score,
+                    "probabilities": probabilities,
+                    "confidence": confidence,
+                });
+                if let Some(legend) = legend {
+                    answer["legend"] = legend.clone();
+                }
+                answer
+            }
             // Noul 自带 `type` 判别键（kind），直通内层序列化
             Answer::Noul(n) => return n.serialize(serializer),
         };
@@ -589,14 +705,17 @@ mod tests {
         assert_eq!(req.model, "laya-english");
         let q = req.questions.get("q").unwrap();
         assert_eq!(q.question_type_str(), "noul");
-        assert_eq!(q.instructions(), "is this a greeting?");
+        assert_eq!(
+            q.instructions(),
+            &Instructions::Text("is this a greeting?".into())
+        );
         // 上下文校验：noul → Bool 形态（而非 untagged 的 Map）
         assert_eq!(
             q.criteria(),
-            &Criteria::Bool {
+            Some(&Criteria::Bool {
                 r#true: "yes".into(),
                 r#false: "no".into()
-            }
+            })
         );
         // round-trip
         let back = serde_json::to_string(&req).unwrap();
@@ -636,7 +755,11 @@ mod tests {
         assert_eq!(q.question_type_str(), "score");
         assert_eq!(
             q.criteria(),
-            &Criteria::List(vec!["low".into(), "med".into(), "high".into()])
+            Some(&Criteria::List(vec![
+                "low".into(),
+                "med".into(),
+                "high".into()
+            ]))
         );
     }
 
@@ -654,21 +777,21 @@ mod tests {
         assert_eq!(q.question_type_str(), "choice");
         assert_eq!(
             q.criteria(),
-            &Criteria::Map(BTreeMap::from([
+            Some(&Criteria::Map(BTreeMap::from([
                 ("A".into(), "alpha".into()),
                 ("B".into(), "beta".into()),
-            ]))
+            ])))
         );
     }
 
     #[test]
     fn missing_criteria_rejected_with_upstream_message() {
-        // §8 验收：缺 criteria → 反序列化错误；文案对齐上游（§6）
+        // Choice and Score require criteria; Noul criteria is optional in TypeSafe.
         let json = r#"{
             "model": "m",
             "state": null,
             "questions": {
-                "q": {"type": "noul", "instructions": "x"}
+                "q": {"type": "choice", "instructions": "x"}
             }
         }"#;
         let err = serde_json::from_str::<JevRequest>(json).unwrap_err();
@@ -677,21 +800,53 @@ mod tests {
                 .contains("expected record, received undefined"),
             "unexpected message: {err}"
         );
+
+        let noul =
+            r#"{"model":"m","state":null,"questions":{"q":{"type":"noul","instructions":"x"}}}"#;
+        let req: JevRequest = serde_json::from_str(noul).unwrap();
+        assert_eq!(req.questions["q"].criteria(), None);
+        assert!(serde_json::to_value(req).unwrap()["questions"]["q"]
+            .get("criteria")
+            .is_none());
+    }
+
+    #[test]
+    fn official_instruction_and_criteria_unions_are_preserved() {
+        let raw = r#"{
+            "model":"m",
+            "state":null,
+            "questions":{
+                "choice":{
+                    "type":"choice",
+                    "instructions":["choose",{"detail":"structured"}],
+                    "criteria":{"A":"plain","B":{"label":"object"},"C":["array",{"nested":true}],"D":null}
+                },
+                "score":{
+                    "type":"score",
+                    "instructions":{"prompt":"rate","context":["structured"]},
+                    "criteria":["low",{"level":2},["high","certain"]]
+                },
+                "noul":{"type":"noul","instructions":"is it true?"}
+            }
+        }"#;
+        let req: JevRequest = serde_json::from_str(raw).unwrap();
+        let normalized = serde_json::to_value(&req).unwrap();
+        let input: serde_json::Value = serde_json::from_str(raw).unwrap();
+        assert_eq!(normalized, input);
     }
 
     #[test]
     fn wrong_shape_criteria_rejected_locally() {
         // 错形态 → 本地拒绝，不发上游（§3/§6）
-        // noul 收 array
+        // Noul criteria is optional; when supplied it must be a record.
         let noul_arr = r#"{
             "model": "m", "state": null,
             "questions": {"q": {"type": "noul", "instructions": "x", "criteria": ["a","b"]}}
         }"#;
         let err = serde_json::from_str::<JevRequest>(noul_arr).unwrap_err();
-        assert!(
-            err.to_string().contains("expected record, received array"),
-            "unexpected: {err}"
-        );
+        assert!(err
+            .to_string()
+            .contains("expected record for optional noul criteria"));
 
         // choice 收 array
         let choice_arr = r#"{
@@ -715,17 +870,15 @@ mod tests {
             "unexpected: {err}"
         );
 
-        // noul 缺 true/false 键
+        // Non-legacy Noul criteria is retained instead of being rejected.
         let noul_partial = r#"{
             "model": "m", "state": null,
             "questions": {"q": {"type": "noul", "instructions": "x", "criteria": {"other": "1"}}}
         }"#;
-        let err = serde_json::from_str::<JevRequest>(noul_partial).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("expected record, received undefined"),
-            "unexpected: {err}"
-        );
+        assert!(serde_json::from_str::<JevRequest>(noul_partial).is_ok());
+
+        let score_null = r#"{"model":"m","state":null,"questions":{"s":{"type":"score","instructions":"x","criteria":[null]}}}"#;
+        assert!(serde_json::from_str::<JevRequest>(score_null).is_err());
     }
 
     #[test]
@@ -844,6 +997,38 @@ mod tests {
             r#"{"type":"score","probabilities":{"1":1.0},"confidence":1.0}"#
         )
         .is_err());
+    }
+
+    #[test]
+    fn score_legend_is_preserved_without_weakening_score_type() {
+        let raw = r#"{"type":"score","score":1.5,"legend":{"1":"low","2":"high"},"probabilities":{"1":0.5,"2":0.5},"confidence":0.8}"#;
+        let answer: Answer = serde_json::from_str(raw).unwrap();
+        let Answer::Score { score, legend, .. } = &answer else {
+            panic!("expected score answer");
+        };
+        assert_eq!(*score, 1.5);
+        assert_eq!(
+            legend.as_ref(),
+            Some(&serde_json::json!({"1": "low", "2": "high"}))
+        );
+        assert_eq!(
+            serde_json::to_value(answer).unwrap()["legend"],
+            serde_json::json!({"1": "low", "2": "high"})
+        );
+    }
+
+    #[test]
+    fn explicit_null_score_legend_is_distinct_from_missing() {
+        let raw = r#"{"type":"score","score":1.0,"legend":null,"probabilities":{"1":1.0},"confidence":1.0}"#;
+        let answer: Answer = serde_json::from_str(raw).unwrap();
+        let Answer::Score { legend, .. } = &answer else {
+            panic!("expected score answer");
+        };
+        assert_eq!(legend.as_ref(), Some(&serde_json::Value::Null));
+        assert_eq!(
+            serde_json::to_value(answer).unwrap()["legend"],
+            serde_json::Value::Null
+        );
     }
 
     #[test]

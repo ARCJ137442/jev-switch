@@ -78,6 +78,7 @@ pub fn build_jev_response_from_vercel(raw: &VercelResponse) -> Result<JevRespons
                     score: va
                         .score
                         .ok_or_else(|| format!("answer '{qid}': missing field `score`"))?,
+                    legend: va.legend.clone(),
                     probabilities: va
                         .probabilities
                         .clone()
@@ -185,10 +186,10 @@ mod tests {
             "q".to_string(),
             Question::Noul {
                 instructions: "is greeting?".into(),
-                criteria: Criteria::Bool {
+                criteria: Some(Criteria::Bool {
                     r#true: "yes".into(),
                     r#false: "no".into(),
-                },
+                }),
             },
         );
         JevRequest {
@@ -379,7 +380,7 @@ mod tests {
             "model":"typesafe-ai/jev",
             "answers":{
                 "route":{"type":"choice","choice":"billing","probabilities":{"billing":1.0,"shipping":0.0},"confidence":1.0},
-                "quality":{"type":"score","score":1.98,"probabilities":{"1":0.02,"2":0.98},"confidence":0.97}
+                "quality":{"type":"score","score":1.98,"legend":["low","high"],"probabilities":{"1":0.02,"2":0.98},"confidence":0.97}
             },
             "usage":{"input_tokens":418,"output_tokens":51}
         }"#;
@@ -402,10 +403,14 @@ mod tests {
         }
         match &response.answers["quality"] {
             Answer::Score {
-                score, confidence, ..
+                score,
+                legend,
+                confidence,
+                ..
             } => {
                 assert_eq!(*score, 1.98);
                 assert_eq!(*confidence, 0.97);
+                assert_eq!(legend.as_ref(), Some(&serde_json::json!(["low", "high"])));
             }
             other => panic!("unexpected score answer: {other:?}"),
         }

@@ -1113,10 +1113,10 @@ mod tests {
             "q".to_string(),
             Question::Noul {
                 instructions: "is greeting?".into(),
-                criteria: Criteria::Bool {
+                criteria: Some(Criteria::Bool {
                     r#true: "yes".into(),
                     r#false: "no".into(),
-                },
+                }),
             },
         );
         JevRequest {

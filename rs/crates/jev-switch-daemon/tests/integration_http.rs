@@ -251,7 +251,7 @@ async fn capability_mismatch_is_422_without_real_send() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-4 · 协议非法（缺 criteria）→ 400
+4 · Choice criteria 缺失 → 400（Noul criteria 是可选项）
 ══════════════════════════════════════════════════════════════════ */
 
 #[tokio::test]
@@ -259,12 +259,12 @@ async fn missing_criteria_is_400() {
     let path = temp_config("400", "# empty\n");
     let app = build_app(state_with(Registry::new(vec![]), path.clone()));
 
-    // 缺 criteria 字段（contracts/01：反序列化即校验 → 本地 400，不发上游）
+    // Choice criteria 缺失（反序列化即校验 → 本地 400，不发上游）
     let body_json = serde_json::json!({
         "model": "jev",
         "state": "hi",
         "questions": {
-            "q": { "type": "noul", "instructions": "x" }
+            "q": { "type": "choice", "instructions": "x" }
         }
     })
     .to_string();
