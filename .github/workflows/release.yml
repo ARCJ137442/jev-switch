@@ -156,8 +156,10 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ needs.meta.outputs.version }}'
-          $msi = @(Get-ChildItem src-tauri/target/release/bundle/msi -Filter "*_$version_*.msi" -File)
-          $nsis = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter "*_$version_*-setup.exe" -File)
+          $msiPattern = '*_{0}_*.msi' -f $version
+          $nsisPattern = '*_{0}_*-setup.exe' -f $version
+          $msi = @(Get-ChildItem src-tauri/target/release/bundle/msi -Filter $msiPattern -File)
+          $nsis = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter $nsisPattern -File)
           if ($msi.Count -ne 1 -or $nsis.Count -ne 1) {
             throw "Expected one MSI and one NSIS artifact; found MSI=$($msi.Count), NSIS=$($nsis.Count)."
           }
