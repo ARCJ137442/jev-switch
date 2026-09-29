@@ -97,6 +97,7 @@ export const zh: Record<keyof typeof en, string> = {
   'add.tabForm': '表单',
   'add.idRequired': 'id 必填',
   'add.kindRequired': 'kind 必填',
+  'add.kindUnsupported': '不支持的 API 协议：{kind}',
   'add.baseHttp': 'base 需以 http(s):// 开头',
   'add.noSections': '未解析到任何 [providers.<id>] 段',
   'add.pasteHint': '粘贴 [providers.<id>] 片段',
@@ -229,6 +230,7 @@ export const zh: Record<keyof typeof en, string> = {
 
   /* api/admin parse errors */
   'api.missingKind': '[{id}] 缺少 kind',
+  'api.unsupportedKind': '[{id}] 不支持的 API 协议：{kind}',
   'api.missingBase': '[{id}] 缺少 base',
   'api.badSection': '第 {n} 行：不支持的段 [{name}]（期待 [providers.<id>]）',
   'api.parseLine': '第 {n} 行：无法解析 "{line}"',

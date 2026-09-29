@@ -89,6 +89,18 @@ foreach ($relativeAssetPath in $assetRelativePaths) {
     $assetHashes[$relativeAssetPath.Replace('\', '/')] = $sourceHash
 }
 
+$uiFileHashes = [ordered]@{}
+foreach ($sourceFile in (Get-ChildItem -LiteralPath $uiDistPath -Recurse -File | Sort-Object FullName)) {
+    $relativePath = $sourceFile.FullName.Substring($uiDistPath.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar).Replace('\', '/')
+    $portableFile = Join-Path (Join-Path $destinationPath 'ui/dist') $relativePath
+    $resourceFile = Join-Path (Join-Path $destinationPath 'resources/ui/dist') $relativePath
+    $sourceHash = Get-Sha256 $sourceFile.FullName
+    if ((Get-Sha256 $portableFile) -ne $sourceHash -or (Get-Sha256 $resourceFile) -ne $sourceHash) {
+        throw "Portable UI file hash mismatch: $relativePath"
+    }
+    $uiFileHashes[$relativePath] = $sourceHash
+}
+
 $msiInputHashes = $null
 if ($MsiPath) {
     if (-not (Test-Path -LiteralPath $MsiPath -PathType Leaf)) {
@@ -156,6 +168,7 @@ $manifest = [ordered]@{
     daemon_sha256 = Get-Sha256 $daemonPath
     ui_index_sha256 = Get-Sha256 (Join-Path $uiDistPath 'index.html')
     files = $fileHashes
+    ui_files = $uiFileHashes
     ui_assets = $assetHashes
 }
 if ($msiInputHashes) {

@@ -13,11 +13,13 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
 - **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与[当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
 - **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。
-- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya 与 TypeSafe SystemOne。TypeSafe 可连接官方 API，也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；这不等于支持普通 OpenAI/Anthropic API。OpenRouter 仍未接入，详见[路线图](ROADMAP.md)与[TypeSafe adapter 核对记录](docs/verification/typesafe-systemone-adapter-2026-09-28.md)。TypeSafe 增量尚未进入 v0.1.0 Release。
+- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya 与 TypeSafe SystemOne。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；这不等于支持普通 OpenAI/Anthropic API。官方真实请求与边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)。OpenRouter 仍未接入，详见[路线图](ROADMAP.md)。TypeSafe 增量尚未进入 v0.1.0 Release。
 - **可编辑调用路由 DAG**：支持对外入口、路由节点和提供商模型端口之间的多跳与分支，并配置候选优先级和失败处理；简单直连只是 DAG 的一种形式。
 - **演练场横向比较**：可比较多个对外入口、直接上游模型或混合目标；结果分别呈现实际路径、耗时、usage 与错误。
 - **密钥边界**：上游 key 留在 daemon；管理 API 只返回脱敏状态，不提供明文读回接口。不要把真实 key 提交到仓库或聊天。
-- **四页控制台**：Dashboard、Providers、Routing、Playground；当前提供简体中文和英文，语言注册表可扩展。
+- **模型目录发现**：Providers 可让 daemon 通过上游 `/v1/models` 获取账户模型并回填列表，同时显示 HTTP 状态和延迟；浏览器不直连上游，也不会把 key 写入配置或响应。
+- **首页运行遥测**：Dashboard 展示当前 daemon 会话的入口/出口速率、累计字节、活跃请求、成功/失败/failover、网关平均延迟和 daemon 进程 CPU/内存；采样数据只在内存中保留，无法精确获得的 Tauri WebView/上游指标明确显示不可用。
+- **五页控制台**：Dashboard、Providers、Entries、Routing DAG、Playground；当前提供简体中文和英文，语言注册表可扩展。
 - **契约驱动**：Rust `ts-rs` 生成前端类型到 `ui/src/generated/`；协议及路由不变量见 `docs/contracts/`。
 
 ## 架构
@@ -30,8 +32,8 @@ Rust workspace（`rs/Cargo.toml`）+ React 控制台（`ui/`）+ Tauri 壳（`sr
 | `jev-core` | Router DAG（select/plan/failover）、冻结 trait `ProtocolAdapter`/`UpstreamAdapter` + `Registry`、`RetryPolicy`、redact | **无** axum / reqwest |
 | `jev-adapters` | Vercel、Laya、TypeSafe 上游实现、VercelProtocol 翻译、厂商 DTO | 厂商方言**只活在本 crate** |
 | `jev-switch-daemon` | axum HTTP、配置/数据库、管理 API、静态 UI 托管 | 组装协议、路由与适配器 |
-| `ui/` | React 控制台：Dashboard / Providers / Routing / Playground | 开发端口 5173；类型由 `ts-rs` 生成 |
-| `src-tauri/` | Windows 桌面壳与随包 sidecar | MSI / NSIS |
+| `ui/` | React 控制台：Dashboard / Providers / Entries / Routing DAG / Playground | 开发端口 5173；类型由 `ts-rs` 生成 |
+| `src-tauri/` | Windows 桌面壳与随包 sidecar | MSI / NSIS / Standalone 源码构建 |
 
 ```text
 调用者：网关地址 + 调用 token + 对外模型 ID
@@ -58,7 +60,7 @@ HTTP surface 按调用、管理、事件与统计分组；端点随管理能力�
 | 调用 | `/health`, `/v1/models`, `/v1/systemone` | 健康身份、可公开模型、Jev 原生推理请求 |
 | 提供商与路由 | `/v1/admin/providers*`, `/v1/admin/routes` | 接入配置、探测/直调与路由图管理 |
 | 服务入口 | `/v1/admin/endpoints*`, `/v1/admin/config/default_strategy` | 对外模型 ID、路由策略与启停 |
-| 访问与观测 | `/v1/admin/tokens*`, `/v1/admin/stats`, `/v1/admin/events*`, `/v1/stats/my`, `/v1/events/my*` | 调用权限、统计、历史与事件流 |
+| 访问与观测 | `/v1/admin/tokens*`, `/v1/admin/stats`, `/v1/admin/events*`, `/v1/admin/telemetry`, `/v1/stats/my`, `/v1/events/my*` | 调用权限、历史、事件流与当前会话遥测 |
 | 运行管理 | `/v1/admin/mode`, `/v1/admin/listen`, `/v1/admin/status`, `/v1/admin/config/*` | 模式/监听管理、TOML 导入导出与存储状态 |
 
 完整 DTO、鉴权边界与错误语义以当前 [HTTP 契约](docs/contracts/05-HTTP契约.md)、[入口网关修订](docs/contracts/07-入口网关修订.md)和后端实现为准。

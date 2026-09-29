@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import {
+  discoverProviderModelsDraft,
   parseProvidersToml,
   type AdminProviderWrite,
 } from '../../api/admin';
+import { applyProviderKindPreset, isProviderKind } from '../../api/providerKinds';
+import { ProviderKindSelect } from './ProviderKindSelect';
 import { useI18n, type MessageKey } from '../../i18n';
 
 interface Props {
@@ -63,6 +66,16 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
   const [toml, setToml] = useState('');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverMessage, setDiscoverMessage] = useState<string | null>(null);
+
+  const selectKind = (kind: string) => {
+    setForm((current) => {
+      const currentModels = current.modelsText.split(/\r?\n/).map((model) => model.trim()).filter(Boolean);
+      const preset = applyProviderKindPreset(current.kind, kind, current.base, currentModels);
+      return { ...current, kind, base: preset.base, modelsText: preset.models.join('\n') };
+    });
+  };
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     fontSize: 'var(--text-sm)',
@@ -80,6 +93,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
     const next: string[] = [];
     if (!form.id.trim()) next.push(t('add.idRequired'));
     if (!form.kind.trim()) next.push(t('add.kindRequired'));
+    else if (!isProviderKind(form.kind.trim())) next.push(t('add.kindUnsupported', { kind: form.kind.trim() }));
     if (!/^https?:\/\/.+/.test(form.base.trim())) next.push(t('add.baseHttp'));
     if (next.length > 0) {
       setErrors(next);
@@ -104,6 +118,28 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
       setErrors([(e2 as Error).message]);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const discoverModels = async () => {
+    if (!form.kind.trim() || !isProviderKind(form.kind.trim()) || !/^https?:\/\/.+/.test(form.base.trim())) {
+      setErrors([!form.kind.trim() ? t('add.kindRequired') : !isProviderKind(form.kind.trim()) ? t('add.kindUnsupported', { kind: form.kind.trim() }) : t('add.baseHttp')]);
+      return;
+    }
+    setDiscovering(true);
+    setDiscoverMessage(null);
+    try {
+      const result = await discoverProviderModelsDraft({ kind: form.kind.trim(), base: form.base.trim(), ...(form.apiKey ? { api_key: form.apiKey } : {}) });
+      if (!result.ok || result.models.length === 0) {
+        setDiscoverMessage(t('providers.modelsDiscoverFailed' as MessageKey, { error: result.error ?? t('providers.noModels' as MessageKey) }));
+        return;
+      }
+      setForm((current) => ({ ...current, modelsText: result.models.join('\n') }));
+      setDiscoverMessage(t('providers.modelsDiscovered' as MessageKey, { n: result.models.length, status: result.status, ms: result.latency_ms }));
+    } catch (cause) {
+      setDiscoverMessage(t('providers.modelsDiscoverFailed' as MessageKey, { error: (cause as Error).message }));
+    } finally {
+      setDiscovering(false);
     }
   };
 
@@ -199,29 +235,23 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
             <Field label={t('providers.account' as MessageKey)}>
               <input value={form.account} onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))} placeholder="team@example.com" className="h-9 w-full px-2.5" style={inputStyle} />
             </Field>
-            <Field label="kind" hint={t('common.required')}>
-              <input
-                value={form.kind}
-                onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
-                placeholder="vercel-gateway"
-                spellCheck={false}
-                className="h-9 w-full px-2.5"
-                style={inputStyle}
-              />
+            <Field label={t('providers.kind' as MessageKey)} hint={t('common.required')}>
+              <ProviderKindSelect value={form.kind} onChange={selectKind} className="h-9 w-full px-2.5" style={inputStyle} />
             </Field>
           </div>
           <Field label="base" hint="http(s)://…">
             <input
               value={form.base}
               onChange={(e) => setForm((f) => ({ ...f, base: e.target.value }))}
-              placeholder="https://…"
+            placeholder="https://api.typesafe.ai/v1/systemone"
               spellCheck={false}
               className="h-9 w-full px-2.5"
               style={inputStyle}
             />
           </Field>
-          <Field label={t('providers.models' as MessageKey)} hint={t('providers.modelsHint' as MessageKey)}>
+          <Field label={t('providers.models' as MessageKey)} hint={t('providers.modelsHint' as MessageKey)} action={<button type="button" disabled={busy || discovering} onClick={() => void discoverModels()} style={{ ...btn, padding: '0.25rem 0.5rem', fontSize: 'var(--text-xs)' }}>{discovering ? t('providers.discoveringModels' as MessageKey) : t('providers.discoverModels' as MessageKey)}</button>}>
             <textarea value={form.modelsText} onChange={(e) => setForm((f) => ({ ...f, modelsText: e.target.value }))} rows={3} spellCheck={false} placeholder={'provider/model-a\nprovider/model-b'} className="w-full resize-y p-2.5 leading-relaxed" style={inputStyle} />
+            {discoverMessage && <span role="status" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{discoverMessage}</span>}
           </Field>
           <Field label="api_key">
             <input
@@ -268,7 +298,7 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
             spellCheck={false}
             title={t('add.parseHint')}
             aria-label={t('add.pasteHint')}
-            placeholder={'[providers.vercel]\nkind = "vercel-gateway"\nbase = "https://…"\napi_key = "…"\nenabled = true'}
+            placeholder={'[providers.typesafe]\nkind = "typesafe"\nbase = "https://api.typesafe.ai/v1/systemone"\nmodels = ["jev-latest"]\napi_key_env = "TYPESAFE_API_KEY"\nenabled = true'}
             className="w-full resize-y p-3 leading-relaxed"
             style={inputStyle}
           />
@@ -292,10 +322,12 @@ export function AddProviderPanel({ initialTab = 'form', onAdd, onCancel }: Props
 function Field({
   label,
   hint,
+  action,
   children,
 }: {
   label: string;
   hint?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -311,6 +343,7 @@ function Field({
         >
           {label}
         </span>
+        {action}
         {hint && (
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>{hint}</span>
         )}

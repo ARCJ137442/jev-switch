@@ -12,6 +12,7 @@
 //! 6. failover：双候选首败次成 → 200 + `upstream_calls==2`（wiremock）
 //! 7. `GET /v1/models` 不可路由过滤（**回归护栏**：6af3a47）
 //! 8. `GET /v1/admin/providers` 无明文（HTTP 级复核 —— 与 A7 单测不同层）
+//! 9. `GET /v1/admin/telemetry` reports process-local request counters
 //!
 //! #43 注：基座全部 local 态（`state_with` → `AuthState::default()`）——
 //! 上述 8 条同时兼任「local 态零鉴权回归」的 HTTP 级护栏；cloud 态鉴权
@@ -82,6 +83,7 @@ fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
         events: jev_switch_daemon::events::EventBus::new(200),
         service_endpoints: Arc::new(RwLock::new(endpoints)),
         db_conn: Arc::new(Mutex::new(db_conn)),
+        telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
     }
 }
 
@@ -195,6 +197,36 @@ async fn health_json_shape_over_http() {
         5,
         "daemon identity prevents reusing an unrelated service: {body}"
     );
+    let _ = std::fs::remove_dir_all(path.parent().unwrap());
+}
+
+#[tokio::test]
+async fn telemetry_reports_session_counters_after_a_request() {
+    let path = temp_config("telemetry", "# empty\n");
+    let calls = Arc::new(AtomicU32::new(0));
+    let mut registry = Registry::new(vec![edge("m1", "fake", 0)]);
+    registry.register(Box::new(CountingFake {
+        id: "fake".into(),
+        cap: Capabilities {
+            question_types: &[QuestionType::Noul],
+            has_confidence: false,
+            has_usage: false,
+            noul_via_boolean: false,
+            retryable_status: &[408, 429, 500, 502, 503, 504],
+        },
+        calls: calls.clone(),
+    }));
+    let app = build_app(state_with(registry, path.clone()));
+    let (status, body) = send(app.clone(), "POST", "/v1/systemone", Some(noul_body("m1"))).await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body) = send(app, "GET", "/v1/admin/telemetry", None).await;
+    assert_eq!(status, 200, "{body}");
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(value["ingress_bytes_total"].as_u64().unwrap_or(0) > 0, "{body}");
+    assert!(value["egress_bytes_total"].as_u64().unwrap_or(0) > 0, "{body}");
+    assert_eq!(value["total_requests"], 1);
+    assert_eq!(value["active_requests"], 0);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }
 

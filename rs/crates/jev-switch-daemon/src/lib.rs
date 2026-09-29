@@ -14,6 +14,7 @@
 //! - `PUT/GET /v1/admin/listen` — 监听热 Rebind（ListenSupervisor，任务级小网关）
 //! - `PUT  /v1/admin/password` — admin 密码热更（门外：会话或 loopback）
 //! - `GET  /v1/admin/status` — 首页仪表盘自检（mode/bind/设密/uptime，7 键冻结）
+//! - `GET  /v1/admin/telemetry` — 当前 daemon 会话的非持久化流量与资源遥测
 //! - `GET  /`、`/assets/*` 等 — 静态 UI（`tower_http::ServeDir` 挂 `JEV_UI_DIST`，
 //!   默认 `ui/dist`；同源托管简化 CORS —— #43 容器交付）
 //!
@@ -36,6 +37,7 @@ pub mod db;
 pub mod events;
 pub mod listen;
 pub mod tokens;
+pub mod telemetry;
 
 use axum::{
     body::Bytes,
@@ -54,7 +56,6 @@ use jev_adapters::{
 use jev_core::{
     adapter::{plain_ctx, Registry, UpstreamAdapter},
     redact::redact,
-    upstream::JevError,
 };
 use jev_protocol::{JevRequest, JevResponse};
 use serde::Serialize;
@@ -92,6 +93,8 @@ pub struct AppState {
     pub service_endpoints: Arc<RwLock<HashMap<String, db::endpoints::ServiceEndpoint>>>,
     /// Phase 4: 数据库连接（SQLite，支持服务入口配置 + 调用统计）
     pub db_conn: Arc<Mutex<rusqlite::Connection>>,
+    /// Process-local session telemetry for the Dashboard; never persisted.
+    pub telemetry: telemetry::Telemetry,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -231,6 +234,7 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         events: events::EventBus::new(200),
         service_endpoints: Arc::new(RwLock::new(endpoints)),
         db_conn: Arc::new(Mutex::new(db_conn)),
+        telemetry: telemetry::Telemetry::new(),
     };
     if let Err(e) = admin::endpoints::refresh_endpoint_routes(&state, &[]) {
         tracing::warn!(error = %e, "failed to load persisted endpoint routes into runtime registry");
@@ -396,6 +400,14 @@ pub fn build_app(state: AppState) -> Router {
         .route("/v1/admin/events/stream", get(tokens::events_stream_admin))
         .route("/v1/admin/providers/:id/probe", post(admin::probe_provider))
         .route(
+            "/v1/admin/providers/:id/models",
+            post(admin::discover_provider_models),
+        )
+        .route(
+            "/v1/admin/providers/discover-models",
+            post(admin::discover_provider_models_draft),
+        )
+        .route(
             "/v1/admin/providers/:id/invoke",
             post(admin::invoke_provider),
         )
@@ -405,6 +417,7 @@ pub fn build_app(state: AppState) -> Router {
             get(admin::get_listen).put(admin::put_listen),
         )
         .route("/v1/admin/status", get(admin::get_status))
+        .route("/v1/admin/telemetry", get(admin::get_telemetry))
         // Phase 4.2: 服务入口配置端点
         .route(
             "/v1/admin/endpoints",
@@ -552,16 +565,6 @@ async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
     })
 }
 
-/// 把 JevError 转换为 axum Response（contracts/05 §3；error 串过 redact）。
-fn jev_error_to_response(e: JevError, keys: &[String]) -> Response {
-    let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    // 404 路由错误不带 upstream 字段（A4 行为保留）
-    let upstream = e.error_body_upstream().map(str::to_string);
-    let retryable = e.retryable();
-    let msg = e.to_string(); // 含上游 body —— 可能回显 key，交给 redact
-    error_response(status, msg, upstream, retryable, keys)
-}
-
 async fn systemone_handler(
     State(state): State<AppState>,
     caller: Option<Extension<tokens::CallerIdentity>>,
@@ -602,6 +605,7 @@ async fn systemone_handler(
         );
     }
     let started = std::time::Instant::now();
+    state.telemetry.begin_request(body.len() as u64);
     let strategy = admin::endpoints::routing_strategy(&state, &endpoint_id);
     let mut result = run_request_with_strategy_traced(&state.registry, req, &keys, strategy).await;
     let elapsed = started.elapsed();
@@ -632,6 +636,20 @@ async fn systemone_handler(
             .map(|Extension(identity)| identity.id.as_str()),
         &mut result,
         elapsed,
+    );
+    let response_bytes = match &result {
+        Ok(response) => serde_json::to_vec(response).ok().map(|bytes| bytes.len() as u64),
+        Err(failure) => Some(failure.response_bytes),
+    };
+    let trace = match &result {
+        Ok(response) => response.extra.get("route_trace"),
+        Err(failure) => Some(&failure.route_trace),
+    };
+    state.telemetry.finish_request(
+        response_bytes,
+        result.is_ok(),
+        elapsed.as_millis().min(u64::MAX as u128) as u64,
+        trace,
     );
     let mut response = match result {
         Ok(response) => Json(response).into_response(),
@@ -862,6 +880,7 @@ async fn run_request(
 struct RequestFailure {
     response: Response,
     route_trace: serde_json::Value,
+    response_bytes: u64,
 }
 
 async fn run_request_with_strategy_traced(
@@ -878,10 +897,27 @@ async fn run_request_with_strategy_traced(
         Err(failure) => {
             // tracing 输出同样 redact（contracts/04 §2：日志/tracing 统一脱敏）
             tracing::warn!(error = %redact(&failure.error.to_string(), keys), status = failure.error.http_status(), "invoke failed");
-            let response = jev_error_to_response(failure.error, keys);
+            let status = StatusCode::from_u16(failure.error.http_status())
+                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            let error_message = redact(&failure.error.to_string(), keys);
+            let response_bytes = serde_json::to_vec(&serde_json::json!({
+                "error": error_message,
+                "upstream": failure.error.error_body_upstream(),
+                "retryable": failure.error.retryable(),
+            }))
+            .map(|bytes| bytes.len() as u64)
+            .unwrap_or(0);
+            let response = error_response(
+                status,
+                failure.error.to_string(),
+                failure.error.error_body_upstream().map(str::to_string),
+                failure.error.retryable(),
+                keys,
+            );
             Err(RequestFailure {
                 response,
                 route_trace: failure.route_trace,
+                response_bytes,
             })
         }
     }

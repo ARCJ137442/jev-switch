@@ -170,6 +170,11 @@ jobs:
           Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $zip -CompressionLevel Optimal
           Get-FileHash -LiteralPath $zip -Algorithm SHA256
 
+          # Build a separate one-file Tauri application from the same verified daemon/UI inputs.
+          $standalone = "src-tauri/target/release/bundle/standalone/jev-switch-standalone-${{ needs.meta.outputs.version }}-windows-x64.exe"
+          .\scripts\build-standalone.ps1 -PortableDirectory $portable -OutputPath $standalone
+          Get-FileHash -LiteralPath $standalone -Algorithm SHA256
+
       - name: 上传安装包
         uses: actions/upload-artifact@v4
         with:
@@ -178,6 +183,7 @@ jobs:
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
             jev-switch-portable-*-windows-x64.zip
+            src-tauri/target/release/bundle/standalone/jev-switch-standalone-*-windows-x64.exe
           if-no-files-found: error
 
   # ── 4. Docker 镜像（ghcr.io） ─────────────────────────────────────
@@ -247,6 +253,7 @@ jobs:
 
             **Windows 桌面**：下载下方 `.msi`（或 NSIS `.exe`）双击安装。
             **Windows 便携版**：下载 `.zip` 并解压，双击其中的 `jev-switch.exe`；它与同次构建的安装包共享壳、daemon 与 UI 资源，不运行安装器。
+            **Windows 独立版**：下载 `jev-switch-standalone-*-windows-x64.exe` 并双击；首次启动会把内嵌 daemon/UI 校验后释放到当前用户的版本化运行缓存，应用数据仍保存在 `%APPDATA%\\jev-switch`。
 
             **Docker（Bash）**：先将 `JEV_ADMIN_PASSWORD` 设置为自己的管理员密码。
             下例挂载持久数据卷，并只在宿主机回环地址提供控制台。

@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import type { AdminProvider } from '../../api/admin';
+import { discoverProviderModels, type AdminProvider } from '../../api/admin';
+import { applyProviderKindPreset, isProviderKind } from '../../api/providerKinds';
 import { useI18n, type MessageKey } from '../../i18n';
+import { ProviderKindSelect } from './ProviderKindSelect';
 
 export interface ProviderConfigFields {
   name: string | null;
@@ -37,11 +39,21 @@ export function ProviderConfigForm({ provider, busy, onSave, onCancel }: Props) 
   const [base, setBase] = useState(provider.base);
   const [models, setModels] = useState((provider.models ?? []).join('\n'));
   const [error, setError] = useState<string | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverMessage, setDiscoverMessage] = useState<string | null>(null);
+
+  const selectKind = (nextKind: string) => {
+    const currentModels = models.split(/\r?\n/).map((model) => model.trim()).filter(Boolean);
+    const preset = applyProviderKindPreset(kind, nextKind, base, currentModels);
+    setKind(nextKind);
+    setBase(preset.base);
+    setModels(preset.models.join('\n'));
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!kind.trim() || !/^https?:\/\/.+/.test(base.trim())) {
-      setError(!kind.trim() ? t('add.kindRequired') : t('add.baseHttp'));
+    if (!kind.trim() || !isProviderKind(kind.trim()) || !/^https?:\/\/.+/.test(base.trim())) {
+      setError(!kind.trim() ? t('add.kindRequired') : !isProviderKind(kind.trim()) ? t('add.kindUnsupported', { kind: kind.trim() }) : t('add.baseHttp'));
       return;
     }
     setError(null);
@@ -56,6 +68,24 @@ export function ProviderConfigForm({ provider, busy, onSave, onCancel }: Props) 
       onCancel();
     } catch (cause) {
       setError((cause as Error).message);
+    }
+  };
+
+  const discoverModels = async () => {
+    setDiscovering(true);
+    setDiscoverMessage(null);
+    try {
+      const result = await discoverProviderModels(provider.id);
+      if (!result.ok || result.models.length === 0) {
+        setDiscoverMessage(t('providers.modelsDiscoverFailed' as MessageKey, { error: result.error ?? t('providers.noModels' as MessageKey) }));
+        return;
+      }
+      setModels(result.models.join('\n'));
+      setDiscoverMessage(t('providers.modelsDiscovered' as MessageKey, { n: result.models.length, status: result.status, ms: result.latency_ms }));
+    } catch (cause) {
+      setDiscoverMessage(t('providers.modelsDiscoverFailed' as MessageKey, { error: (cause as Error).message }));
+    } finally {
+      setDiscovering(false);
     }
   };
 
@@ -80,7 +110,7 @@ export function ProviderConfigForm({ provider, busy, onSave, onCancel }: Props) 
         </label>
         <label className="flex flex-col gap-1.5">
           <span style={labelStyle}>{t('providers.kind' as MessageKey)}</span>
-          <input value={kind} onChange={(event) => setKind(event.target.value)} style={inputStyle} />
+          <ProviderKindSelect value={kind} onChange={selectKind} style={inputStyle} />
         </label>
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span style={labelStyle}>{t('providers.base' as MessageKey)}</span>
@@ -88,9 +118,15 @@ export function ProviderConfigForm({ provider, busy, onSave, onCancel }: Props) 
         </label>
       </div>
       <label className="flex flex-col gap-1.5">
-        <span style={labelStyle}>{t('providers.models' as MessageKey)}</span>
+        <span className="flex items-center justify-between gap-2" style={labelStyle}>
+          <span>{t('providers.models' as MessageKey)}</span>
+          <button type="button" disabled={busy || discovering} onClick={() => void discoverModels()} style={{ ...button, minHeight: 28, padding: '0 8px', fontSize: 'var(--text-xs)' }}>
+            {discovering ? t('providers.discoveringModels' as MessageKey) : t('providers.discoverModels' as MessageKey)}
+          </button>
+        </span>
         <textarea value={models} onChange={(event) => setModels(event.target.value)} rows={4} spellCheck={false} className="resize-y p-2.5 leading-relaxed" style={inputStyle} />
         <span style={labelStyle}>{t('providers.modelsHint' as MessageKey)}</span>
+        {discoverMessage && <span role="status" style={{ ...labelStyle, color: 'var(--text-muted)' }}>{discoverMessage}</span>}
       </label>
       {error && <p role="alert" className="text-sm" style={{ color: 'var(--danger)' }}>{error}</p>}
       <div className="flex gap-2">

@@ -74,7 +74,7 @@ export function EndpointPanel({ disabled = false, onChanged }: Props) {
   const globalConfig = storedStrategy(globalStrategy);
   return <section className="entry-workspace" aria-label={t('entry.tab')}>
     <div className="entry-toolbar">
-      <div><h2 className="text-lg font-semibold">{t('entry.tab')}</h2><p className="entry-muted">{t('entry.subtitle')}</p></div>
+      <p className="entry-muted">{t('entry.subtitle')}</p>
       <div className="entry-actions">
         <button className="entry-button" disabled={disabled || busy || loading || !globalConfig} onClick={() => setEditingGlobal(true)}>
           <Pencil size={14}/>{t('entry.global')} · {globalConfig ? t(`entry.${globalConfig.type}`) : globalStrategy}

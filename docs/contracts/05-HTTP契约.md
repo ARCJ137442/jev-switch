@@ -15,6 +15,10 @@
 | `GET` | `/v1/admin/routes` | 模型路由 DAG |
 | `PUT` | `/v1/admin/routes` | 写回 DAG（整表替换） |
 | `POST` | `/v1/admin/providers/{id}/probe` | 健康探测 |
+| `POST` | `/v1/admin/providers/{id}/invoke` | 在 daemon 内用指定 provider 直接调用 Jev 请求（供演练场直连上游） |
+| `POST` | `/v1/admin/providers/{id}/models` | 从已保存 provider 的同源 `/v1/models` 获取模型 ID |
+| `POST` | `/v1/admin/providers/discover-models` | 为尚未保存的表单执行一次不落盘模型发现 |
+| `GET` | `/v1/admin/telemetry` | 当前 daemon 会话的流量、请求和资源遥测（不落盘） |
 
 Admin 仅绑 `127.0.0.1`；CORS 见 §5。
 
@@ -60,9 +64,10 @@ Admin 仅绑 `127.0.0.1`；CORS 见 §5。
 {
   "providers": [
     {
-      "id": "vercel",
-      "kind": "vercel-gateway",
-      "base": "https://…",
+      "id": "typesafe",
+      "kind": "typesafe",
+      "base": "https://api.typesafe.ai/v1/systemone",
+      "models": ["jev-latest"],
       "enabled": true,
       "api_key_masked": "sk-****a1b2",
       "api_key_set": true
@@ -79,7 +84,9 @@ Admin 仅绑 `127.0.0.1`；CORS 见 §5。
 { "providers": [ { "id": "vercel", "kind": "…", "base": "…", "enabled": true, "api_key": "…" } ] }
 ```
 
-写入后落盘 toml（0600）；响应回 **masked**，不回明文。
+`kind` 当前只接受 `vercel`、`laya`、`typesafe`。TypeSafe 官方地址是完整 endpoint `https://api.typesafe.ai/v1/systemone`，Bearer key 由 daemon 添加；官方模型示例为 `jev-latest`。本地 TypeSafe kind 也必须提供相同 Jev `POST /v1/systemone` wire format，不表示兼容一般 OpenAI/Anthropic Chat API。
+
+写入后落盘 toml（0600）；响应回 **masked**，不回明文。`api_key` 省略表示保留已有密钥，空串表示清除；`api_key_env` 省略表示保留已有环境变量名。
 
 ### `GET/PUT /v1/admin/routes`
 
@@ -102,6 +109,52 @@ Admin 仅绑 `127.0.0.1`；CORS 见 §5。
 ```json
 { "ok": true, "latency_ms": 42, "status": 200, "error": null }
 ```
+
+此探测只对上游 `GET base` 检查网络连通性；收到任何 HTTP 状态都代表端点可达，不验证 TypeSafe Bearer key，也不运行推理。
+
+### `POST /v1/admin/providers/{id}/models`
+
+daemon 将 provider 的完整 `POST /v1/systemone` 地址解析为同 host/base path 下的 `GET /v1/models`，使用 daemon 持有的 key 添加 Bearer header。成功响应为：
+
+```json
+{ "ok": true, "latency_ms": 42, "status": 200, "models": ["jev-latest"], "error": null }
+```
+
+当前解析 TypeSafe 的 `models` 数组和 OpenAI 风格的 `data` 数组，支持字符串条目及 `{id}`/`{name}` 条目并去重。请求不运行推理；模型目录失败时返回 `ok=false` 和已掩码错误。
+
+`POST /v1/admin/providers/discover-models` 使用相同响应形状，但从请求体读取未保存表单的 `kind/base/api_key`，只在本次请求内使用，不写入配置或响应。
+
+### `GET /v1/admin/telemetry`
+
+该端点返回当前 daemon 进程自启动以来的只读会话遥测。它不读取或保存请求体、答案、密钥或历史调用正文；重启 daemon 后累计值从零开始。`samples` 是最近约 10 分钟的内存环形采样，前端默认约每秒读取一次：
+
+```json
+{
+  "schema_version": 1,
+  "session_started_at_ms": 0,
+  "sampled_at_ms": 0,
+  "ingress_bps": 0,
+  "egress_bps": 0,
+  "ingress_bytes_total": 0,
+  "egress_bytes_total": 0,
+  "active_requests": 0,
+  "total_requests": 0,
+  "success_requests": 0,
+  "failed_requests": 0,
+  "failover_requests": 0,
+  "avg_gateway_latency_ms": null,
+  "upstream_latency_ms": null,
+  "daemon": { "available": true, "memory_bytes": 0, "cpu_percent": 0, "source": "daemon-process", "precision": "process-snapshot" },
+  "shell": { "available": false, "memory_bytes": null, "cpu_percent": null, "source": "tauri-shell-not-exposed", "precision": "unavailable" },
+  "samples": []
+}
+```
+
+`ingress`/`egress` 是网关客户端边界上可观测的请求/响应 JSON 字节；当前失败响应也计入已知 JSON body 大小。上游延迟和 Tauri WebView 资源尚未由 daemon 精确提供时返回 `null`/`available=false`，不得由客户端估算后冒充真实值。
+
+### `POST /v1/admin/providers/{id}/invoke`
+
+请求体为契约 `01-协议契约` 中的 `JevRequest`；daemon 使用该 ID 已保存的适配器与密钥，不接受请求体传入 base/key。成功时返回 `JevResponse` 并带 `x-jev-request-id`；密钥与请求正文不写入调用历史。
 
 ## 3. 错误体（统一）
 

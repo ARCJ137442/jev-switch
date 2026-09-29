@@ -197,14 +197,14 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 ### 9.2 构建（本机已验，Windows / x86_64-msvc）
 
 ```powershell
-# 一次生成 MSI、NSIS 与配套便携运行目录；不安装、不触发 UAC
+# 一次生成 MSI、NSIS、文件夹 Portable 与单文件 Standalone 候选；不安装、不触发 UAC
 .\scripts\build-windows-release.ps1
 
 # 也可指定便携目录；目标必须不存在
 .\scripts\build-windows-release.ps1 -PortableDestination "$env:TEMP\jev-switch-portable-build1"
 ```
 
-前置：Rust（msvc）、Node、Tauri CLI（`cargo install tauri-cli`）、WebView2（NSIS 安装器自动引导下载）。脚本会先构建 daemon release 并更新 Tauri sidecar，再运行 Tauri UI hook 与 MSI/NSIS 构建，最后从同一组输入生成文件夹式便携运行时。`src-tauri/binaries/*.exe`、`src-tauri/target/`、`src-tauri/gen/` 已 gitignore。
+前置：Rust（msvc）、Node、Tauri CLI（`cargo install tauri-cli`）、WebView2（NSIS 安装器自动引导下载）。脚本先构建 daemon 并更新 Tauri sidecar，再从同一组 daemon/UI 输入生成 MSI/NSIS 与文件夹 Portable；之后校验便携目录清单，构建嵌入相同 daemon 和完整 UI 的 Standalone EXE，并运行独立资源缓存测试。`src-tauri/binaries/*.exe`、`src-tauri/target/`、`src-tauri/gen/` 已 gitignore。
 
 产物（2026-09-23 实测）：
 
@@ -219,6 +219,16 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 2026-09-26 起，便携验收目录由 `scripts/build-windows-release.ps1` 从同次 MSI/NSIS 构建输入组装，具体路径与 SHA-256 写在每份 `build-manifest.json`；发布流水线另将目录压为 Windows x64 ZIP。最新执行与哈希见[总计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[发版手册](RELEASE.md)。
 
 ### 9.3 实测证据（双击开箱门禁，2026-09-23）
+
+当前面向人的启动契约是：双击完整桌面壳（开始菜单快捷方式，或便携目录中的 `jev-switch.exe`），由壳在前台呈现 UI，并按同批资源身份检查/启动配套 daemon。用户不需要先手工启动 daemon，也不应把 daemon 当作日常入口。当前便携版仍是文件夹运行时；“双击一个文件”不等于“单文件 Standalone”。单文件版只有在资源嵌入/版本化释放、数据目录、升级、缓存损坏和安全验证全部通过后才能发布。
+
+### 9.3.1 单文件 Standalone EXE
+
+Standalone 是单独编译的 Tauri 应用：daemon 与 `ui/dist` 的每个文件在编译时嵌入 EXE，不依赖同目录资源，也不需要用户解压。启动时在 `%LOCALAPPDATA%\Jev-Switch\runtime\<version>\<sha256>` 校验已有缓存；缺失或字节不符时先释放到 staging，再切换到目标内容指纹目录。应用通过单实例插件聚焦已运行窗口，daemon 仍由当前壳启动并在壳完全退出时回收。
+
+配置、SQLite 与调用历史继续保存在 `%APPDATA%\jev-switch`，与可执行文件位置和资源缓存分开。独立版不从网络下载或执行 daemon；校验和释放失败时保留等待页错误，不回退要求用户手动启动 daemon。资源缓存不包含配置、密钥或数据库；清理运行缓存不会删除 AppData 用户数据。
+
+构建入口仍是 `scripts/build-windows-release.ps1`。产物名为 `jev-switch-standalone-<version>-windows-x64.exe`；现有 `jev-switch-portable-<version>-windows-x64.zip` 仍需解压，不能称为单文件版。GitHub 当前正式 Release `v0.1.0` 尚无该产物；只有冷启动、重复启动、缓存修复及桌面端本地路由验收通过后，后续 Release 才发布它。
 
 | 断言 | 证据 |
 |---|---|

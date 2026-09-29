@@ -46,6 +46,13 @@ kind = "laya"
 base = "http://127.0.0.1:18765/v1/systemone"
 enabled = true
 
+# TypeSafe official SystemOne. Add an API key in Providers before enabling.
+[providers.typesafe]
+kind = "typesafe"
+base = "https://api.typesafe.ai/v1/systemone"
+models = ["jev-latest"]
+enabled = false
+
 # ── Router 段（旧式，兼容保留）：model id → upstream id ──────────────
 # 每条 = 单条 match=exact 边（priority=0、on_error=next、sticky=none）。
 # 调用方 POST {"model": "laya-english", ...} 即走 Laya

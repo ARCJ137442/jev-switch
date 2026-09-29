@@ -33,7 +33,4 @@
 .entry-route { padding: .875rem; border: 1px solid var(--border); border-radius: var(--radius); display: grid; grid-template-columns: 1.3fr 1fr .6fr; gap: .75rem; }
 .entry-route-list { display: grid; gap: .75rem; }
 .entry-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; background: var(--surface); padding-top: .75rem; border-top: 1px solid var(--border); }
-.routing-tabs { display: flex; align-items: center; gap: .25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
-.routing-tabs button { padding: .625rem 1rem; border-bottom: 2px solid transparent; color: var(--text-muted); border-radius: 0; }
-.routing-tabs button[aria-selected='true'] { color: var(--accent); border-bottom-color: var(--accent); }
 @media (max-width: 640px) { .entry-fields, .entry-route { grid-template-columns: 1fr; } .entry-dialog { max-height: calc(100dvh - 1rem); } }

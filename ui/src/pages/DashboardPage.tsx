@@ -14,6 +14,7 @@ import { useI18n, type MessageKey } from '../i18n';
 import { InstanceSettings } from '../components/settings/InstanceSettings';
 import { AccessDashboard } from '../components/access/AccessDashboard';
 import { useAuth } from '../auth/AuthContext';
+import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
 
 /**
  * Dashboard（v2.0 · 设计稿 docs/design/UI-REDESIGN-v2.md §2）
@@ -298,6 +299,8 @@ export function DashboardPage() {
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />
+
+      <RuntimeTelemetry />
 
       {/* ② Token 管理、调用归属与真实活动数据仍留在 Dashboard 内，不增加主导航。 */}
       <AccessDashboard />

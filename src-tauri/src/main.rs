@@ -12,6 +12,8 @@
 
 mod runtime_probe;
 mod sidecar;
+#[cfg(feature = "standalone")]
+mod standalone;
 mod window_layout;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +28,7 @@ pub struct ShellState {
     pub child: Mutex<Option<std::process::Child>>,
     pub quitting: AtomicBool,
     pub config_dir: std::path::PathBuf,
+    pub runtime_dir: Option<std::path::PathBuf>,
 }
 
 fn main() {
@@ -45,32 +48,50 @@ fn main() {
                 window.show()?;
             }
 
-            // 1. 配置目录 + 首启播种（已有不覆盖）
-            let config_dir = sidecar::config_dir();
-            let config_path = match sidecar::seed_config(&config_dir) {
-                Ok(p) => p,
-                Err(e) => {
-                    sidecar::set_status(
-                        &app_handle,
-                        &format!("配置播种失败：{e}（{}）", config_dir.display()),
-                    );
-                    config_dir.join("providers.toml")
-                }
+            // Standalone builds release their embedded daemon/UI before config or spawn.
+            #[cfg(feature = "standalone")]
+            let runtime_result = standalone::prepare_runtime().map(Some);
+            #[cfg(not(feature = "standalone"))]
+            let runtime_result: Result<Option<std::path::PathBuf>, String> = Ok(None);
+
+            let (runtime_dir, runtime_error) = match runtime_result {
+                Ok(runtime_dir) => (runtime_dir, None),
+                Err(error) => (None, Some(error)),
             };
+
+            // 1. 配置目录（用户数据与可执行资源缓存分开存放）
+            let config_dir = sidecar::config_dir();
 
             app.manage(ShellState {
                 child: Mutex::new(None),
                 quitting: AtomicBool::new(false),
                 config_dir: config_dir.clone(),
+                runtime_dir,
             });
 
             // 2. 托盘
             build_tray(&app_handle)?;
 
+            if let Some(error) = runtime_error {
+                sidecar::set_status(&app_handle, &error);
+                return Ok(());
+            }
+
+            let config_path = match sidecar::seed_config(&config_dir) {
+                Ok(path) => path,
+                Err(error) => {
+                    sidecar::set_status(
+                        &app_handle,
+                        &format!("配置目录不可用：{error}（{}）", config_dir.display()),
+                    );
+                    return Ok(());
+                }
+            };
+
             // 3. sidecar 拉起 + 就绪轮询（服务身份及版本通过 → 切入控制台 UI）
             if let Err(e) = sidecar::start(app_handle.clone(), &config_path) {
                 sidecar::set_status(&app_handle, &e);
-                // 可等待用户手动启动兼容内核；身份不符时保持错误提示。
+                #[cfg(not(feature = "standalone"))]
                 sidecar::wait_for_daemon(app_handle);
             }
             Ok(())
@@ -308,6 +329,22 @@ mod tests {
               theme: root.dataset.theme || null,
               viewport: { width: innerWidth, height: innerHeight },
               document: { width: root.scrollWidth, clientWidth: root.clientWidth },
+              header: (() => {
+                const inner = document.querySelector('.app-shell__header-inner');
+                const brand = document.querySelector('.app-shell__brand');
+                const actions = document.querySelector('.app-shell__actions');
+                const nav = [...document.querySelectorAll('.app-shell__nav a')].map(link => ({
+                  text: link.textContent.trim(),
+                  href: link.getAttribute('href')
+                }));
+                return inner && brand && actions ? {
+                  leftInset: inner.getBoundingClientRect().left,
+                  rightInset: innerWidth - inner.getBoundingClientRect().right,
+                  brandLeft: brand.getBoundingClientRect().left,
+                  actionsRight: innerWidth - actions.getBoundingClientRect().right,
+                  nav
+                } : null;
+              })(),
               main: main ? {
                 width: main.clientWidth,
                 scrollWidth: main.scrollWidth,
@@ -315,6 +352,8 @@ mod tests {
                 clientHeight: main.clientHeight
               } : null,
               heading: document.querySelector('main h1')?.textContent?.trim() || '',
+              routingTabsPresent: Boolean(document.querySelector('.routing-tabs')),
+              graphToolsPresent: Boolean(document.querySelector('.dag-tools')),
               activeNav: active?.getAttribute('aria-current') === 'page',
               themeTogglePresent: Boolean(toggle)
             };
@@ -368,6 +407,7 @@ mod tests {
                 child: Mutex::new(None),
                 quitting: AtomicBool::new(false),
                 config_dir: data_dir,
+                runtime_dir: None,
             })
             .setup(move |app| {
                 tauri::WebviewWindowBuilder::from_config(
@@ -453,7 +493,7 @@ mod tests {
 
     #[test]
     #[ignore = "Loads the live local UI in an isolated hidden Tauri WebView; run explicitly on Windows"]
-    fn native_webview_routes_the_four_pages_and_measures_responsive_layout() {
+    fn native_webview_routes_the_five_pages_and_measures_responsive_layout() {
         use tauri::{LogicalSize, Manager, RunEvent};
 
         assert_eq!(
@@ -462,7 +502,13 @@ mod tests {
             "a compatible local daemon is required; this test never starts or stops it"
         );
 
-        const ROUTES: [&str; 4] = ["dashboard", "providers", "routing", "playground"];
+        const ROUTES: [&str; 5] = [
+            "dashboard",
+            "providers",
+            "endpoints",
+            "routing",
+            "playground",
+        ];
         const SIZES: [(f64, f64); 3] = [(760.0, 480.0), (900.0, 560.0), (1280.0, 720.0)];
         let expected_reports = ROUTES.len() * SIZES.len();
         let (report_address, report_rx, report_server) = start_report_server(expected_reports);
@@ -489,6 +535,7 @@ mod tests {
                 child: Mutex::new(None),
                 quitting: AtomicBool::new(false),
                 config_dir: data_dir.clone(),
+                runtime_dir: None,
             })
             .setup(move |app| {
                 tauri::WebviewWindowBuilder::from_config(
@@ -581,6 +628,23 @@ mod tests {
                                     assert_eq!(measured["themeTogglePresent"], true);
                                     assert!(!measured["heading"].as_str().unwrap_or_default().is_empty());
                                     assert_eq!(measured["activeNav"], true);
+                                    let header = &measured["header"];
+                                    assert!(header["leftInset"].as_f64().unwrap_or(f64::MAX) <= 1.0);
+                                    assert!(header["rightInset"].as_f64().unwrap_or(f64::MAX) <= 1.0);
+                                    assert!(header["brandLeft"].as_f64().unwrap_or(f64::MAX) <= 20.0);
+                                    assert!(header["actionsRight"].as_f64().unwrap_or(f64::MAX) <= 20.0);
+                                    let navigation: Vec<&str> = header["nav"]
+                                        .as_array()
+                                        .unwrap()
+                                        .iter()
+                                        .filter_map(|item| item["href"].as_str())
+                                        .collect();
+                                    assert_eq!(
+                                        navigation.iter().position(|href| *href == "#/endpoints").unwrap() + 1,
+                                        navigation.iter().position(|href| *href == "#/routing").unwrap()
+                                    );
+                                    assert_eq!(measured["routingTabsPresent"], false);
+                                    assert_eq!(measured["graphToolsPresent"], route == "routing");
                                     let client_width = measured["document"]["clientWidth"].as_u64().unwrap_or(0);
                                     let scroll_width = measured["document"]["width"].as_u64().unwrap_or(u64::MAX);
                                     assert!(

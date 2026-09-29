@@ -13,9 +13,9 @@ import './shell.css';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
 
-export type Route = 'home' | 'dashboard' | 'providers' | 'routing' | 'playground';
+export type Route = 'home' | 'dashboard' | 'providers' | 'endpoints' | 'routing' | 'playground';
 
-const ROUTES: readonly Route[] = ['home', 'dashboard', 'providers', 'routing', 'playground'];
+const ROUTES: readonly Route[] = ['home', 'dashboard', 'providers', 'endpoints', 'routing', 'playground'];
 const DEFAULT_ROUTE: Route = 'dashboard';
 
 function parseHash(hash: string): Route {
@@ -23,7 +23,7 @@ function parseHash(hash: string): Route {
   return (ROUTES as readonly string[]).includes(path) ? (path as Route) : DEFAULT_ROUTE;
 }
 
-/** `/#/home`（默认）· `/#/providers` · `/#/routing` · `/#/playground` */
+/** `/#/dashboard`（默认）· `/#/providers` · `/#/endpoints` · `/#/routing` · `/#/playground` */
 export function useHashRoute(): Route {
   const [route, setRoute] = useState<Route>(() =>
     typeof window === 'undefined' ? DEFAULT_ROUTE : parseHash(window.location.hash),
@@ -78,9 +78,10 @@ interface ShellProps {
   children: ReactNode;
 }
 
-const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navDashboard' | 'shell.navProviders' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
+const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navDashboard' | 'shell.navProviders' | 'entry.tab' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
   { route: 'dashboard', labelKey: 'shell.navDashboard', href: '#/dashboard' },
   { route: 'providers', labelKey: 'shell.navProviders', href: '#/providers' },
+  { route: 'endpoints', labelKey: 'entry.tab', href: '#/endpoints' },
   { route: 'routing', labelKey: 'shell.navRouting', href: '#/routing' },
   { route: 'playground', labelKey: 'shell.navPlayground', href: '#/playground' },
 ];
@@ -141,7 +142,7 @@ function ShellFrame({ route, children }: ShellProps) {
         className="shrink-0 border-b"
         style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
       >
-        <div className="app-shell__header-inner mx-auto max-w-7xl">
+        <div className="app-shell__header-inner">
             <a
               href="#/dashboard"
               className="app-shell__brand flex items-center gap-2 font-semibold"

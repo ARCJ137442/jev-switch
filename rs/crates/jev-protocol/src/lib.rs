@@ -652,9 +652,7 @@ fn default_upstream_calls() -> Option<u32> {
 /// (`162.4`), while the public Jev contract stores the gateway value as an
 /// integer. Normalize at the protocol boundary so adapters do not each need a
 /// vendor-specific DTO just for timing precision.
-fn deserialize_optional_latency_ms<'de, D>(
-    deserializer: D,
-) -> Result<Option<u64>, D::Error>
+fn deserialize_optional_latency_ms<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
 where
     D: Deserializer<'de>,
 {

@@ -50,61 +50,72 @@ pub fn seed_config(dir: &Path) -> std::io::Result<PathBuf> {
 /// 打包态：externalBin 落资源目录（具体子路径随平台，逐一探测）。
 /// dev 态：`src-tauri/binaries/jev-switch-<triple>.exe` 或仓库 `rs/target/release/`。
 pub fn resolve_sidecar_exe(app: &AppHandle) -> Option<PathBuf> {
-    // 打包名 = jev-switch-daemon.exe（**不能**与壳主二进制 jev-switch.exe 同名：
-    // WiX ICE30 两组件同装一个文件名 → MSI light 失败；externalBin 落地时剥 triple）
-    let daemon_plain = "jev-switch-daemon.exe";
-    let daemon_triple = format!(
-        "jev-switch-daemon-{}-pc-windows-msvc.exe",
-        arch_triple_prefix()
-    );
-    // dev 兜底：rs workspace 的 bin 名仍是 jev-switch.exe
-    #[cfg(debug_assertions)]
-    let dev_plain = "jev-switch.exe";
-    #[cfg(debug_assertions)]
-    let dev_triple = format!("jev-switch-{}-pc-windows-msvc.exe", arch_triple_prefix());
-    let names: [&str; 2] = [daemon_triple.as_str(), daemon_plain];
-
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(res) = app.path().resource_dir() {
-        for name in names {
-            candidates.push(res.join("binaries").join(name));
-            candidates.push(res.join("bin").join(name));
-            candidates.push(res.join(name));
-        }
+    #[cfg(feature = "standalone")]
+    {
+        let runtime_dir = app.try_state::<ShellState>()?.runtime_dir.clone()?;
+        let daemon = runtime_dir.join("jev-switch-daemon.exe");
+        return daemon.is_file().then_some(daemon);
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
+
+    #[cfg(not(feature = "standalone"))]
+    {
+        // 打包名 = jev-switch-daemon.exe（**不能**与壳主二进制 jev-switch.exe 同名：
+        // WiX ICE30 两组件同装一个文件名 → MSI light 失败；externalBin 落地时剥 triple）
+        let daemon_plain = "jev-switch-daemon.exe";
+        let daemon_triple = format!(
+            "jev-switch-daemon-{}-pc-windows-msvc.exe",
+            arch_triple_prefix()
+        );
+        // dev 兜底：rs workspace 的 bin 名仍是 jev-switch.exe
+        #[cfg(debug_assertions)]
+        let dev_plain = "jev-switch.exe";
+        #[cfg(debug_assertions)]
+        let dev_triple = format!("jev-switch-{}-pc-windows-msvc.exe", arch_triple_prefix());
+        let names: [&str; 2] = [daemon_triple.as_str(), daemon_plain];
+
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Ok(res) = app.path().resource_dir() {
             for name in names {
-                candidates.push(dir.join("binaries").join(name));
-                candidates.push(dir.join("bin").join(name));
-                candidates.push(dir.join(name));
-            }
-            // 仓库路径仅供 debug 开发；安装包不能回退到工作目录中的旧内核。
-            #[cfg(debug_assertions)]
-            {
-                // dev：exe 在 src-tauri/target/debug/ → ../../binaries/
-                candidates.push(dir.join("../../binaries").join(&daemon_triple));
-                candidates.push(dir.join("../../binaries").join(&daemon_plain));
-                candidates.push(dir.join("../../binaries").join(&dev_triple));
-                candidates.push(dir.join("../../binaries").join(dev_plain));
-                // dev：仓库根 rs/target/release（免 copy 直跑）
-                candidates.push(dir.join("../../../rs/target/release").join(dev_plain));
+                candidates.push(res.join("binaries").join(name));
+                candidates.push(res.join("bin").join(name));
+                candidates.push(res.join(name));
             }
         }
-    }
-    // cwd 兜底（`tauri dev` 常以 src-tauri 为 cwd）
-    #[cfg(debug_assertions)]
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("binaries").join(&daemon_triple));
-        candidates.push(cwd.join("binaries").join(&daemon_plain));
-        candidates.push(cwd.join("binaries").join(dev_plain));
-        candidates.push(cwd.join("rs/target/release").join(dev_plain));
-        candidates.push(cwd.join("../rs/target/release").join(dev_plain));
-    }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                for name in names {
+                    candidates.push(dir.join("binaries").join(name));
+                    candidates.push(dir.join("bin").join(name));
+                    candidates.push(dir.join(name));
+                }
+                // 仓库路径仅供 debug 开发；安装包不能回退到工作目录中的旧内核。
+                #[cfg(debug_assertions)]
+                {
+                    // dev：exe 在 src-tauri/target/debug/ → ../../binaries/
+                    candidates.push(dir.join("../../binaries").join(&daemon_triple));
+                    candidates.push(dir.join("../../binaries").join(&daemon_plain));
+                    candidates.push(dir.join("../../binaries").join(&dev_triple));
+                    candidates.push(dir.join("../../binaries").join(dev_plain));
+                    // dev：仓库根 rs/target/release（免 copy 直跑）
+                    candidates.push(dir.join("../../../rs/target/release").join(dev_plain));
+                }
+            }
+        }
+        // cwd 兜底（`tauri dev` 常以 src-tauri 为 cwd）
+        #[cfg(debug_assertions)]
+        if let Ok(cwd) = std::env::current_dir() {
+            candidates.push(cwd.join("binaries").join(&daemon_triple));
+            candidates.push(cwd.join("binaries").join(&daemon_plain));
+            candidates.push(cwd.join("binaries").join(dev_plain));
+            candidates.push(cwd.join("rs/target/release").join(dev_plain));
+            candidates.push(cwd.join("../rs/target/release").join(dev_plain));
+        }
 
-    select_sidecar(candidates, std::env::current_exe().ok().as_deref())
+        select_sidecar(candidates, std::env::current_exe().ok().as_deref())
+    }
 }
 
+#[cfg(not(feature = "standalone"))]
 fn select_sidecar(candidates: Vec<PathBuf>, current_exe: Option<&Path>) -> Option<PathBuf> {
     let current = current_exe.and_then(|path| path.canonicalize().ok());
     candidates.into_iter().find(|path| {
@@ -117,6 +128,7 @@ fn select_sidecar(candidates: Vec<PathBuf>, current_exe: Option<&Path>) -> Optio
 }
 
 /// `x86_64-pc-windows-msvc` 的 arch 段（当前仅 Windows 线；mac/Linux 后置）。
+#[cfg(not(feature = "standalone"))]
 fn arch_triple_prefix() -> &'static str {
     match std::env::consts::ARCH {
         "x86_64" => "x86_64",
@@ -127,27 +139,37 @@ fn arch_triple_prefix() -> &'static str {
 
 /// 解析 ui/dist：打包资源 → dev 仓库路径。
 pub fn resolve_ui_dist(app: &AppHandle) -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(res) = app.path().resource_dir() {
-        candidates.push(res.join("ui/dist"));
-        candidates.push(res.join("resources/ui/dist"));
+    #[cfg(feature = "standalone")]
+    {
+        let runtime_dir = app.try_state::<ShellState>()?.runtime_dir.clone()?;
+        let ui_dist = runtime_dir.join("ui/dist");
+        return ui_dist.join("index.html").is_file().then_some(ui_dist);
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("ui/dist"));
-            // 发行包只使用随包资源，避免静默加载工作区旧页面。
-            #[cfg(debug_assertions)]
-            candidates.push(dir.join("../../../ui/dist"));
+
+    #[cfg(not(feature = "standalone"))]
+    {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Ok(res) = app.path().resource_dir() {
+            candidates.push(res.join("ui/dist"));
+            candidates.push(res.join("resources/ui/dist"));
         }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                candidates.push(dir.join("ui/dist"));
+                // 发行包只使用随包资源，避免静默加载工作区旧页面。
+                #[cfg(debug_assertions)]
+                candidates.push(dir.join("../../../ui/dist"));
+            }
+        }
+        #[cfg(debug_assertions)]
+        if let Ok(cwd) = std::env::current_dir() {
+            candidates.push(cwd.join("ui/dist"));
+            candidates.push(cwd.join("../ui/dist"));
+        }
+        candidates
+            .into_iter()
+            .find(|p| p.join("index.html").is_file())
     }
-    #[cfg(debug_assertions)]
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("ui/dist"));
-        candidates.push(cwd.join("../ui/dist"));
-    }
-    candidates
-        .into_iter()
-        .find(|p| p.join("index.html").is_file())
 }
 
 fn probe_daemon() -> RuntimeProbe {
@@ -240,6 +262,7 @@ fn spawn_sidecar(app: &AppHandle, config_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(feature = "standalone"))]
 pub fn wait_for_daemon(app: AppHandle) {
     spawn_watch(app);
 }
@@ -361,6 +384,7 @@ mod tests {
     use std::cell::Cell;
 
     #[test]
+    #[cfg(not(feature = "standalone"))]
     fn never_resolves_the_shell_itself_as_its_daemon() {
         let current = std::env::current_exe().unwrap();
         assert!(select_sidecar(vec![current.clone()], Some(&current)).is_none());
@@ -477,6 +501,7 @@ mod tests {
                 child: std::sync::Mutex::new(None),
                 quitting: AtomicBool::new(false),
                 config_dir: data_dir.clone(),
+                runtime_dir: None,
             })
             .setup(move |app| {
                 tauri::WebviewWindowBuilder::from_config(
@@ -637,6 +662,7 @@ mod tests {
                 child: std::sync::Mutex::new(None),
                 quitting: AtomicBool::new(false),
                 config_dir: data_dir.clone(),
+                runtime_dir: None,
             })
             .setup(move |app| {
                 tauri::WebviewWindowBuilder::from_config(

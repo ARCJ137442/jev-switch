@@ -57,6 +57,11 @@ Write-Host 'Packaging the no-installer runtime from these same release inputs...
 
 $portableManifestPath = Join-Path ([IO.Path]::GetFullPath($PortableDestination)) 'build-manifest.json'
 $portableManifest = Get-Content -LiteralPath $portableManifestPath -Raw | ConvertFrom-Json
+$standalonePath = Join-Path $tauriRoot "target/release/bundle/standalone/jev-switch-standalone-$($portableManifest.version)-windows-x64.exe"
+& (Join-Path $PSScriptRoot 'build-standalone.ps1') `
+    -PortableDirectory $PortableDestination `
+    -OutputPath $standalonePath
+
 Write-Output "MSI: $($msiArtifacts[0].FullName)"
 Write-Output "MSI SHA-256: $((Get-FileHash -LiteralPath $msiArtifacts[0].FullName -Algorithm SHA256).Hash)"
 Write-Output "NSIS: $($nsisArtifacts[0].FullName)"
@@ -64,3 +69,5 @@ Write-Output "NSIS SHA-256: $((Get-FileHash -LiteralPath $nsisArtifacts[0].FullN
 Write-Output "Portable executable: $(Join-Path ([IO.Path]::GetFullPath($PortableDestination)) 'jev-switch.exe')"
 Write-Output "Portable manifest: $portableManifestPath"
 Write-Output "Portable MSI hash: $($portableManifest.installers.($msiArtifacts[0].Name))"
+Write-Output "Standalone executable: $standalonePath"
+Write-Output "Standalone SHA-256: $((Get-FileHash -LiteralPath $standalonePath -Algorithm SHA256).Hash)"

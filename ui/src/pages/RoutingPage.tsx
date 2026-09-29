@@ -6,7 +6,6 @@ import { DagCanvas } from '../components/routing/DagCanvas';
 import { routeIdentity, routeDocumentSignature, type DagEntry, type DagProvider, type Point } from '../components/routing/dag';
 import { DocumentHistory } from '../components/routing/documentHistory';
 import { RouteTableForm } from '../components/routing/RouteTableForm';
-import { EndpointPanel } from '../components/routing/EndpointPanel';
 import { useToast } from '../app/feedback';
 import { useI18n } from '../i18n';
 
@@ -38,7 +37,6 @@ const isEditing = (target: EventTarget | null) => target instanceof HTMLElement 
 export function RoutingPage() {
   const { t } = useI18n();
   const { toast } = useToast();
-  const [tab, setTab] = useState<'entries' | 'graph'>('entries');
   const [doc, setDoc] = useState<GraphDocument>(() => ({ routes: [], positions: readPositions() }));
   const history = useRef(new DocumentHistory(doc));
   const [entries, setEntries] = useState<DagEntry[]>([]);
@@ -151,7 +149,6 @@ export function RoutingPage() {
   };
 
   useEffect(() => {
-    if (tab !== 'graph') return;
     const onKey = (event: KeyboardEvent) => {
       if (isEditing(event.target)) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
@@ -163,17 +160,12 @@ export function RoutingPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, tab]);
+  }, [selected]);
 
   return <div className="w-full min-w-0 px-4 py-4 sm:px-6 lg:px-8">
     <h1 className="mb-5 font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>{t('shell.navRouting')}</h1>
-    <div className="routing-tabs" role="tablist" aria-label={t('shell.navRouting')}>
-      <button type="button" role="tab" id="entry-tab" aria-controls="entry-panel" aria-selected={tab === 'entries'} onClick={() => setTab('entries')}>{t('entry.tab')}</button>
-      <button type="button" role="tab" id="graph-tab" aria-controls="graph-panel" aria-selected={tab === 'graph'} onClick={() => setTab('graph')}>{t('entry.graph')}</button>
-    </div>
-    {tab === 'entries' ? <div role="tabpanel" id="entry-panel" aria-labelledby="entry-tab"><EndpointPanel disabled={dirty || saving} onChanged={() => void load()} /></div>
-      : <div role="tabpanel" id="graph-panel" aria-labelledby="graph-tab">
-        <div className="dag-tools">
+    <div>
+      <div className="dag-tools">
           <span aria-live="polite">{saving ? t('common.saving') : dirty ? t('routing.unsaved') : t('routing.synced')}</span>
           <span className="dag-help">{t('routing.edges', { n: doc.routes.length })}</span>
           <button type="button" disabled={!history.current.canUndo || loading} onClick={undo} title="Ctrl+Z">{t('dag.undo')}</button>
@@ -194,6 +186,6 @@ export function RoutingPage() {
             onResetLayout={() => commit({ ...history.current.current, positions: {} })} />
           {showTable && <div className="mt-4"><RouteTableForm routes={doc.routes} errorEdges={errors} onPatchAt={patchAt} onDeleteAt={removeAt} onAdd={() => changeRoutes([...history.current.current.routes, normalizeRoute({ left: entries[0]?.id ?? '', right: providers[0]?.id ?? '', match: 'exact', priority: 10 })])} /></div>}
         </>}
-      </div>}
+    </div>
   </div>;
 }

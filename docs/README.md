@@ -4,12 +4,14 @@
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。
 
-> **2026-09-28 adapter 状态：**当前源码增加 TypeSafe 官方及 TypeSafe-compatible SystemOne 上游；该实现尚未进入 v0.1.0 Release。契约测试与适用边界见[核对记录](verification/typesafe-systemone-adapter-2026-09-28.md)。
+> **2026-09-29 adapter 状态：**当前源码增加 TypeSafe 官方及 TypeSafe-compatible SystemOne 上游；官方 `/v1/systemone`、Bearer key 与 `jev-latest` 已按 TypeSafe 文档核对。该实现尚未进入 v0.1.0 Release；wiremock 是离线证据，真实账户与本地桌面 E2E 状态以对应核验记录为准。
+>
+> **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **当前核实状态（2026-09-27）**：正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已由 tag 流水线发布，含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。Release gate 的 Rust、UI、Tauri 与版本检查通过。验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。Laya 不重复实测。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段**：网关实施及 v0.1.0 验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准。2026-09-28 当前源码增量加入 TypeSafe 官方及本地-compatible SystemOne adapter，尚未发布；本轮离线证据见[核对记录](verification/typesafe-systemone-adapter-2026-09-28.md)。便携运行时需整体保留壳、sidecar 与 UI 资源，配置仍从正式 AppData 读取；可用 `scripts/build-windows-release.ps1` 重建 MSI/NSIS 与便携包。总计划 §3/§3.1 记录决定及八条批注，顶部发布后状态与对应证据节记录现行验收边界。
+> **当前产品基线与维护阶段**：网关实施及 v0.1.0 验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准。2026-09-29 当前源码增量含 TypeSafe 官方及本地-compatible SystemOne adapter 与 Standalone 单文件构建路径，尚未发布；真实官方调用、本地桌面 E2E 和独立版运行验收需分别看本轮核验结果。便携 ZIP 仍是文件夹运行时；`scripts/build-windows-release.ps1` 生成 MSI、NSIS、Portable 及单文件 Standalone 候选。总计划 §3/§3.1 记录决定及八条批注，顶部发布后状态与对应证据节记录正式 Release 验收边界。
 
 ## 核心定位（一句话）
 
@@ -21,6 +23,13 @@
 |---|---|---|
 | **[../ROADMAP.md](../ROADMAP.md)** | **未来功能方向、优先级和可验收边界** | OpenRouter 适配器为最高优先级；不代表已排期 |
 | [verification/typesafe-systemone-adapter-2026-09-28.md](verification/typesafe-systemone-adapter-2026-09-28.md) | TypeSafe 官方与本地-compatible SystemOne adapter 的当前实现、wiremock 证据和边界 | 源码/离线契约验证；不代表已发布或已做真实官方推理 |
+| [verification/typesafe-official-live-2026-09-29.md](verification/typesafe-official-live-2026-09-29.md) | TypeSafe 官方 key 的隔离单次实测，Noul/Choice/Score 与 usage | 当前源码直连 provider；不代表 Standalone/公开入口 E2E |
+| [verification/standalone-lmstudio-e2e-2026-09-29.md](verification/standalone-lmstudio-e2e-2026-09-29.md) | 较早 Standalone 候选的冷启动、缓存、五页 WebView 与 LM Studio 本地 SystemOne UI 路由 trace | 该记录只属于文档顶部候选哈希；真实系统托盘点击和第二次双击聚焦仍待人工确认 |
+| [verification/typesafe-model-discovery-2026-09-29.md](verification/typesafe-model-discovery-2026-09-29.md) | TypeSafe `/v1/models` 实测与 daemon/UI 自动模型发现 | 管理时目录/鉴权检查；不替代推理调用 |
+| [verification/runtime-telemetry-2026-09-30.md](verification/runtime-telemetry-2026-09-30.md) | Dashboard 当前 daemon 会话遥测、流量曲线与资源卡的实现和验证边界 | Phase 1 已落地；上游延迟与 Tauri WebView 精确资源仍未提供 |
+| [verification/windows-release-candidate-2026-09-29.md](verification/windows-release-candidate-2026-09-29.md) | 当前 Windows MSI、NSIS、Portable 与 Standalone 候选的哈希、离线门禁和运行验收边界 | 新候选构建身份已核对；精确 EXE 的 WebView/托盘实测仍需启动 |
+| [verification/recovery-regression-2026-09-28.md](verification/recovery-regression-2026-09-28.md) | Windows 重启后的 Kev、Laya、Jev Switch 恢复、隔离 target 回归与小样本 Rime smoke | 恢复核对；不替代完整 benchmark |
+| [verification/jevk5-4b-lmstudio-2026-09-28.md](verification/jevk5-4b-lmstudio-2026-09-28.md) | JevK5-4B GGUF 经 LM Studio bridge 注册、路由与清理核对 | 实验性 one-hot 兼容路径；不代表原生 logits 或生产校准 |
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线说明与路线图各方向对应的具体用户旅程 | 早期场景已标为历史构想；第七、八节覆盖路线图中的未来体验提案，不表示已实现 |
 | **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **本轮用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收门槛** | **当前施工入口；P1–P4 已验；P5 有用户截图与 Hide/Restore 证据，候选 Exit/恢复边界仍开放；P6 v0.1.0 已发布** |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
@@ -92,7 +101,7 @@
 
 ```
 rs/     Rust workspace：protocol / core / adapters / daemon
-ui/     React 四页控制台：仪表盘、提供商、路由与演练场
+ui/     React 五页控制台：仪表盘、提供商、入口、路由 DAG 与演练场
 docs/   本目录
 ```
 

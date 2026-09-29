@@ -15,7 +15,7 @@
 - `rs/Cargo.toml` 的 `[workspace.package].version`
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
-每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。正式 v0.1.0 Release 内置 Vercel/Laya；当前源码另有尚未发布的 TypeSafe SystemOne adapter，OpenRouter 仍在路线图。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。正式 v0.1.0 Release 内置 Vercel/Laya；当前源码另有尚未发布的 TypeSafe SystemOne adapter 与 Windows Standalone 构建路径，OpenRouter 仍在路线图。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
 
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
@@ -86,7 +86,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 ### 触发安装前
 
 - 确认当前提交的 Rust workspace 默认/`ts-rs` 测试、Tauri shell 测试、UI 测试、lint 与生产构建均通过。
-- 运行 `scripts/build-windows-release.ps1` 一次生成 MSI、NSIS 与便携目录。便携目录内含可双击的 `jev-switch.exe`，并带 daemon、`ui/dist`、`build-manifest.json`；清单记录壳/daemon/UI 和配对 MSI/NSIS 的 SHA-256。重复构建会生成新的便携目录，不覆盖旧验收产物。不要将 AppData 密钥或配置复制进便携包。GitHub Release 同样上传一个便携 ZIP，解压后运行目录中的 exe。
+- 运行 `scripts/build-windows-release.ps1` 一次生成 MSI、NSIS、文件夹 Portable 与单文件 Standalone 候选。便携目录内含 `jev-switch.exe`、daemon、`ui/dist` 和 SHA-256 manifest，仍需解压；Standalone 则把 daemon/UI 直接嵌入单个 Tauri EXE。脚本在嵌入前按便携 manifest 核对 daemon 与所有 UI 文件，并运行版本化缓存创建/复用/损坏修复测试。不要将 AppData 密钥或配置复制进运行资源。当前公开 v0.1.0 Release 还没有 Standalone；只有本机冷启动与桌面 E2E 验收通过后，未来 tag 才能加入。
 - 从 MSI 只读提取 Tauri shell、daemon 与 HTML/JS/CSS，逐项与当前构建输入哈希核对。之后常规 UI、路由、真实调用、历史与恢复验收直接双击便携目录中的 exe；仅安装器升级专属验证才需要 MSI/UAC。
 - 核对现有 Jev、daemon、Laya 与监听端口归属，避免覆盖或停止其他项目服务；确认现有 Vercel 凭据只通过掩码状态检查，不读取或记录明文。
 - 准备演练场相同输入、公开入口与直连 provider/model 两类目标；准备 Dashboard request ID、SQLite event/trace 字段核对项。
@@ -96,9 +96,9 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 1. 核对 `127.0.0.1:11435` 的监听 PID 与路径。只在确认属于 Jev-Switch 后结束占用，再双击便携目录内 `jev-switch.exe`；核对启动的壳、sidecar、health/API identity 与 `build-manifest.json`。若 shell 复用了原 daemon，先确认它确为本次目标版本，不能只看窗口已打开。
 2. 用现存正式配置核对 schema migration、入口/provider 状态及既有历史计数；不覆盖配置、不打印密钥。
 3. 各执行一次真实 Laya 与 Vercel TypeSafe 公开入口请求，并通过演练场各执行一次直连上游比较。把响应 request ID 与 Dashboard 活动及 SQLite 记录对应，确认成功/失败状态、provider/model、usage、latency、route trace 按契约保存；确认请求正文、答案、key 与原始错误 body 未写入安全 trace。
-4. 在便携版或升级后的 WebView 检查 Dashboard、Providers、Routing/入口 DAG、Playground 多入口并排四页；覆盖短窗口、窄屏长宽比与现有多 DPI 显示器。确认布局使用可用视口，入口图与实际配置一致，比较结果并排可读。
+4. 在 Tauri 候选中检查 Dashboard、Providers、Entries、Routing DAG、Playground 五页；覆盖短窗口、窄屏长宽比与现有多 DPI 显示器。确认顶栏全宽贴边、入口独立导航、路由页直达 DAG，布局使用可用视口且比较结果并排可读。
 5. 通过真实托盘菜单执行“退出”，确认 shell 负责停止其拥有的 sidecar；重启后核对入口、配置、历史和统计恢复，再核对关闭/隐藏到托盘行为。
-6. 全部检查通过后再截取当前候选版本的四页正式截图，更新 README/发布材料与验证记录；截图不得来自旧 demo、开发预览或旧 UI hash。
+6. 全部检查通过后再截取当前候选版本的五页正式截图，更新 README/发布材料与验证记录；截图不得来自旧 demo、开发预览或旧 UI hash。
 
 ### 可选：一次 MSI 安装器升级验收
 

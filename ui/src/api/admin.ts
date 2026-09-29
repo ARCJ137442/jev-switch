@@ -5,8 +5,11 @@ import { ROUTES_FIXTURE } from '../fixtures/routes.mock';
 import type { ProviderView } from '../generated/ProviderView';
 import type { ProviderInput } from '../generated/ProviderInput';
 import type { ProbeResult } from '../generated/ProbeResult';
+import type { ProviderModelsResult } from '../generated/ProviderModelsResult';
+import type { TelemetrySnapshot } from '../generated/TelemetrySnapshot';
 import { parseProviderTomlValue, stripTomlComment } from './providerTomlValue';
 import { getCallerToken } from '../auth/callerSession';
+import { isProviderKind } from './providerKinds';
 
 /**
  * Admin API 客户端（contracts/05 §2 形状字面）。
@@ -48,6 +51,9 @@ export type AdminProviderWrite = Omit<ProviderInput, 'models' | 'api_key' | 'api
   Partial<Pick<ProviderInput, 'models' | 'api_key' | 'api_key_env'>>;
 
 export type ProbeResponse = ProbeResult;
+
+export type ProviderModelsResponse = ProviderModelsResult;
+export type RuntimeTelemetry = TelemetrySnapshot;
 
 /* ---------- 通用请求（#43 cloud：admin 会话附带 + 401/403 全局上报） ---------- */
 
@@ -268,6 +274,36 @@ export async function probeProvider(id: string): Promise<ProbeResponse> {
   return request<ProbeResponse>(`/v1/admin/providers/${encoded}/probe`, { method: 'POST' });
 }
 
+/** Fetch a provider-owned model catalog through the daemon; the browser never contacts the upstream directly. */
+export async function discoverProviderModels(id: string): Promise<ProviderModelsResponse> {
+  if (adminMode === 'mock') {
+    await delay(120);
+    const provider = mockProviders.find((item) => item.id === id);
+    return provider
+      ? { ok: true, latency_ms: 20, status: 200, models: provider.models ?? [], error: null }
+      : { ok: false, latency_ms: 0, status: 404, models: [], error: 'not found' };
+  }
+  return request<ProviderModelsResponse>(`/v1/admin/providers/${encodeURIComponent(id)}/models`, { method: 'POST' });
+}
+
+/** Discover a model catalog for an unsaved form. The key exists only in this request. */
+export async function discoverProviderModelsDraft(input: {
+  kind: string;
+  base: string;
+  api_key?: string;
+  api_key_env?: string;
+}): Promise<ProviderModelsResponse> {
+  if (adminMode === 'mock') {
+    await delay(120);
+    return { ok: true, latency_ms: 20, status: 200, models: [], error: null };
+  }
+  return request<ProviderModelsResponse>('/v1/admin/providers/discover-models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
 /* ---------- routes（contracts/03 §2 / contracts/05 GET·PUT /v1/admin/routes） ---------- */
 
 export interface Route {
@@ -455,6 +491,31 @@ export async function getStatus(): Promise<{ status: AdminStatus; source: 'live'
   }
 }
 
+export async function getTelemetry(): Promise<RuntimeTelemetry> {
+  if (adminMode === 'mock') {
+    return {
+      schema_version: 1,
+      session_started_at_ms: Date.now() - 11 * 60 * 1000,
+      sampled_at_ms: Date.now(),
+      ingress_bps: 3840,
+      egress_bps: 1024,
+      ingress_bytes_total: 6_660_000_000,
+      egress_bytes_total: 1_290_000_000,
+      active_requests: 1,
+      total_requests: 353,
+      success_requests: 347,
+      failed_requests: 6,
+      failover_requests: 2,
+      avg_gateway_latency_ms: 11,
+      upstream_latency_ms: null,
+      daemon: { available: true, memory_bytes: 79_300_000, cpu_percent: 4, source: 'mock', precision: 'fixture' },
+      shell: { available: false, memory_bytes: null, cpu_percent: null, source: 'tauri-shell-not-exposed', precision: 'unavailable' },
+      samples: [],
+    };
+  }
+  return request<RuntimeTelemetry>('/v1/admin/telemetry');
+}
+
 /**
  * PUT /v1/admin/mode —— cloud 激活密码闸 400 文案由服务端给出
  * （含 `admin password required` → 调用方弹设密对话框后带 admin_password 重发）。
@@ -539,7 +600,7 @@ export interface TomlParseResult {
 /**
  * 解析 contracts/04 §6 形态的 `[providers.<id>]` 表片段：
  *   [providers.vercel]
- *   kind = "vercel-gateway"
+ *   kind = "vercel"
  *   base = "https://…"
  *   api_key = "…"      # 仅在内存中流转，随 PUT 一次发出
  *   enabled = true
@@ -553,6 +614,7 @@ export function parseProvidersToml(text: string): TomlParseResult {
   const flush = () => {
     if (current === null) return;
     if (!current.kind) errors.push(tI18n('api.missingKind', { id: current.id }));
+    else if (!isProviderKind(current.kind)) errors.push(tI18n('api.unsupportedKind', { id: current.id, kind: current.kind }));
     if (!current.base) errors.push(tI18n('api.missingBase', { id: current.id }));
     if (current.kind && current.base) providers.push(current);
     current = null;

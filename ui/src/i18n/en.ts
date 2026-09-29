@@ -101,6 +101,7 @@ export const en = {
   'add.tabForm': 'Form',
   'add.idRequired': 'id is required',
   'add.kindRequired': 'kind is required',
+  'add.kindUnsupported': 'Unsupported API protocol: {kind}',
   'add.baseHttp': 'base must start with http(s)://',
   'add.noSections': 'No [providers.<id>] sections found',
   'add.pasteHint': 'Paste a [providers.<id>] snippet',
@@ -234,6 +235,7 @@ export const en = {
 
   /* api/admin parse errors */
   'api.missingKind': '[{id}] missing kind',
+  'api.unsupportedKind': '[{id}] unsupported API protocol: {kind}',
   'api.missingBase': '[{id}] missing base',
   'api.badSection': 'line {n}: unsupported section [{name}] (expected [providers.<id>])',
   'api.parseLine': 'line {n}: cannot parse "{line}"',

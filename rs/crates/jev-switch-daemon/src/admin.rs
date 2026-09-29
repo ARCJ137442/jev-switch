@@ -10,6 +10,7 @@
 //! - `PUT  /v1/admin/routes` → 整表替换：字段校验 → **检环 400**（文案含 环/cycle）
 //!   → right 引用校验 → 落盘 → `Registry::replace_edges` 热替换（无重启）
 //! - `POST /v1/admin/providers/{id}/probe` → `{ok,latency_ms,status,error}`
+//! - `POST /v1/admin/providers/{id}/models` → 从上游模型目录获取模型 ID（不运行推理）
 //! - `PUT  /v1/admin/mode` → **mode 热切**（不重启）：可选 `admin_password`
 //!   激活/轮换 → 写 toml `mode` → 写 `AuthState.mode` RwLock → 非显式 bind 时
 //!   联动 ListenSupervisor 热 Rebind 到成对默认（见 [`crate::listen`]）
@@ -167,6 +168,34 @@ pub struct ProbeResult {
     /// 上游 HTTP 状态；`0` = 无 HTTP 响应（连接/超时层失败）。
     pub status: u16,
     pub error: Option<String>,
+}
+
+/// 上游模型目录发现结果。响应只含模型公开元数据，不含地址或密钥。
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct ProviderModelsResult {
+    pub ok: bool,
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
+    pub latency_ms: u64,
+    /// `0` = 没有收到 HTTP 响应；否则为上游真实 HTTP 状态。
+    pub status: u16,
+    pub models: Vec<String>,
+    pub error: Option<String>,
+}
+
+/// 未保存表单的模型发现请求。仅在请求生命周期内携带明文 key，不落盘、不回显。
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ProviderModelsInput {
+    pub kind: String,
+    pub base: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub api_key_env: Option<String>,
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -337,6 +366,16 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
                 &state,
                 StatusCode::BAD_REQUEST,
                 format!("provider '{}' kind 不得为空", p.id),
+            );
+        }
+        if !matches!(p.kind.as_str(), "vercel" | "laya" | "typesafe") {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "provider '{}' kind '{}' 不受支持；可选值：vercel、laya、typesafe",
+                    p.id, p.kind
+                ),
             );
         }
         if p.base.trim().is_empty() {
@@ -957,6 +996,11 @@ pub async fn get_status(State(state): State<AppState>) -> Response {
     .into_response()
 }
 
+/// `GET /v1/admin/telemetry` — process-local session telemetry for Dashboard.
+pub async fn get_telemetry(State(state): State<AppState>) -> Json<crate::telemetry::TelemetrySnapshot> {
+    Json(state.telemetry.snapshot())
+}
+
 /// `PUT /v1/admin/password` 请求体。
 #[derive(Debug, Clone, serde::Deserialize)]
 #[cfg_attr(
@@ -1407,6 +1451,184 @@ pub async fn probe_provider(
     Json(result).into_response()
 }
 
+/// 从 provider 的同源模型目录获取可用模型。
+///
+/// TypeSafe 官方约定为 `GET /v1/models`，而 provider 配置保存的是完整
+/// `POST /v1/systemone` 地址。使用 URL 解析器只替换最后一个 path segment，
+/// 保留 host、scheme 和可能的 base path；绝不通过字符串拼接把 key 带入 URL。
+pub async fn discover_provider_models(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let cfg = match load_config(&state) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+    let Some(provider) = cfg.providers.get(&id) else {
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider '{id}' not found"),
+        );
+    };
+
+    let key = cfg.effective_api_key(&id);
+    Json(discover_models(&provider.kind, &provider.base, key.as_deref()).await).into_response()
+}
+
+/// Discover models for a new provider form without persisting the draft.
+pub async fn discover_provider_models_draft(
+    State(_state): State<AppState>,
+    Json(input): Json<ProviderModelsInput>,
+) -> Response {
+    let key = input
+        .api_key
+        .filter(|key| !key.trim().is_empty())
+        .or_else(|| {
+            input
+                .api_key_env
+                .as_deref()
+                .and_then(|name| std::env::var(name).ok())
+        });
+    Json(discover_models(&input.kind, &input.base, key.as_deref()).await).into_response()
+}
+
+async fn discover_models(kind: &str, base: &str, api_key: Option<&str>) -> ProviderModelsResult {
+    let models_url = match model_catalog_url(base) {
+        Ok(url) => url,
+        Err(error) => {
+            return ProviderModelsResult {
+                ok: false,
+                latency_ms: 0,
+                status: 0,
+                models: Vec::new(),
+                error: Some(redact(&error, &[])),
+            };
+        }
+    };
+    if !matches!(kind, "vercel" | "laya" | "typesafe") {
+        return ProviderModelsResult {
+            ok: false,
+            latency_ms: 0,
+            status: 0,
+            models: Vec::new(),
+            error: Some(format!("unsupported provider kind '{kind}'")),
+        };
+    }
+    let keys = api_key.map(str::to_string).into_iter().collect::<Vec<_>>();
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .connect_timeout(Duration::from_secs(3))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return ProviderModelsResult {
+                ok: false,
+                latency_ms: 0,
+                status: 0,
+                models: Vec::new(),
+                error: Some(redact(&error.to_string(), &keys)),
+            };
+        }
+    };
+
+    let mut request = client.get(models_url);
+    if let Some(key) = api_key {
+        request = request.bearer_auth(key);
+    }
+    let started = Instant::now();
+    let result = match request.send().await {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let success = response.status().is_success();
+            match response.bytes().await {
+                Ok(bytes) if success => {
+                    match serde_json::from_slice::<serde_json::Value>(&bytes)
+                        .ok()
+                        .and_then(|body| extract_model_ids(&body))
+                    {
+                        Some(models) if !models.is_empty() => ProviderModelsResult {
+                            ok: true,
+                            latency_ms: started.elapsed().as_millis() as u64,
+                            status,
+                            models,
+                            error: None,
+                        },
+                        _ => ProviderModelsResult {
+                            ok: false,
+                            latency_ms: started.elapsed().as_millis() as u64,
+                            status,
+                            models: Vec::new(),
+                            error: Some("model catalog response contained no model IDs".into()),
+                        },
+                    }
+                }
+                Ok(bytes) => ProviderModelsResult {
+                    ok: false,
+                    latency_ms: started.elapsed().as_millis() as u64,
+                    status,
+                    models: Vec::new(),
+                    error: Some(redact(
+                        &format!(
+                            "upstream returned HTTP {status}: {}",
+                            String::from_utf8_lossy(&bytes)
+                        ),
+                        &keys,
+                    )),
+                },
+                Err(error) => ProviderModelsResult {
+                    ok: false,
+                    latency_ms: started.elapsed().as_millis() as u64,
+                    status,
+                    models: Vec::new(),
+                    error: Some(redact(&format!("read model catalog: {error}"), &keys)),
+                },
+            }
+        }
+        Err(error) => ProviderModelsResult {
+            ok: false,
+            latency_ms: started.elapsed().as_millis() as u64,
+            status: 0,
+            models: Vec::new(),
+            error: Some(redact(&error.to_string(), &keys)),
+        },
+    };
+    result
+}
+
+fn model_catalog_url(base: &str) -> Result<reqwest::Url, String> {
+    let mut url =
+        reqwest::Url::parse(base).map_err(|error| format!("invalid provider base URL: {error}"))?;
+    let path = url.path().trim_end_matches('/');
+    let prefix = path
+        .rsplit_once('/')
+        .map(|(prefix, _)| prefix)
+        .unwrap_or("");
+    url.set_path(&format!("{prefix}/models"));
+    Ok(url)
+}
+
+fn extract_model_ids(body: &serde_json::Value) -> Option<Vec<String>> {
+    let values = body
+        .get("models")
+        .or_else(|| body.get("data"))
+        .and_then(serde_json::Value::as_array)?;
+    let mut models = Vec::new();
+    for value in values {
+        let id = value
+            .as_str()
+            .or_else(|| value.get("id").and_then(serde_json::Value::as_str))
+            .or_else(|| value.get("name").and_then(serde_json::Value::as_str));
+        if let Some(id) = id.filter(|id| !id.trim().is_empty()) {
+            if !models.iter().any(|existing| existing == id) {
+                models.push(id.to_string());
+            }
+        }
+    }
+    Some(models)
+}
+
 /// Direct upstream invocation for comparison/testing. The path selects an existing
 /// daemon-side provider config; the request never carries a provider URL or credential.
 pub async fn invoke_provider(
@@ -1632,6 +1854,39 @@ mod tests {
 
     /// 假 key（测试专用假值 —— 真实密钥永不进测试/提交）。
     const FAKE_KEY: &str = "sk-test1234abcd";
+
+    #[test]
+    fn model_catalog_url_replaces_only_the_systemone_segment() {
+        assert_eq!(
+            model_catalog_url("https://api.typesafe.ai/v1/systemone")
+                .unwrap()
+                .as_str(),
+            "https://api.typesafe.ai/v1/models"
+        );
+        assert_eq!(
+            model_catalog_url("http://127.0.0.1:8783/v1/systemone")
+                .unwrap()
+                .as_str(),
+            "http://127.0.0.1:8783/v1/models"
+        );
+    }
+
+    #[test]
+    fn model_catalog_parser_accepts_typesafe_and_openai_shapes_and_deduplicates() {
+        let typesafe = serde_json::json!({"models": [{"id": "jev-latest"}, {"name": "jev-1.13.0"}, "jev-latest"]});
+        assert_eq!(
+            extract_model_ids(&typesafe).unwrap(),
+            vec!["jev-latest", "jev-1.13.0"]
+        );
+        let openai = serde_json::json!({"data": [{"id": "model-a"}, {"id": "model-b"}]});
+        assert_eq!(
+            extract_model_ids(&openai).unwrap(),
+            vec!["model-a", "model-b"]
+        );
+        assert!(extract_model_ids(&serde_json::json!({"models": []}))
+            .unwrap()
+            .is_empty());
+    }
 
     /// 每测独立临时配置（不碰 `JEV_SWITCH_CONFIG` 环境变量 —— 进程级会打架，
     /// 测试一律显式传 path）。
@@ -1962,6 +2217,57 @@ enabled = true
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
+    #[tokio::test]
+    async fn model_discovery_fetches_catalog_with_provider_key_and_deduplicates() {
+        let server = wiremock::MockServer::start().await;
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path("/v1/models"))
+            .and(wiremock::matchers::header(
+                "authorization",
+                "Bearer sk-test1234abcd",
+            ))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "models": [{"id": "jev-latest"}, {"name": "jev-1.13.0"}, "jev-latest"]
+                })),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let cfg = format!(
+            r#"
+[providers.typesafe]
+kind = "typesafe"
+base = "{}/v1/systemone"
+api_key = "{}"
+enabled = true
+"#,
+            server.uri(),
+            FAKE_KEY
+        );
+        let path = temp_config("models-discovery", &cfg);
+        let (app, _state) = app_at(path.clone());
+        let (status, body) = send(
+            app,
+            "POST",
+            "/v1/admin/providers/typesafe/models",
+            Some("{}".into()),
+        )
+        .await;
+
+        assert_eq!(status, 200, "{body}");
+        let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(value["ok"], true, "{body}");
+        assert_eq!(value["status"], 200, "{body}");
+        assert_eq!(
+            value["models"],
+            serde_json::json!(["jev-latest", "jev-1.13.0"])
+        );
+        assert!(value["latency_ms"].is_number());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
     /* ── 单测⑦：源码 grep —— 无任何 Serialize 面声明 api_key 字段 ── */
 
     #[test]
@@ -2105,6 +2411,17 @@ enabled = true
         ]}"#;
         let (status, resp) = send(app, "PUT", "/v1/admin/providers", Some(dup.into())).await;
         assert_eq!(status, 400, "{resp}");
+
+        let unsupported = r#"{"providers":[{"id":"a","kind":"vercel-gateway","base":"https://example.invalid","enabled":true}]}"#;
+        let (status, resp) = send(
+            build_app(state.clone()),
+            "PUT",
+            "/v1/admin/providers",
+            Some(unsupported.into()),
+        )
+        .await;
+        assert_eq!(status, 400, "{resp}");
+        assert!(resp.contains("vercel"), "{resp}");
 
         let empty_id = r#"{"providers":[{"id":"","kind":"k","base":"b","enabled":true}]}"#;
         let (status, resp) = send(
