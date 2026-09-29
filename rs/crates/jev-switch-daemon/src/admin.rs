@@ -471,7 +471,7 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
     refresh_known_keys(&state, &cfg);
     state
         .registry
-        .replace_upstreams(crate::build_upstreams(&cfg));
+        .replace_upstreams(crate::build_runtime_upstreams(&cfg, &state.telemetry));
     let keys = known_keys_snapshot(&state);
     Json(providers_doc(&cfg, &keys)).into_response()
 }
@@ -685,7 +685,7 @@ pub async fn import_runtime_config(State(state): State<AppState>, body: Bytes) -
     }
     // Construct adapters before changing the canonical snapshot. A provider that
     // cannot be registered must not yield a successful import with stale runtime.
-    let adapters = crate::build_upstreams(&config);
+    let adapters = crate::build_runtime_upstreams(&config, &state.telemetry);
     let adapter_ids: BTreeSet<&str> = adapters.iter().map(|adapter| adapter.id()).collect();
     for (id, provider) in &config.providers {
         if provider.enabled && !adapter_ids.contains(id.as_str()) {
@@ -997,7 +997,9 @@ pub async fn get_status(State(state): State<AppState>) -> Response {
 }
 
 /// `GET /v1/admin/telemetry` — process-local session telemetry for Dashboard.
-pub async fn get_telemetry(State(state): State<AppState>) -> Json<crate::telemetry::TelemetrySnapshot> {
+pub async fn get_telemetry(
+    State(state): State<AppState>,
+) -> Json<crate::telemetry::TelemetrySnapshot> {
     Json(state.telemetry.snapshot())
 }
 

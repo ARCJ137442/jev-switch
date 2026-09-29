@@ -36,8 +36,8 @@ pub mod config;
 pub mod db;
 pub mod events;
 pub mod listen;
-pub mod tokens;
 pub mod telemetry;
+pub mod tokens;
 
 use axum::{
     body::Bytes,
@@ -63,6 +63,7 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
+    time::Instant,
 };
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -160,8 +161,9 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         panic!("failed to restore runtime config snapshot: {e}");
     }
     let route_edges = config.route_edges();
+    let telemetry = telemetry::Telemetry::new();
     let mut registry = Registry::new(route_edges);
-    for upstream in build_upstreams(&config) {
+    for upstream in build_runtime_upstreams(&config, &telemetry) {
         tracing::info!(provider = %upstream.id(), "configured upstream ready");
         registry.register(upstream);
     }
@@ -234,7 +236,7 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         events: events::EventBus::new(200),
         service_endpoints: Arc::new(RwLock::new(endpoints)),
         db_conn: Arc::new(Mutex::new(db_conn)),
-        telemetry: telemetry::Telemetry::new(),
+        telemetry,
     };
     if let Err(e) = admin::endpoints::refresh_endpoint_routes(&state, &[]) {
         tracing::warn!(error = %e, "failed to load persisted endpoint routes into runtime registry");
@@ -297,6 +299,46 @@ pub(crate) fn build_upstreams(config: &Config) -> Vec<Box<dyn UpstreamAdapter>> 
         }
     }
     adapters
+}
+
+/// Add daemon-local timing at the composition boundary without changing the
+/// frozen `UpstreamAdapter` contract or leaking telemetry into core crates.
+pub(crate) fn build_runtime_upstreams(
+    config: &Config,
+    telemetry: &telemetry::Telemetry,
+) -> Vec<Box<dyn UpstreamAdapter>> {
+    build_upstreams(config)
+        .into_iter()
+        .map(|adapter| {
+            Box::new(TimedUpstream {
+                inner: adapter,
+                telemetry: telemetry.clone(),
+            }) as Box<dyn UpstreamAdapter>
+        })
+        .collect()
+}
+
+struct TimedUpstream {
+    inner: Box<dyn UpstreamAdapter>,
+    telemetry: telemetry::Telemetry,
+}
+
+#[async_trait::async_trait]
+impl UpstreamAdapter for TimedUpstream {
+    fn id(&self) -> &str {
+        self.inner.id()
+    }
+
+    fn capabilities(&self) -> jev_core::upstream::Capabilities {
+        self.inner.capabilities()
+    }
+
+    async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, jev_core::upstream::JevError> {
+        let started = Instant::now();
+        let result = self.inner.evaluate(req).await;
+        self.telemetry.record_upstream_attempt(started.elapsed());
+        result
+    }
 }
 
 /// 可测装配入口（A8 基座）：state → axum `Router`（CORS 白名单 + 双态鉴权中间件
@@ -638,7 +680,9 @@ async fn systemone_handler(
         elapsed,
     );
     let response_bytes = match &result {
-        Ok(response) => serde_json::to_vec(response).ok().map(|bytes| bytes.len() as u64),
+        Ok(response) => serde_json::to_vec(response)
+            .ok()
+            .map(|bytes| bytes.len() as u64),
         Err(failure) => Some(failure.response_bytes),
     };
     let trace = match &result {
@@ -929,7 +973,7 @@ async fn run_request_with_strategy_traced(
 fn state_types_are_send_sync() {
     fn assert_send<T: Send + Sync>() {}
     assert_send::<AppState>();
-    assert_send::<JevError>();
+    assert_send::<jev_core::upstream::JevError>();
     // json! 宏顺带自证 serde_json 可用（全限定路径，免顶层 import）
     let _ = serde_json::json!({});
 }
@@ -937,6 +981,7 @@ fn state_types_are_send_sync() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jev_core::upstream::JevError;
 
     #[test]
     fn configured_adapter_kind_allows_multiple_provider_ids() {

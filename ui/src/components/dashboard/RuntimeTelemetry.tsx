@@ -166,7 +166,7 @@ export function RuntimeTelemetry() {
         <span><strong>{success == null ? '—' : t('telemetry.successRate', { rate: success.toFixed(1) })}</strong></span>
         <span>{t('telemetry.failover')}: <strong>{data?.failover_requests ?? '—'}</strong></span>
         <span>{t('telemetry.gatewayLatency')}: <strong>{formatLatency(data?.avg_gateway_latency_ms)}</strong></span>
-        <span>{t('telemetry.upstreamLatency')}: <strong>{formatLatency(data?.upstream_latency_ms)}</strong></span>
+        <span>{t('telemetry.upstreamLatency')}: <strong>{formatLatency(data?.avg_upstream_latency_ms)}</strong></span>
       </div>
 
       <details className="runtime-telemetry__details">

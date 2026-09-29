@@ -143,7 +143,7 @@ daemon 将 provider 的完整 `POST /v1/systemone` 地址解析为同 host/base 
   "failed_requests": 0,
   "failover_requests": 0,
   "avg_gateway_latency_ms": null,
-  "upstream_latency_ms": null,
+  "avg_upstream_latency_ms": null,
   "daemon": { "available": true, "memory_bytes": 0, "cpu_percent": 0, "source": "daemon-process", "precision": "process-snapshot" },
   "shell": { "available": false, "memory_bytes": null, "cpu_percent": null, "source": "tauri-shell-not-exposed", "precision": "unavailable" },
   "samples": []

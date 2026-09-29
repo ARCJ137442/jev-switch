@@ -222,8 +222,14 @@ async fn telemetry_reports_session_counters_after_a_request() {
     let (status, body) = send(app, "GET", "/v1/admin/telemetry", None).await;
     assert_eq!(status, 200, "{body}");
     let value: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert!(value["ingress_bytes_total"].as_u64().unwrap_or(0) > 0, "{body}");
-    assert!(value["egress_bytes_total"].as_u64().unwrap_or(0) > 0, "{body}");
+    assert!(
+        value["ingress_bytes_total"].as_u64().unwrap_or(0) > 0,
+        "{body}"
+    );
+    assert!(
+        value["egress_bytes_total"].as_u64().unwrap_or(0) > 0,
+        "{body}"
+    );
     assert_eq!(value["total_requests"], 1);
     assert_eq!(value["active_requests"], 0);
     assert_eq!(calls.load(Ordering::SeqCst), 1);

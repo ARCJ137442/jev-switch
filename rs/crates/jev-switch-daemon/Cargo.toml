@@ -40,6 +40,7 @@ sha2 = { workspace = true }
 getrandom = { workspace = true }
 futures-util = { workspace = true }
 sysinfo = { workspace = true }
+async-trait = { workspace = true }
 # axum 使用的同一 Hyper 传输层；显式控制 listener 关闭确认与连接排空。
 hyper-util = { version = "0.1", features = ["server", "http1", "service", "tokio"] }
 

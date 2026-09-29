@@ -6,8 +6,11 @@
 
 use serde::Serialize;
 use std::collections::VecDeque;
-use std::sync::{atomic::{AtomicU64, Ordering}, Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, System};
 
 const SAMPLE_CAPACITY: usize = 600;
@@ -87,7 +90,9 @@ pub struct TelemetrySnapshot {
     #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub failover_requests: u64,
     pub avg_gateway_latency_ms: Option<f64>,
-    pub upstream_latency_ms: Option<f64>,
+    pub avg_upstream_latency_ms: Option<f64>,
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
+    pub upstream_attempts: u64,
     pub daemon: ResourceSnapshot,
     pub shell: ResourceSnapshot,
     pub samples: Vec<TelemetrySample>,
@@ -108,6 +113,8 @@ struct TelemetryInner {
     failed_requests: AtomicU64,
     failover_requests: AtomicU64,
     gateway_latency_ms: AtomicU64,
+    upstream_latency_micros: AtomicU64,
+    upstream_attempts: AtomicU64,
     samples: Mutex<VecDeque<TelemetrySample>>,
 }
 
@@ -124,13 +131,17 @@ impl Telemetry {
                 failed_requests: AtomicU64::new(0),
                 failover_requests: AtomicU64::new(0),
                 gateway_latency_ms: AtomicU64::new(0),
+                upstream_latency_micros: AtomicU64::new(0),
+                upstream_attempts: AtomicU64::new(0),
                 samples: Mutex::new(VecDeque::with_capacity(SAMPLE_CAPACITY)),
             }),
         }
     }
 
     pub fn begin_request(&self, ingress_bytes: u64) {
-        self.inner.ingress_bytes.fetch_add(ingress_bytes, Ordering::Relaxed);
+        self.inner
+            .ingress_bytes
+            .fetch_add(ingress_bytes, Ordering::Relaxed);
         self.inner.active_requests.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -154,7 +165,19 @@ impl Telemetry {
         if route_trace.map(trace_has_failover).unwrap_or(false) {
             self.inner.failover_requests.fetch_add(1, Ordering::Relaxed);
         }
-        self.inner.gateway_latency_ms.fetch_add(gateway_latency_ms, Ordering::Relaxed);
+        self.inner
+            .gateway_latency_ms
+            .fetch_add(gateway_latency_ms, Ordering::Relaxed);
+    }
+
+    /// Record one actual adapter attempt, including failures and retries.
+    /// This is adapter processing time, not a pure network measurement.
+    pub fn record_upstream_attempt(&self, elapsed: Duration) {
+        self.inner.upstream_latency_micros.fetch_add(
+            elapsed.as_micros().min(u128::from(u64::MAX)) as u64,
+            Ordering::Relaxed,
+        );
+        self.inner.upstream_attempts.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn snapshot(&self) -> TelemetrySnapshot {
@@ -166,14 +189,26 @@ impl Telemetry {
         let success_requests = self.inner.success_requests.load(Ordering::Relaxed);
         let failed_requests = self.inner.failed_requests.load(Ordering::Relaxed);
         let failover_requests = self.inner.failover_requests.load(Ordering::Relaxed);
-        let previous = self.inner.samples.lock().expect("telemetry samples lock").back().cloned();
+        let previous = self
+            .inner
+            .samples
+            .lock()
+            .expect("telemetry samples lock")
+            .back()
+            .cloned();
         let (ingress_bps, egress_bps) = previous
             .as_ref()
             .map(|sample| {
                 let elapsed_ms = sampled_at_ms.saturating_sub(sample.sample_at_ms).max(1);
                 (
-                    rate_per_second(ingress_bytes_total.saturating_sub(sample.ingress_bytes_total), elapsed_ms),
-                    rate_per_second(egress_bytes_total.saturating_sub(sample.egress_bytes_total), elapsed_ms),
+                    rate_per_second(
+                        ingress_bytes_total.saturating_sub(sample.ingress_bytes_total),
+                        elapsed_ms,
+                    ),
+                    rate_per_second(
+                        egress_bytes_total.saturating_sub(sample.egress_bytes_total),
+                        elapsed_ms,
+                    ),
                 )
             })
             .unwrap_or((0, 0));
@@ -200,7 +235,20 @@ impl Telemetry {
         let avg_gateway_latency_ms = if total_requests == 0 {
             None
         } else {
-            Some(self.inner.gateway_latency_ms.load(Ordering::Relaxed) as f64 / total_requests as f64)
+            Some(
+                self.inner.gateway_latency_ms.load(Ordering::Relaxed) as f64
+                    / total_requests as f64,
+            )
+        };
+        let upstream_attempts = self.inner.upstream_attempts.load(Ordering::Relaxed);
+        let avg_upstream_latency_ms = if upstream_attempts == 0 {
+            None
+        } else {
+            Some(
+                self.inner.upstream_latency_micros.load(Ordering::Relaxed) as f64
+                    / upstream_attempts as f64
+                    / 1000.0,
+            )
         };
         TelemetrySnapshot {
             schema_version: 1,
@@ -216,7 +264,8 @@ impl Telemetry {
             failed_requests,
             failover_requests,
             avg_gateway_latency_ms,
-            upstream_latency_ms: None,
+            avg_upstream_latency_ms,
+            upstream_attempts,
             daemon: daemon_resources(),
             shell: ResourceSnapshot {
                 available: false,
@@ -228,7 +277,6 @@ impl Telemetry {
             samples,
         }
     }
-
 }
 
 fn daemon_resources() -> ResourceSnapshot {
@@ -260,11 +308,17 @@ fn trace_has_failover(trace: &serde_json::Value) -> bool {
     };
     let providers: std::collections::HashSet<&str> = attempts
         .iter()
-        .filter_map(|attempt| attempt.get("provider_id").and_then(serde_json::Value::as_str))
+        .filter_map(|attempt| {
+            attempt
+                .get("provider_id")
+                .and_then(serde_json::Value::as_str)
+        })
         .collect();
     providers.len() > 1
         || attempts.iter().any(|attempt| {
-            attempt.get("retry_decision").and_then(serde_json::Value::as_str)
+            attempt
+                .get("retry_decision")
+                .and_then(serde_json::Value::as_str)
                 == Some("next_candidate")
         })
 }
@@ -306,7 +360,18 @@ mod tests {
         assert_eq!(snapshot.success_requests, 1);
         assert_eq!(snapshot.failover_requests, 1);
         assert_eq!(snapshot.avg_gateway_latency_ms, Some(12.0));
+        assert_eq!(snapshot.avg_upstream_latency_ms, None);
         assert_eq!(snapshot.samples.len(), 1);
+    }
+
+    #[test]
+    fn upstream_attempt_latency_is_averaged_separately() {
+        let telemetry = Telemetry::new();
+        telemetry.record_upstream_attempt(Duration::from_micros(100_000));
+        telemetry.record_upstream_attempt(Duration::from_micros(300_000));
+        let snapshot = telemetry.snapshot();
+        assert_eq!(snapshot.upstream_attempts, 2);
+        assert_eq!(snapshot.avg_upstream_latency_ms, Some(200.0));
     }
 
     #[test]

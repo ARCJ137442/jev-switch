@@ -2,4 +2,4 @@
 import type { ResourceSnapshot } from "./ResourceSnapshot";
 import type { TelemetrySample } from "./TelemetrySample";
 
-export type TelemetrySnapshot = { schema_version: number, session_started_at_ms: number, sampled_at_ms: number, ingress_bps: number, egress_bps: number, ingress_bytes_total: number, egress_bytes_total: number, active_requests: number, total_requests: number, success_requests: number, failed_requests: number, failover_requests: number, avg_gateway_latency_ms: number | null, upstream_latency_ms: number | null, daemon: ResourceSnapshot, shell: ResourceSnapshot, samples: Array<TelemetrySample>, };
+export type TelemetrySnapshot = { schema_version: number, session_started_at_ms: number, sampled_at_ms: number, ingress_bps: number, egress_bps: number, ingress_bytes_total: number, egress_bytes_total: number, active_requests: number, total_requests: number, success_requests: number, failed_requests: number, failover_requests: number, avg_gateway_latency_ms: number | null, avg_upstream_latency_ms: number | null, upstream_attempts: number, daemon: ResourceSnapshot, shell: ResourceSnapshot, samples: Array<TelemetrySample>, };
