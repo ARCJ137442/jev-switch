@@ -13,7 +13,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
 - **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与[当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
 - **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。
-- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。TypeSafe、OpenRouter、Standalone、命令面板、路由动效、运行遥测和系统主题随 `v0.2.0` 发布；仍需按[人类验收矩阵](docs/verification/v0.2.0-human-acceptance-matrix-2026-09-30.md)完成交互与 live 上游补充证据。
+- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.3.0` 在 v0.2.0 基础上增加 headless CLI Phase 1；TUI、OpenRouter live 和原生桌面交互仍按各自核验边界推进。
 - **可编辑调用路由 DAG**：支持对外入口、路由节点和提供商模型端口之间的多跳与分支，并配置候选优先级和失败处理；简单直连只是 DAG 的一种形式。
 - **演练场横向比较**：可比较多个对外入口、直接上游模型或混合目标；结果分别呈现实际路径、耗时、usage 与错误。
 - **密钥边界**：上游 key 留在 daemon；管理 API 只返回脱敏状态，不提供明文读回接口。不要把真实 key 提交到仓库或聊天。
@@ -127,10 +127,10 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**正式发行版本截至 2026-09-30：**GitHub 最新正式 Release 为 [v0.2.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.2.0)。仓库保留较早的 `v0.5.0-stable` 与 `v0.1.0` Git tag/Release；它们用于历史追溯，不代表当前应用版本。
+**正式发行版本截至 2026-09-30：**GitHub 最新正式 Release 为 [v0.3.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.3.0)。仓库保留较早的 `v0.5.0-stable`、`v0.1.0` 与 `v0.2.0` Git tag/Release；它们用于历史追溯，不代表当前应用版本。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 
 同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID 与 SQLite route trace 对齐。该实例的 Vercel 公开入口也实测 HTTP 200；远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对，Docker cloud 持久化和 CI 测试也有通过记录。
 
-桌面验收边界：v0.2.0 精确 Standalone 已完成冷启动、缓存释放、health 与静态资源核对；五页原生 WebView、托盘交互、OpenRouter live call、Pages 部署和多硬件关闭延迟仍按[人类验收矩阵](docs/verification/v0.2.0-human-acceptance-matrix-2026-09-30.md)逐项补证。公开图册收录 Dashboard、活动摘要、Routing 入口/DAG 和 Playground；Providers 原图因含脱敏 key 前后缀及真实接入地址而仅保留本机。正式 v0.2.0 Release 包含 Windows MSI、NSIS、便携 ZIP、Standalone 和配套 Docker 镜像。未来方向见 [ROADMAP.md](ROADMAP.md)，当前施工状态及版本边界见[实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)和[候选包核验记录](docs/verification/windows-release-candidate-2026-09-29.md)。
+桌面验收边界：v0.2.0 精确 Standalone 已完成冷启动、缓存释放、health 与静态资源核对；v0.3.0 新增 CLI 已通过 WireMock、local daemon smoke 与远端 Linux/Windows CLI 构建。五页原生 WebView、托盘交互、OpenRouter live call 和多硬件关闭延迟仍按各自核验记录补证。正式 v0.3.0 Release 包含 Windows MSI、NSIS、便携 ZIP、Standalone、Linux/Windows CLI 和配套 Docker 镜像。未来方向见 [ROADMAP.md](ROADMAP.md)，当前施工状态及版本边界见[实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)和[CLI 验证记录](docs/verification/cli-phase1-2026-09-30.md)。

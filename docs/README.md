@@ -1,17 +1,17 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前正式版为 `v0.2.0`。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前正式版为 `v0.3.0`。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。
 
-> **2026-09-30 adapter 状态：**当前源码和 `v0.2.0` Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按人类验收矩阵保留边界。
+> **2026-09-30 adapter 状态：**当前源码和 `v0.3.0` Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **当前核实状态（2026-09-27）**：正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已由 tag 流水线发布，含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。Release gate 的 Rust、UI、Tauri 与版本检查通过。验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。Laya 不重复实测。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段**：网关实施及 v0.2.0 验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[人类验收矩阵](verification/v0.2.0-human-acceptance-matrix-2026-09-30.md)为准。当前源码和 Release 包含 TypeSafe、OpenRouter、Standalone、命令面板、路由动效、运行遥测和系统主题增量；OpenRouter live call、本地桌面五页交互、Pages 部署和多硬件关闭延迟仍按矩阵标记。`scripts/build-windows-release.ps1` 生成 MSI、NSIS、Portable 及单文件 Standalone。
+> **当前产品基线与维护阶段**：网关实施及 v0.3.0 验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[CLI 文档](CLI.md)和[CLI 验证记录](verification/cli-phase1-2026-09-30.md)为准。当前源码和 Release 包含 TypeSafe、OpenRouter、Standalone、命令面板、路由动效、运行遥测、系统主题与 CLI Phase 1；TUI、OpenRouter live call、本地桌面原生交互和多硬件关闭延迟仍按各自边界标记。
 
 ## 核心定位（一句话）
 
