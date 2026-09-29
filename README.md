@@ -19,6 +19,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **密钥边界**：上游 key 留在 daemon；管理 API 只返回脱敏状态，不提供明文读回接口。不要把真实 key 提交到仓库或聊天。
 - **模型目录发现**：Providers 可让 daemon 通过上游 `/v1/models` 获取账户模型并回填列表，同时显示 HTTP 状态和延迟；浏览器不直连上游，也不会把 key 写入配置或响应。
 - **首页运行遥测**：Dashboard 展示当前 daemon 会话的入口/出口速率、累计字节、活跃请求、成功/失败/failover、网关平均延迟和 daemon 进程 CPU/内存；采样数据只在内存中保留，无法精确获得的 Tauri WebView/上游指标明确显示不可用。
+- **Headless CLI Phase 1**：`jev-switch-cli` 通过 daemon HTTP API 提供 `status`、`models`、`invoke`、`routes`、`events`，支持 JSON/表格输出，适合 Termux、SSH 与脚本；TUI 和完整 Android 原生交互仍后置。详见 [CLI 文档](docs/CLI.md)。
 - **五页控制台**：Dashboard、Providers、Entries、Routing DAG、Playground；当前提供简体中文和英文，语言注册表可扩展。
 - **契约驱动**：Rust `ts-rs` 生成前端类型到 `ui/src/generated/`；协议及路由不变量见 `docs/contracts/`。
 
@@ -32,6 +33,7 @@ Rust workspace（`rs/Cargo.toml`）+ React 控制台（`ui/`）+ Tauri 壳（`sr
 | `jev-core` | Router DAG（select/plan/failover）、冻结 trait `ProtocolAdapter`/`UpstreamAdapter` + `Registry`、`RetryPolicy`、redact | **无** axum / reqwest |
 | `jev-adapters` | Vercel、Laya、TypeSafe 上游实现、VercelProtocol 翻译、厂商 DTO | 厂商方言**只活在本 crate** |
 | `jev-switch-daemon` | axum HTTP、配置/数据库、管理 API、静态 UI 托管 | 组装协议、路由与适配器 |
+| `jev-switch-cli` | Termux/SSH/headless HTTP 客户端（Phase 1） | 只调用 daemon API，不复制路由、SQLite 或 provider key |
 | `ui/` | React 控制台：Dashboard / Providers / Entries / Routing DAG / Playground | 开发端口 5173；类型由 `ts-rs` 生成 |
 | `src-tauri/` | Windows 桌面壳与随包 sidecar | MSI / NSIS / Standalone 源码构建 |
 
@@ -82,6 +84,9 @@ cargo run --manifest-path rs/Cargo.toml
 
 # 2. 终端 B：启动前端
 npm run dev --prefix ui    # http://127.0.0.1:5173
+
+# 3. 可选：终端 C 使用 headless CLI
+cargo run --manifest-path rs/Cargo.toml -p jev-switch-cli -- status
 ```
 
 前端可通过 `http://127.0.0.1:5173` 连接本机 daemon。生产构建由 daemon 同源托管 UI。Docker 默认使用 cloud 模式；先为管理密码和公开调用 Token 配置本机 `.env`，然后启动：

@@ -189,7 +189,38 @@ jobs:
             src-tauri/target/release/bundle/standalone/jev-switch-standalone-*-windows-x64.exe
           if-no-files-found: error
 
-  # ── 4. Docker 镜像（ghcr.io） ─────────────────────────────────────
+  # ── 4. Headless CLI（Linux/Windows；Termux 使用设备本机 cargo install） ──
+  cli:
+    name: CLI (${{ matrix.platform }})
+    needs: [meta, gate]
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            executable: rs/target/release/jev-switch-cli
+          - os: windows-latest
+            platform: windows-x64
+            executable: rs/target/release/jev-switch-cli.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 构建 CLI
+        run: cargo build --release --locked --manifest-path rs/Cargo.toml -p jev-switch-cli
+      - name: 准备 CLI 产物
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "${{ matrix.executable }}" "dist/jev-switch-cli-${{ needs.meta.outputs.version }}-${{ matrix.platform }}${{ matrix.platform == 'windows-x64' && '.exe' || '' }}"
+      - name: 上传 CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-switch-cli-${{ needs.meta.outputs.version }}-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  # ── 5. Docker 镜像（ghcr.io） ─────────────────────────────────────
   docker:
     name: Docker 镜像
     needs: [meta, gate]
@@ -230,10 +261,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── 5. GitHub Release（仅 tag 触发） ──────────────────────────────
+  # ── 6. GitHub Release（仅 tag 触发） ──────────────────────────────
   release:
     name: GitHub Release
-    needs: [meta, windows, docker]
+    needs: [meta, windows, docker, cli]
     if: needs.meta.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -241,7 +272,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: jev-switch-windows-${{ needs.meta.outputs.version }}
+          pattern: jev-switch-windows-${{ needs.meta.outputs.version }}
+          merge-multiple: true
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: jev-switch-cli-${{ needs.meta.outputs.version }}-*
+          merge-multiple: true
           path: dist
 
       - name: 创建 Release
@@ -257,6 +295,7 @@ jobs:
             **Windows 桌面**：下载下方 `.msi`（或 NSIS `.exe`）双击安装。
             **Windows 便携版**：下载 `.zip` 并解压，双击其中的 `jev-switch.exe`；它与同次构建的安装包共享壳、daemon 与 UI 资源，不运行安装器。
             **Windows 独立版**：下载 `jev-switch-standalone-*-windows-x64.exe` 并双击；首次启动会把内嵌 daemon/UI 校验后释放到当前用户的版本化运行缓存，应用数据仍保存在 `%APPDATA%\\jev-switch`。
+            **Headless CLI**：下载对应平台的 `jev-switch-cli-*`；Termux/Android arm64 请在设备上执行 `cargo install --path rs/crates/jev-switch-cli --locked`，避免把主机二进制误当成 Android 包。
 
             **Docker（Bash）**：先将 `JEV_ADMIN_PASSWORD` 设置为自己的管理员密码。
             下例挂载持久数据卷，并只在宿主机回环地址提供控制台。

@@ -1,6 +1,6 @@
 # Jev-Switch Roadmap
 
-> **TL;DR**：v0.2.0 已发布；v0.1.0 是上一正式发行版。当前源码和 Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne、OpenRouter adapter、Standalone、命令面板、路由动效、运行遥测与系统主题。OpenRouter live key、原生五页交互、Pages 部署和多硬件性能数据仍按人类验收矩阵补证。
+> **TL;DR**：v0.2.0 已发布，v0.3.0 CLI minor release 候选已进入门禁；v0.1.0 是更早正式发行版。当前源码包含 TypeSafe 官方、TypeSafe-compatible SystemOne、OpenRouter adapter、Standalone、命令面板、路由动效、运行遥测、系统主题和 CLI Phase 1。TUI、OpenRouter live key、原生五页交互与多硬件性能数据仍按各自边界推进。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）<br>
 > **AI 披露**：本文由 AI 协助整理；范围与优先顺序以项目维护者后续确认为准。<br>
@@ -10,7 +10,7 @@
 
 Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的路由过程。后续体验改进应服务这些目标：减少开发者重复操作，让每次调用的真实路径容易理解；不以装饰动效或未验证的性能宣传代替可测结果。
 
-当前正式发布为 [v0.2.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.2.0)。下述规划不属于 v0.2.0；仓库中的 `v0.5.0-stable` 是较早的源代码 tag，没有对应 GitHub Release，不能代表当前应用版本。
+当前正式发布为 [v0.2.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.2.0)，本轮目标是发布 `v0.3.0` CLI minor。下述规划不属于已发布版本；仓库中的 `v0.5.0-stable` 是较早的源代码 tag，没有对应 GitHub Release，不能代表当前应用版本。
 
 配套的前后变化与用户场景见[用户旅程文档第七、八节](docs/USER-JOURNEYS.md)，作为本路线图方向的体验叙事；两处内容均属未来提案，优先级与验收边界以本文件为准。
 
@@ -32,6 +32,7 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 | Jev 路由顾问与受控自我迭代（探索） | 研究让 Jev 本身参与入口、提供商与路由决策：用户可以给提供商和入口写用途/质量备注，并标注推荐、成功、失败或不适用案例；由选定的决策模型（例如用户配置的本地 Laya 模型）回答“这个提供商值得链接到这个入口吗？”，给出证据、置信度、备选路由与可撤销的配置建议。中长期再评估基于足量标注迭代策略，甚至在明确边界内自动应用低风险改进。 | 现在用户要靠自己记得“这个入口适合哪些模型、上周为什么把某个提供商排除”。顾问能先读用户写下的用途和历史标注，用本地 Laya 给出“建议连接/暂不推荐”的理由和需要补测的点；用户确认后再落配置。标注越积越多，建议就越贴近团队经验；未来是否能自动维护部分路由，要先证明效果可量化、可回滚，再逐级放权。 | 初期只提供建议，不静默改路由；逐项展示所用备注/历史证据、模型、置信度和不确定点；用户可接受、拒绝、修正并撤销。决策模型及数据发送范围由用户选择，默认优先本地；不把原始敏感请求自动用于训练。自治阶段须另行验证标注质量、离线回放/留出集表现、失败回退、策略版本和人工接管；只有用户明确启用的低风险规则才可自动生效。 | 探索性方向：从可解释建议到经验证的有限自治 |
 | 路由图实时动效 | 借鉴 Jeview 的可视化表达，在新调用到达、沿实际路由经过节点/边时显示有意义的流动状态；成功与失败使用可区分且色盲友好的状态效果。 | 路由图不再只是静态接线图：一次真实请求到来时，用户能看着它经过哪个入口、命中哪条路由、抵达哪家上游；成功和失败一眼可分，排查时不用凭感觉猜。 | 动效来自真实调用事件与真实 route trace；并发请求可区分；失败/重试/终止语义正确；支持关闭、低动态效果及系统减少动态效果偏好；不把配置 DAG 伪装成调用历史。 | 产品亮点候选 |
 | Tauri 2 / Android 可行性 | 复用 ExoMind 的 Android/Tauri 经验做一轮可行性调查，核对 Tauri 2 官方平台支持、Rust daemon 生命周期、插件兼容、凭据与本地数据保护、网络/后台限制、触屏适配和 CI 打包成本。 | 如果用户想在安卓设备上检查或调试自己的 Jev 服务，先不用承诺“马上有手机版”；我们先查清守护进程、凭据、后台网络和触控体验哪些能成立，再用真机原型回答“能不能稳定用”。 | 先提交调研结论与风险/工作量矩阵，再决定是否做最小 Android 原型；没有真机安装、生命周期和网络回归前不宣称支持 Android。只迁移可复用经验，不假设两项目结构或插件可直接共享。 | 可行性先行 |
+| Termux CLI/TUI 与 CLI 发布形态（Phase 1） | 参考 [cc-switch-cli](https://github.com/SaladDay/cc-switch-cli)，已实现独立 `jev-switch-cli` 薄客户端：`status`、`models`、`invoke`、`routes`、`events`，复用 daemon HTTP API 与环境变量鉴权；Linux/Windows CLI 随 v0.3.0 发布，Termux/Android arm64 通过设备本机 `cargo install`。TUI 仍后置，只有 SSH/低带宽/无浏览器场景形成稳定需求才评估 ratatui。 | 用户在 Termux 里不必安装完整桌面应用，也能检查 daemon、查看模型、发起 Jev 请求和翻阅路由事件；JSON 输出可以接脚本，表格输出适合终端。对只想在 Android 上使用的人，Termux + 浏览器 Web UI 仍是更完整的路径；需要原生触控时再比较 Tauri Android。 | CLI 仅做 HTTP 转发，不复制路由、SQLite 或 provider key 管理；`JEV_SWITCH_URL`、`JEV_SWITCH_TOKEN`、`JEV_SWITCH_ADMIN_TOKEN` 分别控制地址、调用和管理访问；token 不进参数、history 或日志；请求限制 2 MiB，事件 limit 上限 500，禁用 HTTP 重定向。覆盖 local/cloud 鉴权、事件游标、断线错误、非 TTY/JSON、Unicode 错误和敏感字段脱敏。 | **Phase 1 已实现，v0.3.0 候选；TUI 保持后置** |
 | GitHub Pages 官方首页 | 为项目建立不依赖自有域名的静态主页，采用 ExoMind 官网中适合本项目的信息层级：一句话定位、主要能力、产品截图、快速开始、下载、限制与文档入口。部署到 GitHub Pages，再考虑加入仓库 Website 链接。 | 第一次从 GitHub 点进来的开发者不用先读完长 README 才知道这是做什么的：主页用几屏说明核心路径、展示真实界面、直接指向安装和文档；手机上也能快速找到限制与下载。 | 首页、下载地址、README、截图和当前 Release 相互一致；页面可访问、移动端可读；不复制敏感运行配置；域名保持可选。 | 近期 |
 | 性能基线与优化 | 对 daemon 启动、健康探测、路由选择、SQLite 历史查询、前端首屏与调用展示建立可复现基线；分开记录网关耗时、上游耗时和用户感知延迟，再按证据优化热点。 | 用户点下测试后，不再只看到“慢”，而能分清是网关选择路由花了时间，还是上游本身响应慢。每次优化都有同条件前后对比，让“快”成为能复现的数据，而不是宣传词。 | 给出硬件/数据规模/方法、冷暖启动、p50/p95 与资源使用；无效输入及慢上游不能混入网关耗时；每项优化有前后同条件数据与回归。未做同方法对照前不宣称“比其他网关更快”。 | 近期基础 |
 | 首页动态运行仪表盘（Phase 1/2） | 已落地 Dashboard 当前 daemon 会话遥测：入口/出口 JSON 字节、实时速率、会话累计、活跃请求、成功/失败/failover、网关平均延迟、daemon 进程 CPU/内存；最近约 10 分钟保留 600 个内存采样点。`abc793f` 又在 daemon 组合边界记录每次真实 adapter attempt，聚合 `avg_upstream_latency_ms` 与 `upstream_attempts`。后续再补 Tauri WebView 进程资源和逐跳 route latency。 | 用户打开首页就能知道“这一刻网关是否在工作”：一条请求到来时，入口速率曲线出现脉冲，活跃请求数短暂升高；响应发出后出口曲线与会话累计同步增加。开发者可以看到“网关收到/发出多少、请求是否堆积、是网关还是 adapter processing 变慢、应用自己占了多少内存”，而不必开任务管理器、翻日志、猜测数字含义。重启应用后会话累计从零开始，历史调用仍在活动记录和统计页中保留。 | `GET /v1/admin/telemetry` 使用版本化只读数据模型；前端支持 1 秒/5 秒刷新、暂停、手动刷新、最近 10 分钟曲线、响应式指标矩阵和展开诊断。失败响应的已知 JSON body 计入出口；adapter attempt latency 不写 SQLite、不与 gateway latency 相加；Tauri WebView 资源仍显示 unavailable。HTTP 集成回归、Rust/UI 门禁和 ts-rs 已通过；新 Tauri WebView 截图与真实桌面流量验收仍待后续。 | 高：Phase 1/2 已实现，继续做固定场景性能基线 |
@@ -75,7 +76,8 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 7. 并行完成 GitHub Pages 静态首页，按[专项计划](docs/design/ROADMAP-PLAN-GITHUB-PAGES.md)保持 README/Release/截图单一事实源。
 8. 梳理服务发现目标授权、非破坏性探测表、服务详情与快速添加；再处理数据目录、首次引导、端口避让和单例开关等桌面生命周期功能。
 9. 为路由顾问先定义标注数据、证据呈现、决策模型选择和建议审批流程；以离线回放验证价值，再讨论有限自治。
-10. 单独完成 Android 可行性报告，通过后再决定是否投入原型与正式打包；每阶段按 ARC137 开发规范做职责范围内的代码质量和接管审查。
+10. 比较三条移动/终端路径：Termux daemon + Android 浏览器 Web UI、Tauri 2 Android、以及封存的 CLI/TUI；先用已有 Termux 核验和 Tauri 可行性调研决定主路径。
+11. CLI Phase 1 发布后，收集 Termux/SSH/脚本化使用反馈；只有当无浏览器/低带宽终端形成可复现需求，且表格 CLI 无法经济覆盖时，才激活 TUI；每阶段按 ARC137 开发规范做职责范围内的代码质量和接管审查。
 
 ## 决策边界
 
@@ -88,6 +90,7 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 - 真实上游仍由已配置服务承担推理；性能数据必须分辨本地网关与上游服务耗时。
 - 动效只能呈现已观测到的事件；尚未收到、未持久化或无法关联的状态应显示为未知/缺失，不推测补画。
 - Android 计划当前只到可行性调研；平台打包不等于适配完成。
+- Termux CLI/TUI 分阶段推进：CLI Phase 1 是 daemon 的薄 HTTP 客户端，TUI 仍是候选；Termux daemon + Android 浏览器 Web UI 和 Tauri Android 仍是更完整的替代方案。不得把 CLI 宣称为完整 Web/Tauri 替代，也不得复制 Web/Tauri 的全部交互。
 - UI 的游戏感以清晰反馈和可控性为限，装饰不能降低可读性、响应速度或无障碍可用性。
 
 — GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理

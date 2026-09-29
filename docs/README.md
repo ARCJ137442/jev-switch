@@ -71,6 +71,8 @@
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 公开筛选的 v0.1.0 界面图册 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
 | [verification/termux-build-deployment-2026-09-27.md](verification/termux-build-deployment-2026-09-27.md) | **Termux / Android arm64 构建、daemon 烟测与 CLI/TUI 后续方向** | GPT-5.6 Sol ultra 实测；运行时源代码固定到 `f1670e7`，报告文档随后持续修订，不替代其他平台发布验收 |
+| [CLI.md](CLI.md) | **Termux/SSH/headless CLI Phase 1**：状态、模型、调用、路由与事件读取 | v0.3.0 独立 Rust 客户端；TUI 暂未包含 |
+| [verification/cli-phase1-2026-09-30.md](verification/cli-phase1-2026-09-30.md) | CLI Phase 1 自动测试与 local daemon smoke | v0.3.0 候选验证；不替代 Termux 真机和 cloud 会话验证 |
 
 ## 阅读顺序（开发 Agent）
 

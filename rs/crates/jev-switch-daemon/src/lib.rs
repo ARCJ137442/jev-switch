@@ -1062,8 +1062,8 @@ mod tests {
         );
         // 键集冻结：不得漂移出第三个键
         assert_eq!(v.as_object().unwrap().len(), 5);
-        // 当前契约样例版本字面量（0.2.0）
-        assert_eq!(v["version"], "0.2.0");
+        // 当前契约样例版本字面量（0.3.0）
+        assert_eq!(v["version"], "0.3.0");
         assert_eq!(v["status"], "ok");
     }
 

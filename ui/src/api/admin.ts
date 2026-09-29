@@ -466,7 +466,7 @@ const STATUS_FIXTURE: AdminStatus = {
   bind_explicit: false,
   env_override_active: false,
   password_set: false,
-  version: '0.2.0',
+  version: '0.3.0',
   uptime_s: 2 * 3600 + 15 * 60,
 };
 

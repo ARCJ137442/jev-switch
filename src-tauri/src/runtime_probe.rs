@@ -74,21 +74,21 @@ mod tests {
 
     #[test]
     fn accepts_matching_daemon_but_rejects_other_services_and_old_health_shape() {
-        let health = serde_json::json!({"status":"ok", "product":"jev-switch", "version":"0.2.0", "api_revision":1, "build_revision":null});
+        let health = serde_json::json!({"status":"ok", "product":"jev-switch", "version":"0.3.0", "api_revision":1, "build_revision":null});
         assert_eq!(
-            validate_response(&response(health.clone()), "0.2.0"),
+            validate_response(&response(health.clone()), "0.3.0"),
             RuntimeProbe::Ready
         );
         let mut other = health;
         other["product"] = "another-app".into();
         assert!(matches!(
-            validate_response(&response(other), "0.2.0"),
+            validate_response(&response(other), "0.3.0"),
             RuntimeProbe::Occupied(_)
         ));
         assert!(matches!(
             validate_response(
-                &response(serde_json::json!({"status":"ok", "version":"0.2.0"})),
-                "0.2.0"
+                &response(serde_json::json!({"status":"ok", "version":"0.3.0"})),
+                "0.3.0"
             ),
             RuntimeProbe::Occupied(_)
         ));
@@ -96,22 +96,22 @@ mod tests {
 
     #[test]
     fn rejects_incompatible_versions_and_non_health_http_responses() {
-        let health = serde_json::json!({"status":"ok", "product":"jev-switch", "version":"0.2.0", "api_revision":2});
+        let health = serde_json::json!({"status":"ok", "product":"jev-switch", "version":"0.3.0", "api_revision":2});
         assert!(matches!(
-            validate_response(&response(health), "0.2.0"),
+            validate_response(&response(health), "0.3.0"),
             RuntimeProbe::Occupied(_)
         ));
-        let health = serde_json::json!({"status":"ok", "product":"jev-switch", "version":"0.1.0", "api_revision":1});
+        let health = serde_json::json!({"status":"ok", "product":"jev-switch", "version":"0.2.0", "api_revision":1});
         assert!(matches!(
-            validate_response(&response(health), "0.2.0"),
-            RuntimeProbe::Occupied(_)
-        ));
-        assert!(matches!(
-            validate_response(b"HTTP/1.1 200 OK\r\n\r\n<html>Old demo</html>", "0.2.0"),
+            validate_response(&response(health), "0.3.0"),
             RuntimeProbe::Occupied(_)
         ));
         assert!(matches!(
-            validate_response(b"HTTP/1.1 503 Unavailable\r\n\r\n{}", "0.2.0"),
+            validate_response(b"HTTP/1.1 200 OK\r\n\r\n<html>Old demo</html>", "0.3.0"),
+            RuntimeProbe::Occupied(_)
+        ));
+        assert!(matches!(
+            validate_response(b"HTTP/1.1 503 Unavailable\r\n\r\n{}", "0.3.0"),
             RuntimeProbe::Occupied(_)
         ));
     }
