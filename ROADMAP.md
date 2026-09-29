@@ -1,6 +1,6 @@
 # Jev-Switch Roadmap
 
-> **TL;DR**：v0.1.0 是当前正式发行版。当前源码已加入 TypeSafe 官方及 TypeSafe-compatible SystemOne adapter；官方账户的一笔三题 live request 已返回 HTTP 200，较早 Standalone 候选已完成本地模型 E2E。下一项上游扩展是 OpenRouter。单文件 Standalone 的嵌入、校验与缓存修复路径已进入源码；本次重建候选已完成构建与离线门禁，仍需对该精确 EXE 做冷启动、缓存恢复和端到端验收后才能进入 Release。
+> **TL;DR**：v0.1.0 是当前正式发行版。当前源码已加入 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter adapter；官方账户的一笔三题 live request 已返回 HTTP 200，OpenRouter 尚完成离线契约/ WireMock 验证，尚无 live key 证据。较早 Standalone 候选已完成本地模型 E2E；本次重建候选已完成构建和离线门禁，仍需对精确 EXE 做冷启动、缓存恢复和端到端验收后才能进入 Release。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）<br>
 > **AI 披露**：本文由 AI 协助整理；范围与优先顺序以项目维护者后续确认为准。<br>
@@ -80,7 +80,7 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 ## 决策边界
 
 - 本文描述方向，不指定发布日期、版本号或保证实现顺序；开始每项前仍需结合用户反馈、依赖和实测调整。
-- 当前源码内置 Vercel、Laya 与 TypeSafe SystemOne adapters；TypeSafe 支持官方 endpoint 及提供相同 Jev SystemOne wire format 的本地服务。2026-09-29 已通过隔离 daemon 验证官方账户 Noul/Choice/Score 调用和 usage；完整桌面本地 E2E 仍开放。普通 OpenAI/Anthropic chat API 不在其兼容范围。OpenRouter 尚未实现。当前工作树的 TypeSafe provider 与 Standalone 都尚未进入正式 v0.1.0 Release。
+- 当前源码内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter adapters；TypeSafe 支持官方 endpoint 及提供相同 Jev SystemOne wire format 的本地服务。2026-09-29 已通过隔离 daemon 验证官方账户 Noul/Choice/Score 调用和 usage；OpenRouter 当前只有官方 OpenAPI 核对与 WireMock 证据，真实 live call、能力矩阵和 Release 仍开放。普通 OpenAI/Anthropic chat API 不在其兼容范围。TypeSafe/OpenRouter 增量与 Standalone 都尚未进入正式 v0.1.0 Release。
 - 服务发现仅扫描用户明确提供/选择的目标范围；探查和模型推理分开授权，快速添加必须经过结果确认和凭据设置。
 - 路由顾问先作为建议系统；任何扩大自治程度的变更都需要单独的用户授权、可回放评估、版本化和回滚路径。用户标注不能默认等同于可用于训练或自动改配置的授权。
 - standalone 是交付形态目标，不得省略可验证的 sidecar 身份、资源校验和故障恢复；应用数据与可执行文件分离。默认 exe 邻近目录不可写时必须明确交给用户选择，不得静默改写目录策略。

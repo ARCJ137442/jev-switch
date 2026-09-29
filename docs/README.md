@@ -4,7 +4,7 @@
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。
 
-> **2026-09-29 adapter 状态：**当前源码增加 TypeSafe 官方及 TypeSafe-compatible SystemOne 上游；官方 `/v1/systemone`、Bearer key 与 `jev-latest` 已按 TypeSafe 文档核对。该实现尚未进入 v0.1.0 Release；wiremock 是离线证据，真实账户与本地桌面 E2E 状态以对应核验记录为准。
+> **2026-09-30 adapter 状态：**当前源码包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 尚无 live key 证据，TypeSafe/OpenRouter 增量尚未进入 v0.1.0 Release。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
