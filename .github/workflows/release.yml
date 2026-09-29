@@ -183,8 +183,8 @@ jobs:
         with:
           name: jev-switch-windows-${{ needs.meta.outputs.version }}
           path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/jev-switch_${{ needs.meta.outputs.version }}_x64_en-US.msi
+            src-tauri/target/release/bundle/nsis/jev-switch_${{ needs.meta.outputs.version }}_x64-setup.exe
             jev-switch-portable-*-windows-x64.zip
             src-tauri/target/release/bundle/standalone/jev-switch-standalone-*-windows-x64.exe
           if-no-files-found: error
