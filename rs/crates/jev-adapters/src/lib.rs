@@ -9,6 +9,7 @@
 //!   capability 注册制 —— 能力表在各家 adapter 内，不再查 `capabilities_of`）
 
 pub mod upstream_laya;
+pub mod upstream_openrouter;
 pub mod upstream_typesafe;
 pub mod upstream_vercel;
 pub mod vercel_dto;

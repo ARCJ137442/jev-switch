@@ -15,13 +15,14 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 - `local` 描述网关运行位置与默认监听方式，不代表离线；它仍可调用远程上游。云机器上的 `127.0.0.1` 指云机器自身。
 - 对外服务入口与上游提供商配置是两种不同对象；不要混淆网关调用 Token 和供应商 API key。
 - 仅提供 Jev 原生 `/v1/systemone` 接口；不实现 OpenAI/Anthropic 聊天格式兼容入口。
-- 当前内置上游适配器为 Vercel、Laya 与 TypeSafe SystemOne。TypeSafe adapter 支持官方 API 和提供相同 Jev `/v1/systemone` 格式的本地服务；普通 OpenAI/Anthropic chat completions 不属于该兼容范围。OpenRouter 尚未实现，见[路线图](ROADMAP.md)。
+- 当前源码内置上游适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter；正式 v0.1.0 Release 仍未包含后两项增量。OpenRouter 是上游转换 adapter，不是普通 OpenAI/Anthropic 对外入口；TypeSafe 本地使用仍要求 SystemOne-compatible HTTP endpoint。
 - 上游 key 只由 daemon 持有；不得输出、写入公开文档、日志、测试产物或提交。管理 API 仅返回掩码状态。
 
 ## 开发与交付
 
 - 开始跨层功能前先看 [当前实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[HTTP 契约](docs/contracts/05-HTTP契约.md)和[入口网关修订](docs/contracts/07-入口网关修订.md)，再按涉及范围读其他契约。
 - [ROADMAP.md](ROADMAP.md) 记录未排期的未来方向，不代表当前发布包含或承诺了这些能力。
+- [路线图执行计划总表](docs/design/ROADMAP-EXECUTION-PLANS.md)及其专项计划用于把近期候选拆成可执行任务；计划不等于 Release 承诺。
 - Rust workspace 位于 `rs/`，React UI 位于 `ui/`，Tauri 桌面壳位于 `src-tauri/`。`ts-rs` 的 UI 类型来自 Rust 导出。
 - 保持改动局部化；验证与改动职责相称。不要用历史测试计数或旧版运行报告替代当前工作树的结果。
 - GitHub 仓库 About 简介保持“英文一句话 | 中文一句话介绍”的双语格式；每次发版或调整产品定位时核对其内容与 README/当前能力一致。当前简介由仓库维护者在 GitHub 设置中维护，不是代码版本字段。

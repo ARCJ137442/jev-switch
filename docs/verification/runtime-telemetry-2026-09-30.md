@@ -38,6 +38,8 @@ Phase 2 verification:
 - `telemetry::tests::upstream_attempt_latency_is_averaged_separately`: passed.
 - daemon workspace tests and ts-rs generation: passed; `avg_upstream_latency_ms` and `upstream_attempts` are present in the generated TypeScript contract.
 
+OpenRouter/theme follow-up build: the current tree also contains the OpenRouter adapter/kind and system-theme UI changes; they passed the same Rust/UI build gates, but they have not yet been promoted to a public Release or real upstream live-call record.
+
 This record does not claim a new Tauri WebView or real traffic screenshot; the desktop process was not started during this implementation turn.
 
 — GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理

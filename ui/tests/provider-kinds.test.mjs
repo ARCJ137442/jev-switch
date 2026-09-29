@@ -26,5 +26,6 @@ test('changing kind updates only values that still match the previous preset', (
 test('provider kind options have unique stable values', () => {
   const values = PROVIDER_KINDS.map(({ value }) => value);
   assert.equal(new Set(values).size, values.length);
-  assert.equal(isProviderKind('openrouter'), false);
+  assert.equal(isProviderKind('openrouter'), true);
+  assert.equal(getProviderKindPreset('openrouter')?.defaultBase, 'https://openrouter.ai/api/v1/chat/completions');
 });

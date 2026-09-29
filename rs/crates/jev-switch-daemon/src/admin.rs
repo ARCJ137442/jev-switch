@@ -368,12 +368,15 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
                 format!("provider '{}' kind 不得为空", p.id),
             );
         }
-        if !matches!(p.kind.as_str(), "vercel" | "laya" | "typesafe") {
+        if !matches!(
+            p.kind.as_str(),
+            "vercel" | "laya" | "typesafe" | "openrouter"
+        ) {
             return err(
                 &state,
                 StatusCode::BAD_REQUEST,
                 format!(
-                    "provider '{}' kind '{}' 不受支持；可选值：vercel、laya、typesafe",
+                    "provider '{}' kind '{}' 不受支持；可选值：vercel、laya、typesafe、openrouter",
                     p.id, p.kind
                 ),
             );
@@ -1508,7 +1511,7 @@ async fn discover_models(kind: &str, base: &str, api_key: Option<&str>) -> Provi
             };
         }
     };
-    if !matches!(kind, "vercel" | "laya" | "typesafe") {
+    if !matches!(kind, "vercel" | "laya" | "typesafe" | "openrouter") {
         return ProviderModelsResult {
             ok: false,
             latency_ms: 0,
@@ -1603,6 +1606,11 @@ fn model_catalog_url(base: &str) -> Result<reqwest::Url, String> {
     let mut url =
         reqwest::Url::parse(base).map_err(|error| format!("invalid provider base URL: {error}"))?;
     let path = url.path().trim_end_matches('/');
+    if path.ends_with("/chat/completions") {
+        let prefix = path.trim_end_matches("/chat/completions");
+        url.set_path(&format!("{prefix}/models"));
+        return Ok(url);
+    }
     let prefix = path
         .rsplit_once('/')
         .map(|(prefix, _)| prefix)
@@ -1870,6 +1878,12 @@ mod tests {
                 .unwrap()
                 .as_str(),
             "http://127.0.0.1:8783/v1/models"
+        );
+        assert_eq!(
+            model_catalog_url("https://openrouter.ai/api/v1/chat/completions")
+                .unwrap()
+                .as_str(),
+            "https://openrouter.ai/api/v1/models"
         );
     }
 

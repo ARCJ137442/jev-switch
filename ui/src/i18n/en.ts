@@ -46,6 +46,9 @@ export const en = {
   'shell.connecting': 'connecting…',
   'shell.themeToDark': 'Switch to dark theme (currently: light)',
   'shell.themeToLight': 'Switch to light theme (currently: dark)',
+  'shell.themeModeLight': 'Theme: light (click for dark)',
+  'shell.themeModeDark': 'Theme: dark (click for system)',
+  'shell.themeModeSystem': 'Theme: follow system (click for light)',
   'shell.langToZh': '切换到中文',
   'shell.langToEn': 'Switch to English',
 

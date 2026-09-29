@@ -69,6 +69,14 @@ kind = "typesafe"
 base = "http://127.0.0.1:8000/v1/systemone"
 enabled = false
 
+# OpenRouter translates Jev decisions through structured JSON chat completions.
+# [providers.openrouter]
+# kind = "openrouter"
+# base = "https://openrouter.ai/api/v1/chat/completions"
+# models = ["openrouter/auto"]
+# api_key_env = "OPENROUTER_API_KEY"
+# enabled = false
+
 # ── Router 段（旧式，兼容保留）：model id → upstream id ──────────────
 # 每条 = 单条 match=exact 边（priority=0、on_error=next、sticky=none）。
 # 调用方 POST {"model": "laya-english", ...} 即走 Laya

@@ -50,8 +50,8 @@ use axum::{
 };
 use config::Config;
 use jev_adapters::{
-    upstream_laya::LayaUpstream, upstream_typesafe::TypeSafeUpstream,
-    upstream_vercel::VercelUpstream,
+    upstream_laya::LayaUpstream, upstream_openrouter::OpenRouterUpstream,
+    upstream_typesafe::TypeSafeUpstream, upstream_vercel::VercelUpstream,
 };
 use jev_core::{
     adapter::{plain_ctx, Registry, UpstreamAdapter},
@@ -283,6 +283,18 @@ pub(crate) fn build_upstreams(config: &Config) -> Vec<Box<dyn UpstreamAdapter>> 
             },
             "typesafe" => {
                 match TypeSafeUpstream::new_with_id(
+                    id.clone(),
+                    provider.base.clone(),
+                    config.effective_api_key(&id),
+                ) {
+                    Ok(adapter) => adapters.push(Box::new(adapter)),
+                    Err(error) => {
+                        tracing::warn!(provider = %id, error = %error, "upstream adapter init failed")
+                    }
+                }
+            }
+            "openrouter" => {
+                match OpenRouterUpstream::new_with_id(
                     id.clone(),
                     provider.base.clone(),
                     config.effective_api_key(&id),

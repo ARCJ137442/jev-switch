@@ -43,6 +43,9 @@ export const zh: Record<keyof typeof en, string> = {
   'shell.connecting': '连接中…',
   'shell.themeToDark': '切换到深色主题（当前为浅色）',
   'shell.themeToLight': '切换到浅色主题（当前为深色）',
+  'shell.themeModeLight': '主题：浅色（点击切换深色）',
+  'shell.themeModeDark': '主题：深色（点击切换跟随系统）',
+  'shell.themeModeSystem': '主题：跟随系统（点击切换浅色）',
   'shell.langToZh': '切换到中文',
   'shell.langToEn': 'Switch to English',
 

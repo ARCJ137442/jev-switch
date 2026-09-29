@@ -84,7 +84,7 @@ Admin 仅绑 `127.0.0.1`；CORS 见 §5。
 { "providers": [ { "id": "vercel", "kind": "…", "base": "…", "enabled": true, "api_key": "…" } ] }
 ```
 
-`kind` 当前只接受 `vercel`、`laya`、`typesafe`。TypeSafe 官方地址是完整 endpoint `https://api.typesafe.ai/v1/systemone`，Bearer key 由 daemon 添加；官方模型示例为 `jev-latest`。本地 TypeSafe kind 也必须提供相同 Jev `POST /v1/systemone` wire format，不表示兼容一般 OpenAI/Anthropic Chat API。
+`kind` 当前接受 `vercel`、`laya`、`typesafe`、`openrouter`。TypeSafe 官方地址是完整 endpoint `https://api.typesafe.ai/v1/systemone`，Bearer key 由 daemon 添加；官方模型示例为 `jev-latest`。OpenRouter 使用完整 chat endpoint `https://openrouter.ai/api/v1/chat/completions`，daemon 将 Jev 请求转换为结构化 JSON chat 请求，再严格解析回 Jev answers；这不表示对外入口兼容一般 OpenAI/Anthropic Chat API。本地 TypeSafe kind 也必须提供相同 Jev `POST /v1/systemone` wire format。
 
 写入后落盘 toml（0600）；响应回 **masked**，不回明文。`api_key` 省略表示保留已有密钥，空串表示清除；`api_key_env` 省略表示保留已有环境变量名。
 

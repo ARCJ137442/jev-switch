@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, SunMoon } from 'lucide-react';
 import { useI18n } from '../../i18n';
-
-function readTheme(): 'light' | 'dark' {
-  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-}
+import { applyThemePreference, readThemePreference, type ThemePreference } from '../../theme';
 
 /**
  * 主题切换钮（块 2 建，块 5 抽共享组件）——
@@ -13,33 +10,29 @@ function readTheme(): 'light' | 'dark' {
  */
 export function ThemeToggle() {
   const { t } = useI18n();
-  const [theme, setTheme] = useState<'light' | 'dark'>(readTheme);
+  const [preference, setPreference] = useState<ThemePreference>(readThemePreference);
 
   useEffect(() => {
-    const sync = () => setTheme(readTheme());
+    const sync = () => setPreference(readThemePreference());
     window.addEventListener('jev-theme-change', sync);
     return () => window.removeEventListener('jev-theme-change', sync);
   }, []);
 
   const toggle = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem('jev_theme', next);
-    } catch {
-      /* 隐私模式 → 仅本会话生效 */
-    }
-    window.dispatchEvent(new Event('jev-theme-change'));
+    const next: ThemePreference = preference === 'light' ? 'dark' : preference === 'dark' ? 'system' : 'light';
+    setPreference(next);
+    applyThemePreference(next);
   };
 
-  const Icon = theme === 'dark' ? Moon : Sun;
+  const Icon = preference === 'dark' ? Moon : preference === 'light' ? Sun : SunMoon;
+  const label = preference === 'dark' ? t('shell.themeModeDark') : preference === 'light' ? t('shell.themeModeLight') : t('shell.themeModeSystem');
 
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={theme === 'dark' ? t('shell.themeToLight') : t('shell.themeToDark')}
-      aria-pressed={theme === 'dark'}
+      aria-label={label}
+      aria-pressed={preference === 'dark'}
       className="inline-flex h-8 w-8 items-center justify-center transition-colors"
       style={{
         border: '1px solid var(--border)',
@@ -48,7 +41,7 @@ export function ThemeToggle() {
         color: 'var(--text-muted)',
         fontSize: 'var(--text-sm)',
       }}
-      title={theme === 'dark' ? t('shell.themeToLight') : t('shell.themeToDark')}
+      title={label}
     >
       <Icon size={16} strokeWidth={2} />
     </button>

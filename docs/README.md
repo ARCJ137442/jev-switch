@@ -22,11 +22,14 @@
 | 文件 | 内容 | 状态 |
 |---|---|---|
 | **[../ROADMAP.md](../ROADMAP.md)** | **未来功能方向、优先级和可验收边界** | OpenRouter 适配器为最高优先级；不代表已排期 |
+| [design/ROADMAP-EXECUTION-PLANS.md](design/ROADMAP-EXECUTION-PLANS.md) | 基于当前源码的近期路线图执行拆解、文件入口、ICE 和验收门槛 | 计划草案；不代表 Release 承诺 |
 | [verification/typesafe-systemone-adapter-2026-09-28.md](verification/typesafe-systemone-adapter-2026-09-28.md) | TypeSafe 官方与本地-compatible SystemOne adapter 的当前实现、wiremock 证据和边界 | 源码/离线契约验证；不代表已发布或已做真实官方推理 |
 | [verification/typesafe-official-live-2026-09-29.md](verification/typesafe-official-live-2026-09-29.md) | TypeSafe 官方 key 的隔离单次实测，Noul/Choice/Score 与 usage | 当前源码直连 provider；不代表 Standalone/公开入口 E2E |
 | [verification/standalone-lmstudio-e2e-2026-09-29.md](verification/standalone-lmstudio-e2e-2026-09-29.md) | 较早 Standalone 候选的冷启动、缓存、五页 WebView 与 LM Studio 本地 SystemOne UI 路由 trace | 该记录只属于文档顶部候选哈希；真实系统托盘点击和第二次双击聚焦仍待人工确认 |
 | [verification/typesafe-model-discovery-2026-09-29.md](verification/typesafe-model-discovery-2026-09-29.md) | TypeSafe `/v1/models` 实测与 daemon/UI 自动模型发现 | 管理时目录/鉴权检查；不替代推理调用 |
-| [verification/runtime-telemetry-2026-09-30.md](verification/runtime-telemetry-2026-09-30.md) | Dashboard 当前 daemon 会话遥测、流量曲线与资源卡的实现和验证边界 | Phase 1 已落地；上游延迟与 Tauri WebView 精确资源仍未提供 |
+| [verification/runtime-telemetry-2026-09-30.md](verification/runtime-telemetry-2026-09-30.md) | Dashboard 当前 daemon 会话遥测、流量曲线、adapter attempt latency 与资源卡的实现和验证边界 | Phase 1/2 已落地；Tauri WebView 精确资源仍未提供 |
+| [verification/openrouter-adapter-2026-09-30.md](verification/openrouter-adapter-2026-09-30.md) | OpenRouter 官方 OpenAPI 核对、adapter 实现、模型目录和 WireMock 验证边界 | 源码已实现；真实 key/live call 和 Release 仍待完成 |
+| [verification/system-theme-2026-09-30.md](verification/system-theme-2026-09-30.md) | light/dark/system 首帧解析、系统切换和主题控件回归 | 源码与 UI 门禁通过；原生系统主题截图仍待验收 |
 | [verification/windows-release-candidate-2026-09-29.md](verification/windows-release-candidate-2026-09-29.md) | 当前 Windows MSI、NSIS、Portable 与 Standalone 候选的哈希、离线门禁和运行验收边界 | 新候选构建身份已核对；精确 EXE 的 WebView/托盘实测仍需启动 |
 | [verification/recovery-regression-2026-09-28.md](verification/recovery-regression-2026-09-28.md) | Windows 重启后的 Kev、Laya、Jev Switch 恢复、隔离 target 回归与小样本 Rime smoke | 恢复核对；不替代完整 benchmark |
 | [verification/jevk5-4b-lmstudio-2026-09-28.md](verification/jevk5-4b-lmstudio-2026-09-28.md) | JevK5-4B GGUF 经 LM Studio bridge 注册、路由与清理核对 | 实验性 one-hot 兼容路径；不代表原生 logits 或生产校准 |

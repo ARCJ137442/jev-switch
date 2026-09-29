@@ -33,4 +33,16 @@ The previous Standalone/LM Studio record remains the evidence for the older cand
 
 The exact-candidate launch and Providers “从上游获取模型” click remain a manual/runtime acceptance step. The expected official TypeSafe directory result is documented separately as `jev-latest` and `jev-preview` in [the model discovery record](typesafe-model-discovery-2026-09-29.md).
 
+## Rebuilt after Phase 2/OpenRouter/theme changes
+
+The current source was rebuilt on 2026-09-30. The new candidate identity is:
+
+| Artifact | SHA-256 |
+|---|---|
+| `jev-switch-standalone-0.1.0-windows-x64.exe` | `6FDA1D523BE7CB7793BB86DA13DDBDE3310687F3254515F7261BE06DE93EB7FC` |
+| `jev-switch_0.1.0_x64_en-US.msi` | `117EDC3F2A3C4812BD8D12FD43D7CC717CEC98A4C470F63DA815136B530C5EA8` |
+| `jev-switch_0.1.0_x64-setup.exe` | `B62476F1B2F81646D749CEA73E0E6F18558D7DC3F03DB271F7D68391D0B4670C` |
+
+The embedded daemon hash is `E438FE41A03C64DF1E79CE1F8A7BC1CB738BBED0A697A83F462F749699022CB0`. Resource validation/recovery and non-interactive shell tests passed. Launching this exact EXE was rejected by the active process policy in the current session, so this section does not claim health, WebView, model discovery, tray, or desktop UI runtime evidence for the new hash.
+
 — GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理

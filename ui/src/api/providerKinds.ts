@@ -20,6 +20,13 @@ export const PROVIDER_KINDS = [
     defaultBase: 'https://api.typesafe.ai/v1/systemone',
     defaultModels: ['jev-latest'],
   },
+  {
+    value: 'openrouter',
+    labelKey: 'providers.kindOpenRouter',
+    descriptionKey: 'providers.kindOpenRouterHint',
+    defaultBase: 'https://openrouter.ai/api/v1/chat/completions',
+    defaultModels: ['openrouter/auto'],
+  },
 ] as const;
 
 export type ProviderKind = (typeof PROVIDER_KINDS)[number]['value'];
