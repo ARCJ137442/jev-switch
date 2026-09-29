@@ -35,6 +35,15 @@ export const en = {
   'common.required': 'required',
   'common.loadFailed': 'Failed to load: ',
   'common.addRow': '+ Add row',
+  'command.title': 'Command palette',
+  'command.placeholder': 'Search pages and actions…',
+  'command.empty': 'No matching commands.',
+  'command.footer': '↑↓ select · Enter open · Ctrl+K / Ctrl+P toggle',
+  'command.dashboard': 'Open Dashboard',
+  'command.providers': 'Open Providers',
+  'command.endpoints': 'Open Entries',
+  'command.routing': 'Open Routing DAG',
+  'command.playground': 'Open Playground',
 
   /* shell */
   'shell.navDashboard': 'Dashboard',

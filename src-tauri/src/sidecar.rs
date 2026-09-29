@@ -355,21 +355,22 @@ pub fn open_config_dir(dir: &Path) -> Result<(), String> {
     }
 }
 
-/// 退出时先尝试 `taskkill /T`，2s 后兜底 `kill`；不保证上游请求已完成。
+/// 退出时强制终止本壳拥有的 daemon 进程树，并给 Windows 一个很短的
+/// 回收窗口；避免退出路径固定等待 2 秒才让 Tauri 进程消失。
 pub fn shutdown(child: &mut Child) {
-    #[cfg(windows)]
+#[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         let _ = std::process::Command::new("taskkill")
             .creation_flags(0x0800_0000)
-            .args(["/PID", &child.id().to_string(), "/T"])
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn();
-        for _ in 0..20 {
+        for _ in 0..5 {
             match child.try_wait() {
                 Ok(Some(_)) => return,
-                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
                 Err(_) => break,
             }
         }

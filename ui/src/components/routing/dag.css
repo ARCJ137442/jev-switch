@@ -11,6 +11,12 @@
 .dag-world { position: relative; transform-origin: 0 0; user-select: none; }
 .dag-wires { position: absolute; inset: 0; overflow: visible; }
 .dag-wire { fill: none; stroke: var(--text-subtle); stroke-width: 2; opacity: .7; }
+.dag-edge.live-success .dag-wire { stroke: var(--success); stroke-width: 4; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--success) 75%, transparent)); animation: dag-live-success 900ms ease-out both; }
+.dag-edge.live-failure .dag-wire { stroke: var(--danger); stroke-width: 4; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--danger) 75%, transparent)); animation: dag-live-failure 900ms ease-out both; }
+.dag-edge.live-retry .dag-wire { stroke: var(--warning); stroke-width: 4; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--warning) 75%, transparent)); animation: dag-live-retry 900ms ease-out both; }
+@keyframes dag-live-success { 0% { stroke-dasharray: 9 12; stroke-dashoffset: 42; } 100% { stroke-dasharray: 9 12; stroke-dashoffset: 0; } }
+@keyframes dag-live-failure { 0% { opacity: .35; } 35% { opacity: 1; } 70% { opacity: .35; } 100% { opacity: 1; } }
+@keyframes dag-live-retry { 0% { stroke-dasharray: 3 10; stroke-dashoffset: 30; } 100% { stroke-dasharray: 3 10; stroke-dashoffset: 0; } }
 .dag-hit { fill: none; stroke: transparent; stroke-width: 18; cursor: pointer; }
 .dag-priority { fill: var(--text-muted); font-size: 12px; font-family: var(--font-mono); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
 .dag-edge:hover .dag-wire,.dag-edge.selected .dag-wire { stroke: var(--accent); stroke-width: 3; opacity: 1; }
@@ -41,3 +47,4 @@
 @media (max-width: 700px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 420px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: minmax(0,1fr); } .dag-tool-group { flex-wrap: wrap; } }
 @media (max-height: 560px) { .dag-viewport { height: clamp(200px, 55dvh, 300px); } }
+@media (prefers-reduced-motion: reduce) { .dag-edge.live-success .dag-wire, .dag-edge.live-failure .dag-wire, .dag-edge.live-retry .dag-wire { animation: none; filter: none; } }

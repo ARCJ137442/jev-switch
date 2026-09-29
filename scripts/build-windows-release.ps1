@@ -5,6 +5,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $tauriRoot = Join-Path $repoRoot 'src-tauri'
+$tauriConfig = Get-Content -LiteralPath (Join-Path $tauriRoot 'tauri.conf.json') -Raw | ConvertFrom-Json
+$packageVersion = [string]$tauriConfig.version
 $targetTriple = 'x86_64-pc-windows-msvc'
 $daemonReleasePath = Join-Path $repoRoot 'rs/target/release/jev-switch.exe'
 $sidecarPath = Join-Path $tauriRoot "binaries/jev-switch-daemon-$targetTriple.exe"
@@ -36,8 +38,8 @@ finally {
     Pop-Location
 }
 
-$msiArtifacts = @(Get-ChildItem -LiteralPath (Join-Path $tauriRoot 'target/release/bundle/msi') -Filter '*.msi' -File)
-$nsisArtifacts = @(Get-ChildItem -LiteralPath (Join-Path $tauriRoot 'target/release/bundle/nsis') -Filter '*.exe' -File)
+$msiArtifacts = @(Get-ChildItem -LiteralPath (Join-Path $tauriRoot 'target/release/bundle/msi') -Filter "*_$($packageVersion)_*.msi" -File)
+$nsisArtifacts = @(Get-ChildItem -LiteralPath (Join-Path $tauriRoot 'target/release/bundle/nsis') -Filter "*_$($packageVersion)_*-setup.exe" -File)
 if ($msiArtifacts.Count -ne 1 -or $nsisArtifacts.Count -ne 1) {
     throw "Expected exactly one MSI and one NSIS executable; found MSI=$($msiArtifacts.Count), NSIS=$($nsisArtifacts.Count)."
 }

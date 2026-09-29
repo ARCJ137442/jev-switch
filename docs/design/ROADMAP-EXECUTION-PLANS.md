@@ -7,7 +7,7 @@
 
 ## 现状判断
 
-当前代码已经提供 TypeSafe 官方/兼容服务、Provider 模型发现、Standalone 资源嵌入与校验、五页控制台，以及 Dashboard Phase 1 运行遥测。当前正式 Release 仍是 v0.1.0；新源码能力必须经过对应的候选包验收后才能进入发布。
+当前代码和 v0.2.0 Release 已提供 TypeSafe 官方/兼容服务、Provider 模型发现、Standalone 资源嵌入与校验、五页控制台，以及 Dashboard Phase 1 运行遥测。新源码能力仍必须经过对应的候选包与人类验收后才能扩大能力承诺。
 
 `abc793f` 已把 upstream attempt timing 合入主线：`TimedUpstream` 在 daemon 组合边界记录每次真实 adapter attempt（包括失败与重试），并提供会话级 `avg_upstream_latency_ms` 与 `upstream_attempts`。它是 transport + parsing 的 adapter processing time，不是纯网络耗时；不写 SQLite，也不与 gateway latency 相加。性能计划应直接复用这组数据，再补固定场景的 p50/p95/p99。
 

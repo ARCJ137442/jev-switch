@@ -32,6 +32,15 @@ export const zh: Record<keyof typeof en, string> = {
   'common.required': '必填',
   'common.loadFailed': '加载失败：',
   'common.addRow': '+ 添加行',
+  'command.title': '命令面板',
+  'command.placeholder': '搜索页面和动作…',
+  'command.empty': '没有匹配的命令。',
+  'command.footer': '↑↓ 选择 · Enter 打开 · Ctrl+K / Ctrl+P 切换',
+  'command.dashboard': '打开仪表盘',
+  'command.providers': '打开提供商',
+  'command.endpoints': '打开入口',
+  'command.routing': '打开路由 DAG',
+  'command.playground': '打开演练场',
 
   /* shell */
   'shell.navDashboard': '仪表盘',

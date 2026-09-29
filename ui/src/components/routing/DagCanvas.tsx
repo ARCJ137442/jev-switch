@@ -8,6 +8,7 @@ import './dag.css';
 interface Props {
   routes: Route[]; entries: DagEntry[]; providers: DagProvider[];
   positions: Record<string, Point>; selected: string | null; errors: ReadonlySet<string>;
+  liveEdges?: ReadonlyMap<string, 'success' | 'failure' | 'retry'>;
   onSelect: (id: string | null) => void;
   onCreate: (left: string, right: string, model?: string | null) => void;
   onPatch: (key: string, patch: Partial<Route>) => void;
@@ -112,9 +113,10 @@ export function DagCanvas(props: Props) {
             <defs><marker id={marker} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
             {props.routes.map((route, index) => {
               const from = outputPort(route); const to = inputPort(route); if (!from || !to) return null;
-              const key = routeIdentity(route); const selected = key === props.selected;
+               const key = routeIdentity(route); const selected = key === props.selected;
+               const live = props.liveEdges?.get(key);
               const invalid = props.errors.has(edgeKey(route.left, route.right));
-              return <g key={`${key}:${index}`} className={`dag-edge${selected ? ' selected' : ''}${invalid ? ' invalid' : ''}`}
+               return <g key={`${key}:${index}`} className={`dag-edge${selected ? ' selected' : ''}${invalid ? ' invalid' : ''}${live ? ` live-${live}` : ''}`}
                 role="button" tabIndex={0} aria-pressed={selected} aria-label={`${route.left} → ${route.right}${route.upstream_model ? ` / ${route.upstream_model}` : ''}`}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); props.onSelect(key); } }}>
                 <path className="dag-wire" d={wirePath(from, to)} markerEnd={`url(#${marker})`} />

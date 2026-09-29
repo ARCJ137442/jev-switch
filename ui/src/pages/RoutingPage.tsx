@@ -8,6 +8,7 @@ import { DocumentHistory } from '../components/routing/documentHistory';
 import { RouteTableForm } from '../components/routing/RouteTableForm';
 import { useToast } from '../app/feedback';
 import { useI18n } from '../i18n';
+import { getAdminActivity, streamActivity, type ActivityEvent } from '../api/access';
 
 interface GraphDocument { routes: Route[]; positions: Record<string, Point> }
 const serialize = routeDocumentSignature;
@@ -25,6 +26,31 @@ function preserveDraft(routes: Route[], baseline: Route[]) {
     if (serialize(routes) === serialize(baseline)) sessionStorage.removeItem(draftKey());
     else sessionStorage.setItem(draftKey(), JSON.stringify(routes));
   } catch { /* Unavailable storage does not block editing; beforeunload still warns. */ }
+}
+function liveEdgesForEvent(routes: Route[], event: ActivityEvent): Map<string, 'success' | 'failure' | 'retry'> {
+  const result = new Map<string, 'success' | 'failure' | 'retry'>();
+  if (event.kind !== 'request') return result;
+  let detail: any;
+  try { detail = JSON.parse(event.detail); } catch { return result; }
+  const trace = detail?.route_trace;
+  if (!trace || typeof trace !== 'object') return result;
+  const status: 'success' | 'failure' = detail.success === true ? 'success' : 'failure';
+  const provider = typeof trace.selected_provider === 'string' ? trace.selected_provider : null;
+  const selectedModel = typeof trace.selected_model === 'string' ? trace.selected_model : null;
+  const endpoint = typeof detail.endpoint_id === 'string' ? detail.endpoint_id : typeof trace.requested_model === 'string' ? trace.requested_model : null;
+  for (const route of routes) {
+    if (endpoint && route.left === endpoint && (route.right === provider || route.upstream_model === selectedModel)) result.set(routeIdentity(route), status);
+  }
+  const attempts = Array.isArray(trace.attempts) ? trace.attempts : [];
+  for (const attempt of attempts) {
+    const attemptProvider = typeof attempt.provider_id === 'string' ? attempt.provider_id : null;
+    const outcome = attempt.outcome === 'failed' ? 'failure' : attempt.outcome === 'succeeded' ? 'success' : attempt.retry_decision === 'retry_same_candidate' ? 'retry' : null;
+    if (!attemptProvider || !outcome) continue;
+    for (const route of routes) {
+      if ((endpoint && route.left === endpoint && route.right === attemptProvider) || route.right === attemptProvider || route.upstream_model === attempt.upstream_model) result.set(routeIdentity(route), outcome);
+    }
+  }
+  return result;
 }
 function readPositions(): Record<string, Point> {
   try {
@@ -49,6 +75,7 @@ export function RoutingPage() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
+  const [liveEdges, setLiveEdges] = useState<Map<string, 'success' | 'failure' | 'retry'>>(new Map());
   const alive = useRef(true);
   const loadGeneration = useRef(0);
   const inFlight = useRef(false);
@@ -113,6 +140,19 @@ export function RoutingPage() {
   useEffect(() => { try { localStorage.setItem(layoutKey(), JSON.stringify(doc.positions)); } catch { /* Keep layout in memory. */ } }, [doc.positions]);
   useEffect(() => { if (!loading && !loadError) preserveDraft(doc.routes, baseline); }, [doc.routes, baseline, loading, loadError]);
   useEffect(() => {
+    if (loading || loadError) return;
+    const controller = new AbortController();
+    let active = true;
+    void getAdminActivity(0, 1).then((page) => streamActivity({ type: 'admin' }, page.next_since, controller.signal, (event) => {
+      if (!active) return;
+      const next = liveEdgesForEvent(doc.routes, event);
+      if (!next.size) return;
+      setLiveEdges(next);
+      window.setTimeout(() => { if (active) setLiveEdges(new Map()); }, 1400);
+    })).catch(() => undefined);
+    return () => { active = false; controller.abort(); };
+  }, [doc.routes, loading, loadError]);
+  useEffect(() => {
     if (!dirty && !saving) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
@@ -176,7 +216,7 @@ export function RoutingPage() {
         </div>
         {saveError && <div className="dag-tools" role="alert" style={{ color: 'var(--danger)' }}><span>{saveError}</span>{saveFailed && <button type="button" onClick={() => setSaveFailed(false)}>{t('common.retry')}</button>}</div>}
         {loading ? <p className="py-8" role="status">{t('entry.loading')}</p> : loadError ? <div className="dag-tools" role="alert"><span>{loadError}</span><button type="button" onClick={() => void load()}>{t('common.retry')}</button></div> : <>
-          <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} errors={errors}
+          <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} errors={errors} liveEdges={liveEdges}
             onSelect={setSelected} onCreate={createEdge}
             onPatch={(key, patch) => patchAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key), patch)}
             onDelete={key => removeAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key))}

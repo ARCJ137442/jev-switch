@@ -236,11 +236,11 @@ mod tests {
     #[test]
     fn cold_start_extracts_once_and_reuses_identical_cache() {
         let root = isolated_root();
-        let first = prepare_runtime_at(&root, "0.1.0", TEST_ASSETS).unwrap();
-        let second = prepare_runtime_at(&root, "0.1.0", TEST_ASSETS).unwrap();
+        let first = prepare_runtime_at(&root, "0.2.0", TEST_ASSETS).unwrap();
+        let second = prepare_runtime_at(&root, "0.2.0", TEST_ASSETS).unwrap();
 
         assert_eq!(first, second);
-        assert!(first.starts_with(&root.join("0.1.0")));
+        assert!(first.starts_with(&root.join("0.2.0")));
         assert_eq!(
             fs::read(first.join("jev-switch-daemon.exe")).unwrap(),
             TEST_ASSETS[0].bytes
@@ -255,10 +255,10 @@ mod tests {
     #[test]
     fn missing_or_corrupt_cache_files_are_released_again() {
         let root = isolated_root();
-        let runtime = prepare_runtime_at(&root, "0.1.0", TEST_ASSETS).unwrap();
+        let runtime = prepare_runtime_at(&root, "0.2.0", TEST_ASSETS).unwrap();
         fs::write(runtime.join("jev-switch-daemon.exe"), b"damaged daemon").unwrap();
 
-        let repaired = prepare_runtime_at(&root, "0.1.0", TEST_ASSETS).unwrap();
+        let repaired = prepare_runtime_at(&root, "0.2.0", TEST_ASSETS).unwrap();
         assert_eq!(
             fs::read(repaired.join("jev-switch-daemon.exe")).unwrap(),
             TEST_ASSETS[0].bytes

@@ -1,17 +1,17 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前正式版为 `v0.1.0`。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前正式版为 `v0.2.0`。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-27。
 
-> **2026-09-30 adapter 状态：**当前源码包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 尚无 live key 证据，TypeSafe/OpenRouter 增量尚未进入 v0.1.0 Release。
+> **2026-09-30 adapter 状态：**当前源码和 `v0.2.0` Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按人类验收矩阵保留边界。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **当前核实状态（2026-09-27）**：正式 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0) 已由 tag 流水线发布，含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。Release gate 的 Rust、UI、Tauri 与版本检查通过。验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。Laya 不重复实测。你提供的 Tauri 截图已整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；它不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。凭据配置和本机运行目录不纳入发布包。详见[计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[便携运行记录](verification/portable-runtime-acceptance-2026-09-26.md)及[截图图册](screenshots.md)。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段**：网关实施及 v0.1.0 验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准。2026-09-29 当前源码增量含 TypeSafe 官方及本地-compatible SystemOne adapter 与 Standalone 单文件构建路径，尚未发布；真实官方调用、本地桌面 E2E 和独立版运行验收需分别看本轮核验结果。便携 ZIP 仍是文件夹运行时；`scripts/build-windows-release.ps1` 生成 MSI、NSIS、Portable 及单文件 Standalone 候选。总计划 §3/§3.1 记录决定及八条批注，顶部发布后状态与对应证据节记录正式 Release 验收边界。
+> **当前产品基线与维护阶段**：网关实施及 v0.2.0 验收状态以[入口网关认知对齐与实施计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)及[人类验收矩阵](verification/v0.2.0-human-acceptance-matrix-2026-09-30.md)为准。当前源码和 Release 包含 TypeSafe、OpenRouter、Standalone、命令面板、路由动效、运行遥测和系统主题增量；OpenRouter live call、本地桌面五页交互、Pages 部署和多硬件关闭延迟仍按矩阵标记。`scripts/build-windows-release.ps1` 生成 MSI、NSIS、Portable 及单文件 Standalone。
 
 ## 核心定位（一句话）
 
@@ -30,11 +30,12 @@
 | [verification/runtime-telemetry-2026-09-30.md](verification/runtime-telemetry-2026-09-30.md) | Dashboard 当前 daemon 会话遥测、流量曲线、adapter attempt latency 与资源卡的实现和验证边界 | Phase 1/2 已落地；Tauri WebView 精确资源仍未提供 |
 | [verification/openrouter-adapter-2026-09-30.md](verification/openrouter-adapter-2026-09-30.md) | OpenRouter 官方 OpenAPI 核对、adapter 实现、模型目录和 WireMock 验证边界 | 源码已实现；真实 key/live call 和 Release 仍待完成 |
 | [verification/system-theme-2026-09-30.md](verification/system-theme-2026-09-30.md) | light/dark/system 首帧解析、系统切换和主题控件回归 | 源码与 UI 门禁通过；原生系统主题截图仍待验收 |
+| [verification/v0.2.0-human-acceptance-matrix-2026-09-30.md](verification/v0.2.0-human-acceptance-matrix-2026-09-30.md) | v0.2.0 Standalone、主题、OpenRouter、Pages、命令面板、路由动效、遥测和关闭性能的人类验收矩阵 | 发布前逐项完成；自动测试不替代人工验收 |
 | [verification/windows-release-candidate-2026-09-29.md](verification/windows-release-candidate-2026-09-29.md) | 当前 Windows MSI、NSIS、Portable 与 Standalone 候选的哈希、离线门禁和运行验收边界 | 新候选构建身份已核对；精确 EXE 的 WebView/托盘实测仍需启动 |
 | [verification/recovery-regression-2026-09-28.md](verification/recovery-regression-2026-09-28.md) | Windows 重启后的 Kev、Laya、Jev Switch 恢复、隔离 target 回归与小样本 Rime smoke | 恢复核对；不替代完整 benchmark |
 | [verification/jevk5-4b-lmstudio-2026-09-28.md](verification/jevk5-4b-lmstudio-2026-09-28.md) | JevK5-4B GGUF 经 LM Studio bridge 注册、路由与清理核对 | 实验性 one-hot 兼容路径；不代表原生 logits 或生产校准 |
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线说明与路线图各方向对应的具体用户旅程 | 早期场景已标为历史构想；第七、八节覆盖路线图中的未来体验提案，不表示已实现 |
-| **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **本轮用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收门槛** | **当前施工入口；P1–P4 已验；P5 有用户截图与 Hide/Restore 证据，候选 Exit/恢复边界仍开放；P6 v0.1.0 已发布** |
+| **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **本轮用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收门槛** | **当前施工入口；P1–P4 已验；v0.2.0 精确 Standalone 冷启动已验，原生交互补证见人类验收矩阵** |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
 | [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
 | [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
@@ -66,7 +67,7 @@
 | `design/ICON-SYSTEM-DESIGN.md` | 初版图标系统方案（作者 Claude Opus 4.8） | 历史设计；当前能力见 README，显示偏好候选见 ROADMAP |
 | `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 设计规范参考；原稿阶段状态已过期，当前实现/验收以主计划为准 |
 | `design/I18N-DESIGN.md` | **国际化与可扩展语言列表**（作者 Claude Opus 4.8；GPT-6 Luna 实施记录） | 2026-09-24 状态快照；当前已提供语言见 README，新增语言方向见 ROADMAP |
-| `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | `v0.1.0` 已发布 MSI/NSIS/便携 ZIP 与 Docker 镜像 |
+| `RELEASE.md` | **发版手册**（四处版本号门禁 / 流水线结构 / 一次性 Windows 最终验收） | `v0.2.0` 已发布 MSI/NSIS/便携 ZIP/Standalone 与 Docker 镜像 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 公开筛选的 v0.1.0 界面图册 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
 | [verification/termux-build-deployment-2026-09-27.md](verification/termux-build-deployment-2026-09-27.md) | **Termux / Android arm64 构建、daemon 烟测与 CLI/TUI 后续方向** | GPT-5.6 Sol ultra 实测；运行时源代码固定到 `f1670e7`，报告文档随后持续修订，不替代其他平台发布验收 |

@@ -1,6 +1,6 @@
 # Jev-Switch Roadmap
 
-> **TL;DR**：v0.1.0 是当前正式发行版。当前源码已加入 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter adapter；官方账户的一笔三题 live request 已返回 HTTP 200，OpenRouter 尚完成离线契约/ WireMock 验证，尚无 live key 证据。较早 Standalone 候选已完成本地模型 E2E；本次重建候选已完成构建和离线门禁，仍需对精确 EXE 做冷启动、缓存恢复和端到端验收后才能进入 Release。
+> **TL;DR**：v0.2.0 已发布；v0.1.0 是上一正式发行版。当前源码和 Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne、OpenRouter adapter、Standalone、命令面板、路由动效、运行遥测与系统主题。OpenRouter live key、原生五页交互、Pages 部署和多硬件性能数据仍按人类验收矩阵补证。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）<br>
 > **AI 披露**：本文由 AI 协助整理；范围与优先顺序以项目维护者后续确认为准。<br>
@@ -10,7 +10,7 @@
 
 Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的路由过程。后续体验改进应服务这些目标：减少开发者重复操作，让每次调用的真实路径容易理解；不以装饰动效或未验证的性能宣传代替可测结果。
 
-当前正式发布为 [v0.1.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)。下述规划不属于该发布包。仓库中的 `v0.5.0-stable` 是较早的源代码 tag，没有对应 GitHub Release，不能代表当前应用版本。
+当前正式发布为 [v0.2.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.2.0)。下述规划不属于 v0.2.0；仓库中的 `v0.5.0-stable` 是较早的源代码 tag，没有对应 GitHub Release，不能代表当前应用版本。
 
 配套的前后变化与用户场景见[用户旅程文档第七、八节](docs/USER-JOURNEYS.md)，作为本路线图方向的体验叙事；两处内容均属未来提案，优先级与验收边界以本文件为准。
 
@@ -20,7 +20,7 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 
 | 方向 | 计划 | 用户体验故事 | 验收重点 | 优先级 |
 |---|---|---|---|---|
-| 上游适配器：OpenRouter（源码 Phase 1） | 已实现 OpenRouter provider kind、结构化 JSON Chat Completions 转换、`/models` 发现、错误/重试映射和 UI 预设；下一步是受控 live call、能力矩阵与 Release 门禁。 | 使用 OpenRouter 的人可以直接填入服务地址与凭据，查看模型并把它挂到入口，不必另找转接层。 | WireMock、Rust/UI 门禁已通过；真实 key/live call、费用/能力边界和 Windows/Docker Release 仍待验证。 | **最高优先级：源码已实现，验收未完成** |
+| 上游适配器：OpenRouter（源码 Phase 1） | 已实现 OpenRouter provider kind、结构化 JSON Chat Completions 转换、`/models` 发现、错误/重试映射和 UI 预设，并随 v0.2.0 发布。 | 使用 OpenRouter 的人可以直接填入服务地址与凭据，查看模型并把它挂到入口，不必另找转接层。 | WireMock、Rust/UI 门禁和候选包通过；真实 key/live call、费用/能力边界仍待人类验收。 | **最高优先级：已发布，live 验收待补** |
 | 本地/云端 Jev 服务发现 | 在用户选定的本机地址、局域网网段或明确填写的云端主机范围中发现 Jev 兼容服务及其他 Jev-Switch 实例。使用带边界的端口探测，再按已知服务契约逐步请求非破坏性端点（如 health、模型/能力列表）；逐步显示证据、兼容状态、可用模型和鉴权要求。 | 以前接入新服务要靠人记住端口、API 路径和模型名，再一项项手填。现在用户选定电脑或云主机范围后，Jev-Switch 先敲门查“服务在不在、说不说 Jev 协议、有哪些模型”，把在线、需鉴权或不兼容状态逐步列出来；用户看中某项后可以先测试，再确认一键加为提供商。 | 不扫描用户未选择的互联网范围，不调用推理、不发送合成 state/questions；并发数、超时、端口范围与重试可控。结果显示服务地址、类型/身份、探测时间、协议与模型、在线/鉴权/不兼容等状态。用户显式选择后才能运行带费用提示的模型测试，或“快速添加为提供商”；添加前确认地址、适配器类型与凭据，不将扫描结果静默写入配置。其他 Jev-Switch 实例只有在支持的 Jev 协议/认证路径下才可快速添加。 | 高：缩短首次接入路径 |
 | Portable 配套 daemon 发现与启动 | 从 portable 包启动正式桌面 exe 时，检查同目录配套 daemon/守护 exe 及其版本/身份。如果二进制存在但目标 daemon 未运行，由桌面壳启动它并等待健康握手；若同目录文件缺失或启动失败，向用户显示明确修复提示和对应下载/恢复路径。 | 现在用户解压后双击，只看到窗口却不知道后台服务为何没起来，还要猜该启动哪个文件。改进后，桌面程序会自己找到可信的配套 daemon 并等待它就绪；如果文件缺失或启动失败，就直接说明缺什么、下一步怎么修，用户不用靠猜。 | 已有本应用 daemon 时复用，不重复拉起；不接受错误版本/身份的服务；不能静默失败，也不自动下载/执行未知二进制；验证正常启动、缺文件、无权限、崩溃/超时与错误进程占用，并让用户看懂实际监听地址。 | 高：便携使用基础 |
 | 本地模型服务人工启停与统一接入 | 提供人类可见的本地服务操作入口，列出 LM Studio 模型、Laya 和已登记 SystemOne bridges 的状态；用户可以显式启动/停止、做资源预检并查看日志。Jev Switch 负责提供统一 public model/API 与路由，不自行加载或分发权重。危险上游（如 CUDA Python）必须显式确认、通过 RAM/VRAM 门槛，默认不自启；所有下游 APP 仍只调用 Jev Switch。 | 现在用户知道模型大致存在，却不知道要开哪个程序、哪个终端或哪个端口。操作台按模型显示“未启动/运行中/资源不足”，用户点启动后服务进入 Jev Switch 可见目录；停止时只关本次由本应用启动且身份核验通过的服务，不误杀其他 Python 或 LM Studio 任务。 | 禁止任意 shell 命令注入；仅允许注册过的 provider/runtime 启停。启动前显示模型、执行文件、绑定地址、估算及资源水位并要求确认；服务启动后校验 health/product/model ID，再确认 public endpoint 可路由。停止只终止本应用拥有的 PID/job，确认显存、端口和进程释放；LM Studio user-loaded 模型不得被无提示卸载。超过用户配置的 5GB Private Bytes 常驻线或整机 75% 线时拒绝常驻/加载。 | **高：解除当前人工部署障碍** |

@@ -46,3 +46,21 @@ The current source was rebuilt on 2026-09-30. The new candidate identity is:
 The embedded daemon hash is `E438FE41A03C64DF1E79CE1F8A7BC1CB738BBED0A697A83F462F749699022CB0`. Resource validation/recovery and non-interactive shell tests passed. Launching this exact EXE was rejected by the active process policy in the current session, so this section does not claim health, WebView, model discovery, tray, or desktop UI runtime evidence for the new hash.
 
 — GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理
+
+## v0.2.0 exact candidate (2026-09-30)
+
+The release script was rerun from the current `0.2.0` source after filtering stale bundle-directory artifacts by the version in `src-tauri/tauri.conf.json`. MSI, NSIS, Portable, and Standalone all came from this build input.
+
+| Artifact | SHA-256 |
+|---|---|
+| `jev-switch-standalone-0.2.0-windows-x64.exe` | `6F47D42FE60CDBF3F2FA52D40D8013B367C73A1E11DB31F79BAFA0E94038C462` |
+| `jev-switch_0.2.0_x64_en-US.msi` | `CE047E4D9BDC67D2F9A222AABA42CE336386A56E928B031C35404453C61FF306` |
+| `jev-switch_0.2.0_x64-setup.exe` | `399C1C40EE6F551E3B7845165E1C82C2CE2BA3F177F037E1C7CC720A19F85349` |
+| Portable `jev-switch.exe` | `5389AC1C2AFD3DFA6862D3E1E222D49A37041AB5F3393A92F95BA937AEE7741C` |
+| Portable `jev-switch-daemon.exe` | `D4868FA3FF081EB7E21121E840ED69738C68BF9078AEA47A68A23A248144653E` |
+
+The exact Standalone was launched from the build output. It extracted its embedded daemon to the versioned cache under `AppData\\Local\\Jev-Switch\\runtime\\0.2.0`, served the root UI with HTTP 200, served the matching production JavaScript with HTTP 200, and returned `/health` as `status=ok`, `product=jev-switch`, `version=0.2.0`, `api_revision=1`. The shell and daemon were then stopped; port `11435` was free afterward. This proves cold launch, resource extraction/reuse path, health identity, and static asset delivery for this exact hash. It does not replace the interactive matrix rows for WebView clicks, tray behavior, OpenRouter live credentials, Pages deployment, or multi-run shutdown timing.
+
+The build script now selects installer artifacts by the configured package version, so stale artifacts left in the local bundle cache cannot be mistaken for the current release.
+
+— GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理

@@ -15,7 +15,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 - `local` 描述网关运行位置与默认监听方式，不代表离线；它仍可调用远程上游。云机器上的 `127.0.0.1` 指云机器自身。
 - 对外服务入口与上游提供商配置是两种不同对象；不要混淆网关调用 Token 和供应商 API key。
 - 仅提供 Jev 原生 `/v1/systemone` 接口；不实现 OpenAI/Anthropic 聊天格式兼容入口。
-- 当前源码内置上游适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter；正式 v0.1.0 Release 仍未包含后两项增量。OpenRouter 是上游转换 adapter，不是普通 OpenAI/Anthropic 对外入口；TypeSafe 本地使用仍要求 SystemOne-compatible HTTP endpoint。
+- 当前源码内置上游适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter；OpenRouter 是上游转换 adapter，不是普通 OpenAI/Anthropic 对外入口；TypeSafe 本地使用仍要求 SystemOne-compatible HTTP endpoint。正式发布边界以 README、docs/RELEASE.md 和对应核验记录为准。
 - 上游 key 只由 daemon 持有；不得输出、写入公开文档、日志、测试产物或提交。管理 API 仅返回掩码状态。
 
 ## 开发与交付
@@ -40,7 +40,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 | 本地 daemon | 设置 `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"` 后运行 `cargo run --manifest-path rs/Cargo.toml` |
 | 健康检查 | `curl http://127.0.0.1:11435/health` |
 
-版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前正式 GitHub Release 为 v0.1.0；新版本号须先经用户确认，并同步发布元数据。
+版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.2.0`；版本字段、发行产物、README 与核验记录必须保持一致。
 
 ## 文档入口
 

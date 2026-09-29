@@ -7,6 +7,7 @@ import { FeedbackProvider, useConflictControl, useToast } from './feedback';
 import { useI18n } from '../i18n';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { LangToggle } from '../components/ui/LangToggle';
+import { CommandPalette } from '../components/commands/CommandPalette';
 import pkg from '../../package.json';
 import { useAuth } from '../auth/AuthContext';
 import './shell.css';
@@ -121,6 +122,7 @@ function ShellFrame({ route, children }: ShellProps) {
 
   return (
     <div className="app-shell flex h-full min-h-0 flex-col bg-bg text-ink">
+      <CommandPalette />
       {needLogin && (
         <AdminLogin
           onCancel={() => {

@@ -6,16 +6,16 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-09-27，GitHub 最新正式 Release 为 [`v0.1.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，当前源码的四个发布版本字段与锁文件也为 `0.1.0`。仓库另有历史 tag `v0.5.0-stable`，但没有对应 GitHub Release；该 tag 的旧实现元数据仍为 `0.1.0`，不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
+截至 2026-09-30，本次提交准备发布 [`v0.2.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.2.0) minor。发版前四个版本字段与锁文件已统一为 `0.2.0`。仓库另有历史 tag `v0.5.0-stable` 与 `v0.1.0`，用于历史追溯；它们不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
 
-这次发布已完成。下一版号尚未裁定；发版前由用户确认版本号，再让 tag `vX.Y.Z` 与以下四处去掉 `v` 后完全一致：
+本次 v0.2.0 的源码、产物和版本门禁已完成；tag `v0.2.0` 与以下四处去掉 `v` 后必须完全一致：
 
 - `ui/package.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
 - `rs/Cargo.toml` 的 `[workspace.package].version`
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
-每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。正式 v0.1.0 Release 内置 Vercel/Laya；当前源码另有尚未发布的 TypeSafe SystemOne、OpenRouter adapters 与 Windows Standalone 构建路径。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。正式 v0.1.0 Release 内置 Vercel/Laya；v0.2.0 候选增加 TypeSafe、OpenRouter、Pages、命令面板、路由动效和 Standalone 相关增量，但每项仍需按验收矩阵确认。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
 
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
@@ -86,7 +86,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 ### 触发安装前
 
 - 确认当前提交的 Rust workspace 默认/`ts-rs` 测试、Tauri shell 测试、UI 测试、lint 与生产构建均通过。
-- 运行 `scripts/build-windows-release.ps1` 一次生成 MSI、NSIS、文件夹 Portable 与单文件 Standalone 候选。便携目录内含 `jev-switch.exe`、daemon、`ui/dist` 和 SHA-256 manifest，仍需解压；Standalone 则把 daemon/UI 直接嵌入单个 Tauri EXE。脚本在嵌入前按便携 manifest 核对 daemon 与所有 UI 文件，并运行版本化缓存创建/复用/损坏修复测试。不要将 AppData 密钥或配置复制进运行资源。当前公开 v0.1.0 Release 还没有 Standalone；只有本机冷启动与桌面 E2E 验收通过后，未来 tag 才能加入。
+- 运行 `scripts/build-windows-release.ps1` 一次生成 MSI、NSIS、文件夹 Portable 与单文件 Standalone。便携目录内含 `jev-switch.exe`、daemon、`ui/dist` 和 SHA-256 manifest，仍需解压；Standalone 则把 daemon/UI 直接嵌入单个 Tauri EXE。脚本在嵌入前按便携 manifest 核对 daemon 与所有 UI 文件，并运行版本化缓存创建/复用/损坏修复测试。不要将 AppData 密钥或配置复制进运行资源。精确 Standalone 冷启动、health、根 UI 与静态资源已通过；原生五页交互、Pages 部署、OpenRouter live 与多硬件关闭延迟仍按人类验收矩阵记录。
 - 从 MSI 只读提取 Tauri shell、daemon 与 HTML/JS/CSS，逐项与当前构建输入哈希核对。之后常规 UI、路由、真实调用、历史与恢复验收直接双击便携目录中的 exe；仅安装器升级专属验证才需要 MSI/UAC。
 - 核对现有 Jev、daemon、Laya 与监听端口归属，避免覆盖或停止其他项目服务；确认现有 Vercel 凭据只通过掩码状态检查，不读取或记录明文。
 - 准备演练场相同输入、公开入口与直连 provider/model 两类目标；准备 Dashboard request ID、SQLite event/trace 字段核对项。
@@ -104,7 +104,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 
 若本轮确实要验安装器，在便携运行与页面/路由检查完成后使用同一构建的候选 MSI 升级，并在这一处处理 Windows UAC。确认 ProductCode/UpgradeCode、安装目录与 AppData migration；不要为每次 UI 或 daemon 修复重复安装。MSI 成功后，按同一 request ID / SQLite / 页面检查再抽查一次即可。
 
-有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.1.0` 已通过 tag 流水线发布；Windows MSI、NSIS、便携 ZIP 和 Docker 镜像均已生成。
+有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.2.0` 的自动门禁和精确 Standalone 冷启动已通过；仍开放的人工验收边界不得写成已验证能力。
 
 ---
 
@@ -129,7 +129,7 @@ Actions → Release → Run workflow（`workflow_dispatch`）。
 ```bash
 : "${JEV_ADMIN_PASSWORD:?请先设置管理员密码}"
 export JEV_ADMIN_PASSWORD
-VERSION=0.1.0
+VERSION=0.2.0
 docker pull ghcr.io/<owner>/<repo>:${VERSION}
 docker run -d --name jev-switch \
   -p 127.0.0.1:11435:11435 \
@@ -168,6 +168,6 @@ Settings → Actions → General → Workflow permissions → **Read and write**
 
 ## 尚未做
 
-- macOS / Linux 桌面打包（v0.1.0 当前仅发布 Windows 桌面版；暂无排期）
+- macOS / Linux 桌面打包（v0.2.0 仍仅发布 Windows 桌面版；暂无排期）
 - 代码签名与公证
 - Tauri updater 增量更新
