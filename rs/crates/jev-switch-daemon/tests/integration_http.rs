@@ -523,7 +523,10 @@ async fn gateway_control_suspends_model_calls_but_keeps_the_console_control_plan
         "disabled gateway must reject new model calls: {body}"
     );
     let (status, body) = send(app.clone(), "GET", "/v1/models", None).await;
-    assert_eq!(status, 503, "disabled gateway must reject model discovery: {body}");
+    assert_eq!(
+        status, 503,
+        "disabled gateway must reject model discovery: {body}"
+    );
     let (status, body) = send(app.clone(), "GET", "/v1/admin/status", None).await;
     assert_eq!(
         status, 200,

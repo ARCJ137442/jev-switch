@@ -40,7 +40,7 @@ export function ProvidersPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(() => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('focus') ?? '');
   const [availabilityEvents, setAvailabilityEvents] = useState<Awaited<ReturnType<typeof getAdminActivity>>['events']>([]);
   const [addTab, setAddTab] = useState<'form' | 'toml'>('form');
   const { toast } = useToast();

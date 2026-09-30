@@ -40,7 +40,7 @@ export function EndpointPanel({ disabled = false, onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(() => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('focus') ?? '');
   const [editing, setEditing] = useState<ServiceEndpointView | 'new' | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);

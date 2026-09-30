@@ -242,6 +242,31 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         telemetry,
         gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(gateway_enabled)),
     };
+    let events = state.events.clone();
+    state
+        .registry
+        .set_route_activity_observer(Some(Arc::new(move |activity| {
+            let phase = match activity.phase {
+                jev_core::adapter::RouteActivityPhase::Started => "started".to_string(),
+                jev_core::adapter::RouteActivityPhase::Finished { success } => if success {
+                    "finished_success"
+                } else {
+                    "finished_failure"
+                }
+                .to_string(),
+            };
+            events.push(
+                "route_activity",
+                serde_json::json!({
+                    "phase": phase,
+                    "requested_model": activity.requested_model,
+                    "provider_id": activity.provider_id,
+                    "upstream_model": activity.upstream_model,
+                    "hops": activity.hops,
+                })
+                .to_string(),
+            );
+        })));
     if let Err(e) = admin::endpoints::refresh_endpoint_routes(&state, &[]) {
         tracing::warn!(error = %e, "failed to load persisted endpoint routes into runtime registry");
     }

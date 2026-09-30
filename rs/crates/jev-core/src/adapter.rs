@@ -28,6 +28,7 @@ use crate::router::{OnError, RouteCtx, RouteEdge, Router, RouterError};
 use crate::upstream::{Capabilities, JevError, QuestionType};
 use jev_protocol::{JevRequest, JevResponse};
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 /* ══════════════════════════════════════════════════════════════════
 冻结 trait 1 · ProtocolAdapter（contracts/02 §2 原文）
@@ -139,6 +140,22 @@ Registry（contracts/02 §2：register / invoke 传参永久冻结）
 pub struct Registry {
     router: Router,
     retry: RetryPolicy,
+    route_activity_observer: std::sync::RwLock<Option<Arc<dyn Fn(RouteActivity) + Send + Sync>>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteActivityPhase {
+    Started,
+    Finished { success: bool },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteActivity {
+    pub requested_model: String,
+    pub provider_id: String,
+    pub upstream_model: String,
+    pub hops: Vec<String>,
+    pub phase: RouteActivityPhase,
 }
 
 /// Per-endpoint runtime policy. The frozen `invoke(req, ctx)` entry remains failover;
@@ -223,6 +240,39 @@ impl Registry {
         Self {
             router: Router::new(edges, HashMap::new()),
             retry,
+            route_activity_observer: std::sync::RwLock::new(None),
+        }
+    }
+
+    pub fn set_route_activity_observer(
+        &self,
+        observer: Option<Arc<dyn Fn(RouteActivity) + Send + Sync>>,
+    ) {
+        *self
+            .route_activity_observer
+            .write()
+            .expect("route activity observer lock") = observer;
+    }
+
+    fn emit_route_activity(
+        &self,
+        request_model: &str,
+        item: &crate::router::PlanItem,
+        phase: RouteActivityPhase,
+    ) {
+        let observer = self
+            .route_activity_observer
+            .read()
+            .expect("route activity observer lock")
+            .clone();
+        if let Some(observer) = observer {
+            observer(RouteActivity {
+                requested_model: request_model.to_string(),
+                provider_id: item.candidate.upstream_id.clone(),
+                upstream_model: item.candidate.upstream_model.clone(),
+                hops: item.candidate.hops.clone(),
+                phase,
+            });
         }
     }
 
@@ -620,6 +670,7 @@ impl Registry {
             })?;
         let mut upstream_req = req.clone();
         upstream_req.model = item.candidate.upstream_model.clone();
+        self.emit_route_activity(&req.model, &item, RouteActivityPhase::Started);
         let mut attempts = Vec::new();
         let mut upstream_calls = 0;
         for attempt in 1..=self.retry.max_attempts.max(1) {
@@ -630,6 +681,11 @@ impl Registry {
                     attempts.last_mut().expect("attempt was recorded")["outcome"] =
                         serde_json::json!("succeeded");
                     response.upstream_calls = Some(upstream_calls);
+                    self.emit_route_activity(
+                        &req.model,
+                        &item,
+                        RouteActivityPhase::Finished { success: true },
+                    );
                     response.extra.insert("route_trace".into(), serde_json::json!({"requested_model":req.model,"selected_provider":item.candidate.upstream_id,"selected_model":item.candidate.upstream_model,"selected_hops":item.candidate.hops,"attempts":attempts,"upstream_calls":upstream_calls}));
                     return Ok(response);
                 }
@@ -649,6 +705,11 @@ impl Registry {
                         attempts.last_mut().expect("attempt was recorded"),
                         &error,
                         "stop",
+                    );
+                    self.emit_route_activity(
+                        &req.model,
+                        &item,
+                        RouteActivityPhase::Finished { success: false },
                     );
                     return Err(InvocationFailure::new(
                         &req.model,

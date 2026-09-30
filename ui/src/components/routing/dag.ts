@@ -8,7 +8,7 @@ export interface DagEntry { id: string; enabled: boolean; strategy?: string }
 export interface Point { x: number; y: number }
 export interface DagNode extends Point {
   id: string; kind: 'entry' | 'alias' | 'provider'; width: number; height: number;
-  enabled: boolean; label: string; detail?: string; models: Array<string | null>; strategy?: string;
+  enabled: boolean; label: string; detail?: string; models: Array<string | null>; strategy?: string; inCount: number; outCount: number;
 }
 export interface DagPort extends Point { id: string; direction: 'input' | 'output'; model?: string | null }
 
@@ -59,10 +59,12 @@ export function buildDag(routes: Route[], entries: DagEntry[], providers: DagPro
     const label = provider?.name || id;
     const detail = provider?.account || provider?.base;
     const width = Math.min(360, Math.max(250, Math.max(label.length, detail?.length ?? 0) * 7.5 + 36));
+    const inCount = routes.filter(route => route.right === id).length;
+    const outCount = routes.filter(route => route.left === id).length;
     metadata.set(id, {
       id, kind, label, detail,
       enabled: provider?.enabled ?? entry?.enabled ?? true, strategy: entry?.strategy,
-      width, height, models,
+      width, height, models, inCount, outCount,
     });
   }
 

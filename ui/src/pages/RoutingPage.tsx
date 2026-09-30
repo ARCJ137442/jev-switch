@@ -31,6 +31,18 @@ function preserveDraft(routes: Route[], baseline: Route[]) {
 }
 function liveEdgesForEvent(routes: Route[], event: ActivityEvent): Map<string, 'success' | 'failure' | 'retry'> {
   const result = new Map<string, 'success' | 'failure' | 'retry'>();
+  if (event.kind === 'route_activity') {
+    let detail: any;
+    try { detail = JSON.parse(event.detail); } catch { return result; }
+    const provider = typeof detail?.provider_id === 'string' ? detail.provider_id : null;
+    const model = typeof detail?.upstream_model === 'string' ? detail.upstream_model : null;
+    const endpoint = typeof detail?.requested_model === 'string' ? detail.requested_model : null;
+    const state = detail?.phase === 'finished_success' ? 'success' : detail?.phase === 'finished_failure' ? 'failure' : 'retry';
+    for (const route of routes) {
+      if ((endpoint && route.left === endpoint && route.right === provider) || (model && route.upstream_model === model)) result.set(routeIdentity(route), state);
+    }
+    return result;
+  }
   if (event.kind !== 'request') return result;
   let detail: any;
   try { detail = JSON.parse(event.detail); } catch { return result; }
@@ -76,6 +88,7 @@ export function RoutingPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [liveEdges, setLiveEdges] = useState<Map<string, 'success' | 'failure' | 'retry'>>(new Map());
   const alive = useRef(true);
@@ -103,7 +116,7 @@ export function RoutingPage() {
       setBaseline(routes);
       setProviders(providerDoc.providers);
       setEntries(entryDoc.endpoints.map(entry => ({ id: entry.id, enabled: entry.enabled, strategy: entry.strategy_config.type })));
-      setSelected(null); setSaveError(restored ? t('dag.draftRestored') : null); setSaveFailed(restored);
+      setSelected(null); setSelectedNode(null); setSaveError(restored ? t('dag.draftRestored') : null); setSaveFailed(restored);
     } catch (error) {
       if (alive.current && generation === loadGeneration.current) setLoadError(error instanceof Error ? error.message : String(error));
     } finally { if (alive.current && generation === loadGeneration.current) setLoading(false); }
@@ -155,7 +168,7 @@ export function RoutingPage() {
       const next = liveEdgesForEvent(doc.routes, event);
       if (!next.size) return;
       setLiveEdges(next);
-      window.setTimeout(() => { if (active) setLiveEdges(new Map()); }, 1400);
+      window.setTimeout(() => { if (active) setLiveEdges(new Map()); }, 3200);
     })).catch(() => undefined);
     return () => { active = false; controller.abort(); };
   }, [doc.routes, loading, loadError]);
@@ -172,6 +185,11 @@ export function RoutingPage() {
     const route = normalizeRoute({ ...current[index], ...patch });
     if (routeIdentity(current[index]) === selected) setSelected(routeIdentity(route));
     changeRoutes(current.map((old, i) => i === index ? route : old));
+  };
+
+  const openNode = (node: { id: string; kind: 'entry' | 'provider' | 'alias' }) => {
+    if (node.kind === 'entry') window.location.hash = `#/endpoints?focus=${encodeURIComponent(node.id)}`;
+    else if (node.kind === 'provider') window.location.hash = `#/providers?focus=${encodeURIComponent(node.id)}`;
   };
   const removeAt = (index: number) => {
     changeRoutes(history.current.current.routes.filter((_, i) => i !== index)); setSelected(null);
@@ -219,7 +237,8 @@ export function RoutingPage() {
       {dirty && !saving && <button className="dag-icon-button" type="button" onClick={() => { changeRoutes(baseline); setSelected(null); }} title={t('dag.discard')} aria-label={t('dag.discard')}><RotateCcw size={16} aria-hidden="true" /></button>}
     </div>
     {(saveError || loadError) && <div className="routing-page__error" role="alert"><span>{saveError ?? loadError}</span>{saveFailed && <button type="button" onClick={() => setSaveFailed(false)}>{t('common.retry')}</button>}</div>}
-    {loading ? <p className="routing-page__loading" role="status">{t('entry.loading')}</p> : loadError ? <button className="routing-page__loading" type="button" onClick={() => void load()}>{t('common.retry')}</button> : <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} errors={errors} liveEdges={liveEdges}
+    {loading ? <p className="routing-page__loading" role="status">{t('entry.loading')}</p> : loadError ? <button className="routing-page__loading" type="button" onClick={() => void load()}>{t('common.retry')}</button> : <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} selectedNode={selectedNode} errors={errors} liveEdges={liveEdges}
+      onSelectNode={setSelectedNode} onNodeDoubleClick={openNode}
       onSelect={setSelected} onCreate={createEdge}
       onPatch={(key, patch) => patchAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key), patch)}
       onDelete={key => removeAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key))}

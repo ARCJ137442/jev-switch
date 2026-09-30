@@ -23,12 +23,12 @@
 .dag-world { position: relative; transform-origin: 0 0; user-select: none; }
 .dag-wires { position: absolute; inset: 0; overflow: visible; }
 .dag-wire { fill: none; stroke: var(--text-subtle); stroke-width: 2; opacity: .7; }
-.dag-edge.live-success .dag-wire { stroke: var(--success); stroke-width: 4; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--success) 75%, transparent)); animation: dag-live-success 900ms ease-out both; }
-.dag-edge.live-failure .dag-wire { stroke: var(--danger); stroke-width: 4; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--danger) 75%, transparent)); animation: dag-live-failure 900ms ease-out both; }
-.dag-edge.live-retry .dag-wire { stroke: var(--warning); stroke-width: 4; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--warning) 75%, transparent)); animation: dag-live-retry 900ms ease-out both; }
-@keyframes dag-live-success { 0% { stroke-dasharray: 9 12; stroke-dashoffset: 42; } 100% { stroke-dasharray: 9 12; stroke-dashoffset: 0; } }
-@keyframes dag-live-failure { 0% { opacity: .35; } 35% { opacity: 1; } 70% { opacity: .35; } 100% { opacity: 1; } }
-@keyframes dag-live-retry { 0% { stroke-dasharray: 3 10; stroke-dashoffset: 30; } 100% { stroke-dasharray: 3 10; stroke-dashoffset: 0; } }
+.dag-edge.live-success .dag-wire { stroke: var(--success); stroke-width: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--success) 90%, transparent)); animation: dag-glow-success 3.2s ease-out both; }
+.dag-edge.live-failure .dag-wire { stroke: var(--danger); stroke-width: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--danger) 90%, transparent)); animation: dag-glow-failure 3.2s ease-out both; }
+.dag-edge.live-retry .dag-wire { stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 85%, transparent)); animation: dag-exposure 1.2s ease-out both; }
+@keyframes dag-glow-success { 0% { opacity: .95; filter: drop-shadow(0 0 12px color-mix(in srgb, var(--success) 100%, transparent)); } 100% { opacity: .2; filter: drop-shadow(0 0 0 transparent); } }
+@keyframes dag-glow-failure { 0% { opacity: .95; filter: drop-shadow(0 0 12px color-mix(in srgb, var(--danger) 100%, transparent)); } 100% { opacity: .2; filter: drop-shadow(0 0 0 transparent); } }
+@keyframes dag-exposure { 0% { opacity: .3; filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 50%, transparent)); } 35% { opacity: 1; filter: drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 90%, transparent)); } 100% { opacity: .65; filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 35%, transparent)); } }
 .dag-hit { fill: none; stroke: transparent; stroke-width: 18; cursor: pointer; }
 .dag-priority { fill: var(--text-muted); font-size: 12px; font-family: var(--font-mono); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
 .dag-edge:hover .dag-wire,.dag-edge.selected .dag-wire { stroke: var(--accent); stroke-width: 3; opacity: 1; }
@@ -40,11 +40,13 @@
 .dag-alias { border-style: dashed; }
 .dag-provider { border-top: 3px solid var(--accent); }
 .dag-node.disabled { opacity: .55; }
+.dag-node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow-sm); }
 .dag-node-header { padding: 10px 15px; cursor: grab; height: 88px; overflow: hidden; }
 .dag-node-header:active { cursor: grabbing; }
 .dag-kind { display: block; color: var(--text-subtle); font-size: 12px; letter-spacing: .02em; margin-bottom: 4px; }
 .dag-node-header strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .dag-node-header small { display: block; color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 5px; }
+.dag-node-degree { color: var(--text-subtle) !important; font-family: var(--font-mono); }
 .dag-models > div { position: absolute; left: 0; right: 0; height: 30px; line-height: 30px; padding: 0 15px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dag-models em { font-family: var(--font-sans); font-style: normal; color: var(--text-subtle); }
 .dag-port { position: absolute; z-index: 3; width: 15px; height: 15px; padding: 0; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); cursor: crosshair; }
