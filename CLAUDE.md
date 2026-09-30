@@ -23,6 +23,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 - 开始跨层功能前先看 [当前实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[HTTP 契约](docs/contracts/05-HTTP契约.md)和[入口网关修订](docs/contracts/07-入口网关修订.md)，再按涉及范围读其他契约。
 - [ROADMAP.md](ROADMAP.md) 记录未排期的未来方向，不代表当前发布包含或承诺了这些能力。
 - [路线图执行计划总表](docs/design/ROADMAP-EXECUTION-PLANS.md)及其专项计划用于把近期候选拆成可执行任务；计划不等于 Release 承诺。
+- Android APP 当前只属于实验性 CI 构建计划，面向没有 Termux 的普通移动端；未有 APK/真机证据前不得写成稳定平台支持。详见 [Android 实验性计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - Rust workspace 位于 `rs/`，React UI 位于 `ui/`，Tauri 桌面壳位于 `src-tauri/`。`ts-rs` 的 UI 类型来自 Rust 导出。
 - 保持改动局部化；验证与改动职责相称。不要用历史测试计数或旧版运行报告替代当前工作树的结果。
 - GitHub 仓库 About 简介保持“英文一句话 | 中文一句话介绍”的双语格式；每次发版或调整产品定位时核对其内容与 README/当前能力一致。当前简介由仓库维护者在 GitHub 设置中维护，不是代码版本字段。
@@ -40,7 +41,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 | 本地 daemon | 设置 `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"` 后运行 `cargo run --manifest-path rs/Cargo.toml` |
 | 健康检查 | `curl http://127.0.0.1:11435/health` |
 
-版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.4.0`；版本字段、发行产物、README 与核验记录必须保持一致。v0.4.0 已通过自动化门禁但尚未经人工实测，公开能力描述必须保留这一边界。
+版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.4.0`；版本字段、发行产物、README 与核验记录必须保持一致。v0.4.0 的便携/Standalone 桌面核心路径和官方 TypeSafe 调用已由维护者人工确认；MSI/NSIS、Android 实验性 APK 和全链路性能仍必须单独标注边界。
 
 ## 文档入口
 

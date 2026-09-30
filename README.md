@@ -13,13 +13,14 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
 - **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与[当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
 - **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。
-- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.4.0` 在 v0.3.0 基础上整理 UI 图标、健康探测与遥测调度；本版本尚未经人工实测，原生自动化覆盖与剩余验收边界见[发布核验记录](docs/verification/v0.4.0-release-candidate-2026-09-30.md)。
+- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.4.0` 在 v0.3.0 基础上整理 UI 图标、健康探测与遥测调度；维护者已人工确认便携/Standalone 桌面核心路径和官方 TypeSafe 调用，安装器、Android 实验性 APK、全链路性能仍按[发布核验记录](docs/verification/v0.4.0-release-candidate-2026-09-30.md)边界处理。
 - **可编辑调用路由 DAG**：支持对外入口、路由节点和提供商模型端口之间的多跳与分支，并配置候选优先级和失败处理；简单直连只是 DAG 的一种形式。
 - **演练场横向比较**：可比较多个对外入口、直接上游模型或混合目标；结果分别呈现实际路径、耗时、usage 与错误。
 - **密钥边界**：上游 key 留在 daemon；管理 API 只返回脱敏状态，不提供明文读回接口。不要把真实 key 提交到仓库或聊天。
 - **模型目录发现**：Providers 可让 daemon 通过上游 `/v1/models` 获取账户模型并回填列表，同时显示 HTTP 状态和延迟；浏览器不直连上游，也不会把 key 写入配置或响应。
 - **首页运行遥测**：Dashboard 展示当前 daemon 会话的入口/出口速率、累计字节、活跃请求、成功/失败/failover、网关平均延迟和 daemon 进程 CPU/内存；采样数据只在内存中保留，无法精确获得的 Tauri WebView/上游指标明确显示不可用。
 - **Headless CLI Phase 1**：`jev-switch-cli` 通过 daemon HTTP API 提供 `status`、`models`、`invoke`、`routes`、`events`，支持 JSON/表格输出，适合 Termux、SSH 与脚本；TUI 和完整 Android 原生交互仍后置。详见 [CLI 文档](docs/CLI.md)。
+- **Android APP（实验性计划）**：面向没有 Termux 的普通移动端用户，首版计划通过 GitHub Actions 构建 APK，连接云端或局域网已有 Jev-Switch；不承诺手机本地 daemon、Windows sidecar、后台常驻或稳定平台支持。计划见 [Android 实验性计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - **图标与运行效率**：主导航、Dashboard 状态速览、调用活动和 Routing 高频工具已有 Lucide 语义图标；Dashboard 连通性探测限制并发并合并状态提交，health 状态共享，隐藏页暂停遥测。具体测量和范围见[图标/性能验证记录](docs/verification/ui-icon-performance-2026-09-30.md)。
 - **五页控制台**：Dashboard、Providers、Entries、Routing DAG、Playground；当前提供简体中文和英文，语言注册表可扩展。
 - **契约驱动**：Rust `ts-rs` 生成前端类型到 `ui/src/generated/`；协议及路由不变量见 `docs/contracts/`。
@@ -128,10 +129,10 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**正式发行版本截至 2026-09-30：**GitHub 最新正式 Release 为 [v0.4.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.4.0)。本版本通过 CI 与 Windows 原生隔离测试，但尚未经人工实测。仓库保留较早的 `v0.5.0-stable`、`v0.1.0`、`v0.2.0` 与 `v0.3.0` Git tag/Release；它们用于历史追溯，不代表当前应用版本。
+**正式发行版本截至 2026-09-30：**GitHub 最新正式 Release 为 [v0.4.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.4.0)。维护者已人工确认便携/Standalone 桌面核心路径和官方 TypeSafe 调用；安装器、Android 实验性 APK、全链路性能仍未覆盖。仓库保留较早的 `v0.5.0-stable`、`v0.1.0`、`v0.2.0` 与 `v0.3.0` Git tag/Release；它们用于历史追溯，不代表当前应用版本。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 
 同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID 与 SQLite route trace 对齐。该实例的 Vercel 公开入口也实测 HTTP 200；远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对，Docker cloud 持久化和 CI 测试也有通过记录。
 
-验收边界：v0.4.0 的 UI 图标/性能整理、五页原生 WebView、托盘生命周期和多显示器窗口布局已有自动化验证；尚未经人工实测。OpenRouter live call、真实用户配置恢复和多硬件关闭延迟仍按各自核验记录处理。正式 v0.4.0 Release 包含 Windows MSI、NSIS、便携 ZIP、Standalone、Linux/Windows CLI 和配套 Docker 镜像。详细边界见[图标/性能验证记录](docs/verification/ui-icon-performance-2026-09-30.md)和[0.4.0 发布核验记录](docs/verification/v0.4.0-release-candidate-2026-09-30.md)。
+验收边界：维护者已人工确认 v0.4.0 便携/Standalone 桌面核心路径和官方 TypeSafe 调用；MSI/NSIS 安装器、Android 实验性 APK、OpenRouter live call、真实用户配置恢复和全链路性能仍按各自核验记录处理。正式 v0.4.0 Release 包含 Windows MSI、NSIS、便携 ZIP、Standalone、Linux/Windows CLI 和配套 Docker 镜像。详细边界见[图标/性能验证记录](docs/verification/ui-icon-performance-2026-09-30.md)和[0.4.0 发布核验记录](docs/verification/v0.4.0-release-candidate-2026-09-30.md)。
