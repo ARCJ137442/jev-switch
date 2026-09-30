@@ -3,6 +3,8 @@
 **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 **AI 披露**：本文由 AI 协助整理。
 
+**当前状态（2026-09-30）**：`light/dark/system`、首帧 OS preference 解析和 system 模式 `matchMedia` 监听已随 v0.2.0 发布并通过 UI tests/lint/build；本地 Chrome 浏览器 light/dark 均可渲染。Tauri 原生系统切换 screenshot 未在本轮复验，未来修缮 focus 转向 UI 图标一致性与 reduced-motion 设置，不重复实现主题状态源。
+
 **目标**：在保留手动浅色/深色切换的同时增加“跟随系统”，让系统主题变化能自动同步，并支持当前已有的深浅色视觉回归。
 
 ## 现有入口

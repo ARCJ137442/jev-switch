@@ -6,21 +6,21 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-09-30，本次提交准备发布 [`v0.3.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.3.0) CLI minor。发版前四个版本字段与锁文件必须统一为 `0.3.0`。仓库另有历史 tag `v0.5.0-stable`、`v0.1.0` 与 `v0.2.0`，用于历史追溯；它们不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
+截至 2026-09-30，GitHub 正式 Release 为 [`v0.4.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.4.0)，包含 Windows 桌面包、Linux/Windows CLI 和 Docker 镜像。v0.4.0 通过 CI 与 Windows 原生隔离测试，但**尚未经人工实测**；当前四个应用版本字段与锁文件均为 `0.4.0`。仓库另有历史 tag `v0.5.0-stable`、`v0.1.0`、`v0.2.0` 与 `v0.3.0`，用于历史追溯；它们不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
 
-本次 v0.3.0 的源码、CLI、桌面候选和版本门禁必须完成；tag `v0.3.0` 与以下四处去掉 `v` 后必须完全一致：
+后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
 - `ui/package.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
 - `rs/Cargo.toml` 的 `[workspace.package].version`
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
-每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。v0.3.0 在 v0.2.0 基础上增加 headless CLI Phase 1；TUI、OpenRouter live 与原生桌面交互仍按对应核验边界确认。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。v0.4.0 在 v0.3.0 基础上整理高频 UI 图标、provider probe 并发、共享 health 状态、遥测后台调度和原生验收脚本；本版本明确**尚未经人工实测**。TUI、OpenRouter live 与真实用户配置恢复仍按对应核验边界确认。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
 
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.3.0；统一修改上述四处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.4.0；统一修改上述四处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui
@@ -41,7 +41,7 @@ git diff --cached --check
 git diff --cached --stat
 git diff --cached
 
-VERSION=0.2.0  # 示例；必须替换成用户确认的下一个版本
+VERSION='X.Y.Z'  # 占位示例；替换为下一版经维护者确认的 SemVer
 git commit -m "chore: bump ${VERSION}"
 git tag "v${VERSION}"
 git push origin main "v${VERSION}"    # 推 tag 触发发版
@@ -60,9 +60,10 @@ Actions 页查看实际进度；构建耗时受 runner、网络及依赖缓存�
 ```
 meta（版本门禁）
   └─ gate（复用 ci.yml：cargo test --workspace ×2 + ts-rs 门禁 + tsc + UI 回归 + vite build）
-       ├─ windows（daemon release → sidecar → 壳身份回归 → tauri build → msi/nsis artifact）
-       └─ docker （buildx → ghcr.io，tag 版本号 + latest）
-            └─ release（下载 artifact → 建 GitHub Release，自动 changelog）
+       ├─ windows（daemon release → sidecar → 壳身份回归 → tauri build → msi/nsis/Portable/Standalone）
+       ├─ cli（Linux + Windows headless 客户端）
+       └─ docker（buildx → ghcr.io，tag 版本号 + latest）
+            └─ release（下载 Windows/CLI artifacts → 建 GitHub Release，自动 changelog）
 ```
 
 后端 workspace 测试在 Ubuntu 跑。Windows 作业放置 sidecar 后，串行执行独立
@@ -104,7 +105,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 
 若本轮确实要验安装器，在便携运行与页面/路由检查完成后使用同一构建的候选 MSI 升级，并在这一处处理 Windows UAC。确认 ProductCode/UpgradeCode、安装目录与 AppData migration；不要为每次 UI 或 daemon 修复重复安装。MSI 成功后，按同一 request ID / SQLite / 页面检查再抽查一次即可。
 
-有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.3.0` 的 CLI 自动门禁、local daemon smoke 和 `v0.2.0` 延续的桌面候选证据必须分别记录；仍开放的人工验收边界不得写成已验证能力。
+有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.4.0` 的 CLI 自动门禁、local daemon smoke 和 Windows 原生隔离测试必须分别记录；本版本尚未经人工实测，仍开放的人工验收边界不得写成已验证能力。
 
 ---
 
@@ -121,15 +122,16 @@ Actions → Release → Run workflow（`workflow_dispatch`）。
 
 | 产物 | 位置 |
 |---|---|
-| MSI / NSIS | Release 页附件；或 Actions run 的 `jev-switch-windows-<版本>` artifact |
+| MSI / NSIS / Portable / Standalone | Release 页附件；或 Actions run 的 `jev-switch-windows-<版本>` artifact |
+| Linux / Windows CLI | Release 页 `jev-switch-cli-<版本>-<平台>` 附件；Termux/Android arm64 在设备本机 `cargo install --path rs/crates/jev-switch-cli --locked` |
 | Docker | `ghcr.io/<owner>/<repo>:<版本>` 与 `:latest`（owner 自动转小写） |
 
-发布页自动填入实际的小写镜像名称与版本，并提供带持久卷、管理员密码和 15 秒停机预算的启动命令。下面以本次 `0.3.0` 为例；部署其他版本时替换该值，并替换 `<owner>/<repo>`，再设置自己的 `JEV_ADMIN_PASSWORD`：
+发布页自动填入实际的小写镜像名称与版本，并提供带持久卷、管理员密码和 15 秒停机预算的启动命令。下面以本次 `0.4.0` 为例；部署其他版本时替换该值，并替换 `<owner>/<repo>`，再设置自己的 `JEV_ADMIN_PASSWORD`：
 
 ```bash
 : "${JEV_ADMIN_PASSWORD:?请先设置管理员密码}"
 export JEV_ADMIN_PASSWORD
-VERSION=0.3.0
+VERSION=0.4.0
 docker pull ghcr.io/<owner>/<repo>:${VERSION}
 docker run -d --name jev-switch \
   -p 127.0.0.1:11435:11435 \
@@ -168,6 +170,6 @@ Settings → Actions → General → Workflow permissions → **Read and write**
 
 ## 尚未做
 
-- macOS / Linux 桌面打包（v0.3.0 仅增加 Linux headless CLI；桌面版仍只发布 Windows）
+- macOS / Linux 桌面打包（v0.4.0 仍只发布 Windows 桌面；Linux 继续提供 headless CLI）
 - 代码签名与公证
 - Tauri updater 增量更新

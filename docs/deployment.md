@@ -228,7 +228,7 @@ Standalone 是单独编译的 Tauri 应用：daemon 与 `ui/dist` 的每个文�
 
 配置、SQLite 与调用历史继续保存在 `%APPDATA%\jev-switch`，与可执行文件位置和资源缓存分开。独立版不从网络下载或执行 daemon；校验和释放失败时保留等待页错误，不回退要求用户手动启动 daemon。资源缓存不包含配置、密钥或数据库；清理运行缓存不会删除 AppData 用户数据。
 
-构建入口仍是 `scripts/build-windows-release.ps1`。产物名为 `jev-switch-standalone-<version>-windows-x64.exe`；现有 `jev-switch-portable-<version>-windows-x64.zip` 仍需解压，不能称为单文件版。GitHub 当前正式 Release `v0.1.0` 尚无该产物；只有冷启动、重复启动、缓存修复及桌面端本地路由验收通过后，后续 Release 才发布它。
+构建入口仍是 `scripts/build-windows-release.ps1`。产物名为 `jev-switch-standalone-<version>-windows-x64.exe`；现有 `jev-switch-portable-<version>-windows-x64.zip` 仍需解压，不能称为单文件版。Standalone 已从 v0.2.0 起随 Release 发布；其历史冷启动/缓存证据按具体 hash 见 Release verification，不代表所有托盘、升级或多硬件生命周期边界均已验收。v0.4.0 CLI 独立产物构建说明见 [CLI.md](CLI.md)；本版本尚未经人工实测。
 
 | 断言 | 证据 |
 |---|---|

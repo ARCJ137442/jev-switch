@@ -1,6 +1,6 @@
 # Jev-Switch CLI
 
-**状态：** v0.3.0 CLI Phase 1<br>
+**状态：** v0.4.0 CLI Phase 1（尚未经人工实测）<br>
 **作者：** GPT-6 Luna xhigh（OpenAI Codex）<br>
 **AI 披露：** 本文由 AI 协助整理；命令边界、鉴权和发布范围以项目维护者确认的 HTTP 契约为准。
 

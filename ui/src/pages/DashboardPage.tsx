@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Boxes, FlaskConical, GitBranch, Network, Plus, RefreshCw, Server, Settings, type LucideIcon } from 'lucide-react';
 import {
   AdminApiError,
   getStatus,
@@ -15,6 +16,7 @@ import { InstanceSettings } from '../components/settings/InstanceSettings';
 import { AccessDashboard } from '../components/access/AccessDashboard';
 import { useAuth } from '../auth/AuthContext';
 import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
+import { probeProvidersConcurrently, type ProviderHealth } from './dashboardHealth';
 
 /**
  * Dashboard（v2.0 · 设计稿 docs/design/UI-REDESIGN-v2.md §2）
@@ -22,19 +24,29 @@ import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
  * 取代旧 HomePage 的「配置页」定位，改为控制台仪表盘：
  * ① 状态速览 —— daemon / mode+bind / providers 可达性 / routes 摘要，图形优先
  * ② 就地操作 —— 实例设置在本页折叠展开；探测仅表示可达性
- * ③ 活动流水 —— 最近请求（后端 /v1/admin/logs 未落地前为占位空态）
+ * ③ 活动流水 —— 最近请求记录与调用状态（AccessDashboard）
  *
  * 数据源均为真实接口：getStatus / listProviders / listRoutes / probeProvider。
  */
 
-type Reachability = 'reachable' | 'unreachable' | 'disabled' | 'unknown';
-
-const REACHABILITY_COLOR: Record<Reachability, string> = {
+const REACHABILITY_COLOR: Record<ProviderHealth['state'], string> = {
   reachable: 'var(--success)',
   unreachable: 'var(--danger)',
   disabled: 'var(--text-subtle)',
   unknown: 'var(--text-subtle)',
 };
+
+function SummaryMark({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span
+      className="inline-grid h-8 w-8 shrink-0 place-items-center"
+      style={{ color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 12%, transparent)', borderRadius: 'var(--radius)' }}
+      aria-hidden="true"
+    >
+      <Icon size={17} strokeWidth={1.8} />
+    </span>
+  );
+}
 
 function fmtUptime(sec: number): string {
   const d = Math.floor(sec / 86400);
@@ -53,7 +65,7 @@ export function DashboardPage() {
   const [status, setStatus] = useState<AdminStatus | null>(null);
   const [providers, setProviders] = useState<AdminProvider[] | null>(null);
   const [routes, setRoutes] = useState<Route[] | null>(null);
-  const [health, setHealth] = useState<Record<string, { state: Reachability; ms: number | null }>>({});
+  const [health, setHealth] = useState<Record<string, ProviderHealth>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loadError, setLoadError] = useState<'auth' | 'failed' | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -100,33 +112,23 @@ export function DashboardPage() {
   useEffect(() => {
     if (!providers || providers.length === 0) return;
     let cancelled = false;
+    let inFlight = false;
+    let timer: number | undefined;
     const run = async () => {
-      for (const p of providers) {
-        if (cancelled) return;
-        if (!p.enabled) {
-          setHealth((h) => ({ ...h, [p.id]: { state: 'disabled', ms: null } }));
-          continue;
-        }
-        try {
-          const r = await probeProvider(p.id);
-          if (cancelled) return;
-          setHealth((h) => ({
-            ...h,
-            [p.id]: {
-              state: r.ok ? 'reachable' : 'unreachable',
-              ms: r.latency_ms,
-            },
-          }));
-        } catch {
-          if (!cancelled) setHealth((h) => ({ ...h, [p.id]: { state: 'unknown', ms: null } }));
-        }
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        const nextHealth = await probeProvidersConcurrently(providers, probeProvider);
+        if (!cancelled) setHealth(nextHealth);
+      } finally {
+        inFlight = false;
+        if (!cancelled) timer = window.setTimeout(() => void run(), 30000);
       }
     };
     void run();
-    const timer = window.setInterval(run, 30000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [providers]);
 
@@ -174,7 +176,7 @@ export function DashboardPage() {
       {loadError && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3" style={{ ...card, color: 'var(--text-muted)' }}>
           <span>{copy(loadError === 'auth' ? 'overview.authRequired' : 'overview.loadFailed')}</span>
-          <button type="button" style={btn} onClick={() => setRefresh((value) => value + 1)}>{copy('overview.retry')}</button>
+          <button type="button" style={btn} onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={14} className="mr-1 inline-block align-[-2px]" aria-hidden="true" />{copy('overview.retry')}</button>
         </div>
       )}
 
@@ -183,6 +185,7 @@ export function DashboardPage() {
         {/* daemon */}
         <section className="fade-in p-4 sm:p-5" style={card}>
           <div className="mb-2 flex items-center gap-2.5">
+            <SummaryMark icon={Server} />
             <span
               className={daemonUp ? '' : 'status-danger'}
               style={{
@@ -206,10 +209,12 @@ export function DashboardPage() {
         {/* mode + bind：设置在 Dashboard 内部展开，避免跳出当前概览 */}
         <section className="fade-in p-4 sm:p-5" style={card}>
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-semibold capitalize" style={{ fontSize: 'var(--text-lg)' }}>
+            <span className="flex min-w-0 items-center gap-2 font-semibold capitalize" style={{ fontSize: 'var(--text-lg)' }}>
+              <SummaryMark icon={Network} />
               {status?.mode ? t('dash.modeLabel', { mode: status.mode }) : '—'}
             </span>
             <button type="button" onClick={() => setSettingsOpen(true)} style={{ ...btn, color: 'var(--accent)', padding: '0.3rem 0.6rem' }}>
+              <Settings size={14} className="mr-1 inline-block align-[-2px]" aria-hidden="true" />
               {copy('instance.manage')}
             </button>
           </div>
@@ -243,7 +248,8 @@ export function DashboardPage() {
                 );
               })}
             </span>
-            <span className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
+            <span className="flex items-center gap-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
+              <SummaryMark icon={Boxes} />
               {providers === null ? '—' : copy('overview.reachableCount', { reachable: reachableCount, total: totalCount })}
             </span>
           </div>
@@ -281,7 +287,8 @@ export function DashboardPage() {
 
         {/* routes 摘要 */}
         <a href="#/routing" className="fade-in card-hover block p-4 sm:p-5" style={card}>
-          <div className="mb-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
+          <div className="mb-2 flex items-center gap-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
+            <SummaryMark icon={GitBranch} />
             {routes === null ? '—' : t('dash.routes', { n: routes.length })}
           </div>
           <div style={cardLabel} className="tabular">
@@ -309,6 +316,7 @@ export function DashboardPage() {
       <div className="fade-in flex flex-wrap gap-3">
         <a
           href="#/playground"
+          className="inline-flex items-center gap-2"
           style={{
             ...btn,
             background: 'var(--accent)',
@@ -317,12 +325,15 @@ export function DashboardPage() {
             fontWeight: 600,
           }}
         >
+          <FlaskConical size={16} aria-hidden="true" />
           {t('dash.testJev')}
         </a>
-        <a href="#/providers" style={btn}>
+        <a href="#/providers" className="inline-flex items-center gap-2" style={btn}>
+          <Plus size={16} aria-hidden="true" />
           {t('dash.addProvider')}
         </a>
-        <a href="#/routing" style={btn}>
+        <a href="#/routing" className="inline-flex items-center gap-2" style={btn}>
+          <GitBranch size={16} aria-hidden="true" />
           {t('dash.editRoutesAction')}
         </a>
       </div>

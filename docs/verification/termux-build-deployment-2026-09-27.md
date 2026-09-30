@@ -1,5 +1,7 @@
 # Termux Rust Workspace 与 UI 构建核验（2026-09-27）
 
+> **状态边界（2026-09-30）：**以下命令计数、版本和运行数据是 v0.1.0 源码基线 `f1670e7` 的点时记录，不代表当前版本。CLI/TUI 后续方向中的 CLI 薄客户端已作为 v0.4.0 实现和发布；当前命令与安装边界见 [CLI.md](../CLI.md) 和 [CLI Phase 1 验证](cli-phase1-2026-09-30.md)。Termux/Android 设备本机安装仍需其本地 Rust/Android host 工具链，不由 Linux/Windows 预编译附件替代。
+
 ## 范围与结论
 
 核验对象为 Jev-Switch `main` 的运行时源码基线 `f1670e79d61b3a1d0092c0e00dc5a9c88bb952c5`（提交时间 `2026-09-26T19:10:00+08:00`）；其后的 `8b626c2` 是 docs-only 提交，不改变被测运行时代码。报告初始文档提交为 `6b01d0a1baffdd8a40d5db59a0720191fac8317f`，`30f085a3bdb2114d95ace52dd40d88997b9e971d` 修正了 warm-cache 离线证据和版本措辞，后续文档提交只维护证据表述，不改变下述运行时结果。在 Termux / Android arm64 环境检查 Rust workspace 的联网与离线门禁、UI 门禁及运行部署边界。本文记录当前工作树实测，不把历史 CI、其他平台或本机生成物的结果外推到新 checkout。
@@ -66,7 +68,9 @@ Termux 环境未安装 `rustup`，因此本机工具链不是通过 rustup chann
 4. 把源码测试与服务部署分开：本机通过 `cargo test` 不等于 daemon 已部署、进程已重启或新 `ui/dist` 已被正在运行的服务加载。部署前重建目标二进制与 UI，部署后核对进程身份、版本/`build_revision`、监听地址、`/health` 和实际服务资源。
 5. Termux 未安装 Docker，故容器建议仍按仓库的 Dockerfile/Compose 文档在支持 Docker 的主机执行；不要从本次 Android Rust 测试推断 Docker 镜像可构建或可运行。
 
-## 部署烟测与 CLI/TUI 方向
+## 部署烟测与当时的 CLI/TUI 建议
+
+本节末尾的 CLI/TUI 需求、范围和验收条件是 2026-09-27 的建议稿；CLI Phase 1 后续已在 v0.4.0 实现。现行安装和命令方式以 [CLI.md](../CLI.md) 为准，以下源码/设备 smoke 仍只属于本报告记录的历史 revision。
 
 使用当前 workspace 已构建的 `rs/target/debug/jev-switch`（`file` 报告为 Android/aarch64 ELF），配合临时空 provider 配置、临时数据目录和当前 `ui/dist` 完成了本地启动烟测：
 

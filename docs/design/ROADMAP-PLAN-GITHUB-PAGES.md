@@ -3,6 +3,8 @@
 **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 **AI 披露**：本文由 AI 协助整理。
 
+**当前状态（2026-09-30）**：纯静态首页与 Pages workflow 已于 v0.2.0 时部署，桌面 DOM 内容已核验。v0.4.0 发布后，本地工作树中的站点文案已同步当前版本、CLI 入口和“尚未经人工实测”边界；Pages 部署和移动端正式截图仍待后续发布窗口核验。
+
 **目标**：建立一个无需自有域名、与当前 Release 和 README 一致的静态首页，让新用户先看到产品定位、真实界面和限制。
 
 ## 现有入口
@@ -15,7 +17,7 @@
 
 1. 选择静态构建方式（优先纯 HTML/CSS/少量 JS 或现有 UI 的静态子项目），避免复制 React 控制台和引入第二套产品真相。
 2. 首页首屏写一句话定位、真实 Dashboard/路由/Playground 图，第二屏写快速开始、Windows 下载、Docker 入口和当前限制。
-3. 所有下载链接从当前 Release 变量或明确的 Release URL 派生；显示“TypeSafe 已支持、OpenRouter 尚未实现、Windows 优先”等真实边界。
+3. 所有下载链接从当前 Release 变量或明确的 Release URL 派生；显示“TypeSafe 已支持、OpenRouter 为上游转换 adapter、Windows 优先”等真实边界。
 4. 添加 GitHub Pages workflow：构建、预览、链接检查、移动视口检查；部署到仓库 Pages，必要时再更新 GitHub About Website。
 
 ## 完成证据

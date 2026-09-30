@@ -4,6 +4,8 @@
 **Author:** GPT-6 Luna xhigh (OpenAI Codex)  
 **AI disclosure:** AI-assisted implementation and verification record.
 
+> **Release status (2026-09-30):** `light/dark/system` shipped in v0.2.0 and remains in v0.4.0. This record's native OS screenshot boundary remains open; v0.4.0's automated tri-state checks are recorded separately, and the release has not received manual human acceptance.
+
 ## Delivered
 
 - Theme preference now supports `light`, `dark` and `system`.

@@ -327,6 +327,7 @@ mod tests {
             const active = routeLink();
             return {
               theme: root.dataset.theme || null,
+              themePreference: root.dataset.themePreference || null,
               viewport: { width: innerWidth, height: innerHeight },
               document: { width: root.scrollWidth, clientWidth: root.clientWidth },
               header: (() => {
@@ -358,6 +359,8 @@ mod tests {
               themeTogglePresent: Boolean(toggle)
             };
           };
+          localStorage.setItem('jev_theme', 'light');
+          document.documentElement.dataset.themePreference = 'light';
           document.documentElement.dataset.theme = 'light';
           window.dispatchEvent(new Event('jev-theme-change'));
           await pause(100);
@@ -367,11 +370,14 @@ mod tests {
           const dark = measure();
           if (toggle) toggle.click();
           await pause(100);
+          const system = measure();
+          if (toggle) toggle.click();
+          await pause(100);
           const restored = measure();
           await fetch('__REPORT_URL__', {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ route: expectedRoute, light, dark, restored })
+            body: JSON.stringify({ route: expectedRoute, light, dark, system, restored })
           });
         })().catch(() => {});"##
             .replace("__REPORT_URL__", report_url)
@@ -623,7 +629,7 @@ mod tests {
                                     .map_err(|error| format!("invalid DOM snapshot: {error}; {body}"))?;
 
                                 assert_eq!(snapshot["route"], route, "snapshot route mismatch");
-                                for theme in ["light", "dark", "restored"] {
+                                for theme in ["light", "dark", "system", "restored"] {
                                     let measured = &snapshot[theme];
                                     assert_eq!(measured["themeTogglePresent"], true);
                                     assert!(!measured["heading"].as_str().unwrap_or_default().is_empty());
@@ -652,6 +658,14 @@ mod tests {
                                         "horizontal document overflow on {route} {width}x{height} {theme}: {body}"
                                     );
                                 }
+                                assert_eq!(snapshot["light"]["themePreference"], "light");
+                                assert_eq!(snapshot["dark"]["themePreference"], "dark");
+                                assert_eq!(snapshot["system"]["themePreference"], "system");
+                                assert!(matches!(
+                                    snapshot["system"]["theme"].as_str(),
+                                    Some("light" | "dark")
+                                ));
+                                assert_eq!(snapshot["restored"]["themePreference"], "light");
                                 assert_eq!(snapshot["light"]["theme"], "light");
                                 assert_eq!(snapshot["dark"]["theme"], "dark");
                                 assert_eq!(snapshot["restored"]["theme"], "light");

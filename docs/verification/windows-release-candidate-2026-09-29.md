@@ -1,4 +1,6 @@
-# Windows Release Candidate Build
+# Windows Release Candidate Build (v0.1.0/v0.2.0 Historical Evidence)
+
+> This file records only the candidate hashes and checks for the versions listed below. The current formal Release is v0.3.0; do not use these old hashes as current artifacts. See the v0.3.0 Release page and `docs/verification/cli-phase1-2026-09-30.md` for current CLI/release evidence.
 
 **Date:** 2026-09-29  
 **Author:** GPT-6 Luna xhigh (OpenAI Codex)  

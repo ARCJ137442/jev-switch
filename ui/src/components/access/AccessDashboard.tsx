@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Activity, AlertCircle, CheckCircle2, CircleDollarSign, Clock3, Radar, RefreshCw, Settings2, XCircle } from 'lucide-react';
 import {
   createCallerToken,
   getAdminActivity,
@@ -49,6 +50,11 @@ function eventKindLabel(kind: string, copy: Copy): string {
   }
 }
 
+function EventKindMark({ kind }: { kind: string }) {
+  const Icon = kind === 'probe' ? Radar : kind === 'config_change' ? Settings2 : kind === 'error' ? AlertCircle : Activity;
+  return <Icon size={14} className="shrink-0" aria-hidden="true" />;
+}
+
 function EventDetails({ event, copy }: { event: ActivityEvent; copy: Copy }) {
   const detail = parseRequestActivityDetail(event.kind, event.detail);
   let rawDetail = event.detail;
@@ -95,7 +101,12 @@ function EventDetails({ event, copy }: { event: ActivityEvent; copy: Copy }) {
     <div className="min-w-48 space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold" style={{ color: 'var(--text)' }}>{detail.endpointId ?? copy('access.unknownEndpoint')}</span>
-        {statusLabel && <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={statusStyle}>{statusLabel}</span>}
+        {statusLabel && (
+          <span role="status" className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" style={statusStyle}>
+            {detail.success ? <CheckCircle2 size={13} aria-hidden="true" /> : <XCircle size={13} aria-hidden="true" />}
+            {statusLabel}
+          </span>
+        )}
         <span className="tabular" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
           {detail.latencyMs === null ? '—' : `${detail.latencyMs} ms`}
         </span>
@@ -117,18 +128,18 @@ function EventDetails({ event, copy }: { event: ActivityEvent; copy: Copy }) {
 }
 
 function StatGrid({ stats, copy }: { stats: CallerStats | OwnStats | null; copy: Copy }) {
-  const item = (label: string, value: string) => (
+  const item = (label: string, value: string, Icon: typeof Activity) => (
     <div className="rounded-md p-3" style={{ background: 'var(--surface-hover)' }} key={label}>
-      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{label}</div>
+      <div className="flex items-center gap-1.5" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}><Icon size={13} aria-hidden="true" />{label}</div>
       <div className="mt-1 font-semibold tabular" style={{ fontSize: 'var(--text-base)' }}>{value}</div>
     </div>
   );
   return (
     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-      {item(copy('access.requests'), stats ? String(stats.total_requests) : '—')}
-      {item(copy('access.cost'), stats?.total_cost == null ? copy('access.noCost') : stats.total_cost.toFixed(6))}
-      {item(copy('access.avgLatency'), stats?.avg_latency_ms == null ? '—' : `${stats.avg_latency_ms.toFixed(0)} ms`)}
-      {item(copy('access.errorRate'), formatRate(stats?.error_rate ?? null))}
+      {item(copy('access.requests'), stats ? String(stats.total_requests) : '—', Activity)}
+      {item(copy('access.cost'), stats?.total_cost == null ? copy('access.noCost') : stats.total_cost.toFixed(6), CircleDollarSign)}
+      {item(copy('access.avgLatency'), stats?.avg_latency_ms == null ? '—' : `${stats.avg_latency_ms.toFixed(0)} ms`, Clock3)}
+      {item(copy('access.errorRate'), formatRate(stats?.error_rate ?? null), AlertCircle)}
     </div>
   );
 }
@@ -262,7 +273,8 @@ function TokenManager({ copy }: { copy: Copy }) {
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>{copy('access.tokenTitle')}</h2>
-          <button type="button" disabled={!hasLoaded || refreshing} onClick={() => void refresh()} className="rounded-md px-3 py-1.5 text-sm" style={{ background: 'var(--surface-hover)' }}>
+          <button type="button" disabled={!hasLoaded || refreshing} onClick={() => void refresh()} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm" style={{ background: 'var(--surface-hover)' }}>
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
             {refreshing ? copy('access.refreshing') : copy('access.refresh')}
           </button>
         </div>
@@ -488,7 +500,7 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
           <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
             {streaming ? copy('access.live') : copy('access.polling')}
           </span>
-          <button type="button" disabled={refreshing} onClick={() => void refreshNow()} className="rounded-md px-3 py-1.5 text-sm" style={{ background: 'var(--surface-hover)' }}>{refreshing ? copy('access.refreshing') : copy('access.refresh')}</button>
+          <button type="button" disabled={refreshing} onClick={() => void refreshNow()} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm" style={{ background: 'var(--surface-hover)' }}><RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />{refreshing ? copy('access.refreshing') : copy('access.refresh')}</button>
         </div>
       </div>
       {error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{copy(callerToken ? 'access.myLoadFailed' : 'access.eventsFailed', { reason: error })}</p>}
@@ -507,11 +519,11 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
             {events.map((event) => (
               <tr key={event.id} className="border-b align-top" style={{ borderColor: 'var(--border)' }}>
                 <td className="whitespace-nowrap px-2 py-2 text-xs tabular sm:text-sm" style={{ color: 'var(--text-muted)' }}>{formatDate(event.timestamp, '—')}</td>
-                <td className="hidden whitespace-nowrap px-2 py-2 sm:table-cell">{eventKindLabel(event.kind, copy)}</td>
+                <td className="hidden whitespace-nowrap px-2 py-2 sm:table-cell"><span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span></td>
                 {!callerToken && <td className="hidden px-2 py-2 font-mono text-xs lg:table-cell">{event.token_id ?? '—'}</td>}
                 <td className="max-w-xl px-2 py-2">
                   <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs sm:hidden" style={{ color: 'var(--text-muted)' }}>
-                    <span>{eventKindLabel(event.kind, copy)}</span>
+                    <span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span>
                     {!callerToken && <span className="max-w-full break-all font-mono">{event.token_id ?? '—'}</span>}
                   </div>
                   <EventDetails event={event} copy={copy} />

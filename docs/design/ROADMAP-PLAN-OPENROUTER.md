@@ -3,6 +3,8 @@
 **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 **AI 披露**：本文由 AI 协助整理。
 
+**当前状态（2026-09-30）**：OpenRouter 上游适配器已随 v0.2.0 发布，v0.4.0 继续包含；协议/WireMock 与离线 UI/daemon 验证已完成。无获授权的 live key 验证，不宣称真实账户调用、计费或所有模型能力通过。v0.4.0 尚未经人工实测；该文下方阶段清单保留实现前计划语境，不再代表 adapter 尚未写入源码。
+
 **优先级**：最高。  
 **目标**：让 OpenRouter 成为一个真实可测试的上游适配器，定义它在 Jev Noul/Choice/Score 能力上的完整边界，不把普通 OpenAI Chat Completions 兼容误称为 Jev 原生支持。
 

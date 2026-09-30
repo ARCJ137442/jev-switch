@@ -1,5 +1,5 @@
 import { Pause, Play, RefreshCw, Activity, Cpu, HardDrive, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTelemetry, type RuntimeTelemetry as RuntimeTelemetrySnapshot } from '../../api/admin';
 import { useI18n } from '../../i18n';
 import './runtime-telemetry.css';
@@ -63,29 +63,54 @@ export function RuntimeTelemetry() {
   const [data, setData] = useState<RuntimeTelemetrySnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [refreshMs, setRefreshMs] = useState<number>(REFRESH_OPTIONS[0]);
+  const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
+  const mounted = useRef(false);
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const load = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setRefreshing(true);
+    try {
+      const next = await getTelemetry();
+      if (mounted.current) {
+        setData(next);
+        setError(null);
+      }
+    } catch (cause) {
+      if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      inFlight.current = false;
+      if (mounted.current) setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      try {
-        const next = await getTelemetry();
-        if (!cancelled) {
-          setData(next);
-          setError(null);
-        }
-      } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
-      }
+    let timer: number | undefined;
+    const scheduleNext = () => {
+      if (!cancelled && !paused && visible) timer = window.setTimeout(() => void refresh(), refreshMs);
     };
-    void load();
-    if (paused) return () => { cancelled = true; };
-    const timer = window.setInterval(() => void load(), refreshMs);
+    const refresh = async () => {
+      await load();
+      scheduleNext();
+    };
+    const onVisibility = () => setVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', onVisibility);
+    if (!paused && visible) void refresh();
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [paused, refreshMs]);
+  }, [load, paused, refreshMs, visible]);
 
   const chart = useMemo(() => {
     const samples = data?.samples ?? [];
@@ -122,8 +147,8 @@ export function RuntimeTelemetry() {
           <button type="button" className="runtime-telemetry__icon-button" onClick={() => setPaused((value) => !value)} title={paused ? t('telemetry.resume') : t('telemetry.pause')} aria-label={paused ? t('telemetry.resume') : t('telemetry.pause')}>
             {paused ? <Play size={15} /> : <Pause size={15} />}
           </button>
-          <button type="button" className="runtime-telemetry__icon-button" onClick={() => void getTelemetry().then(setData).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)))} title={t('common.refresh')} aria-label={t('common.refresh')}>
-            <RefreshCw size={15} />
+          <button type="button" className="runtime-telemetry__icon-button" onClick={() => void load()} disabled={refreshing} title={t('common.refresh')} aria-label={t('common.refresh')}>
+            <RefreshCw size={15} className={refreshing ? 'animate-spin' : undefined} />
           </button>
         </div>
       </div>

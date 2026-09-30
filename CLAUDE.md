@@ -9,7 +9,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
   → 服务入口与路由策略
   → 可编辑调用路由 DAG
   → 提供商接入配置（地址 + 上游 key + 模型）
-  → 上游适配器（当前内置 Vercel、Laya、TypeSafe SystemOne）
+  → 上游适配器（当前内置 Vercel、Laya、TypeSafe SystemOne、OpenRouter）
 ```
 
 - `local` 描述网关运行位置与默认监听方式，不代表离线；它仍可调用远程上游。云机器上的 `127.0.0.1` 指云机器自身。
@@ -40,7 +40,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 | 本地 daemon | 设置 `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"` 后运行 `cargo run --manifest-path rs/Cargo.toml` |
 | 健康检查 | `curl http://127.0.0.1:11435/health` |
 
-版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.3.0`；版本字段、发行产物、README 与核验记录必须保持一致。
+版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.4.0`；版本字段、发行产物、README 与核验记录必须保持一致。v0.4.0 已通过自动化门禁但尚未经人工实测，公开能力描述必须保留这一边界。
 
 ## 文档入口
 

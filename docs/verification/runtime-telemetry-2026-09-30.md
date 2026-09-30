@@ -4,6 +4,8 @@
 **Author:** GPT-6 Luna xhigh (OpenAI Codex)  
 **AI disclosure:** AI-assisted implementation and verification record.
 
+> **Status note (2026-09-30):** The telemetry baseline below shipped in v0.2.0 and remains in v0.4.0. The icon and polling changes in [the UI iteration record](ui-icon-performance-2026-09-30.md) are included in v0.4.0; the release has not received manual human acceptance.
+
 ## Delivered in Phase 1
 
 - Added `GET /v1/admin/telemetry`, protected by the existing admin boundary.
@@ -38,7 +40,7 @@ Phase 2 verification:
 - `telemetry::tests::upstream_attempt_latency_is_averaged_separately`: passed.
 - daemon workspace tests and ts-rs generation: passed; `avg_upstream_latency_ms` and `upstream_attempts` are present in the generated TypeScript contract.
 
-OpenRouter/theme follow-up build: the current tree also contains the OpenRouter adapter/kind and system-theme UI changes; they passed the same Rust/UI build gates, but they have not yet been promoted to a public Release or real upstream live-call record.
+At the time this telemetry implementation was recorded, OpenRouter/theme changes were present in source but not yet promoted to a Release. They were subsequently shipped in v0.2.0; OpenRouter live-account validation remains separate and unverified.
 
 This record does not claim a new Tauri WebView or real traffic screenshot; the desktop process was not started during this implementation turn.
 

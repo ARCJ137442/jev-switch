@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Boxes, DoorOpen, FlaskConical, LayoutDashboard, Route, type LucideIcon } from 'lucide-react';
 import { getBase, fetchHealth } from '../api';
 import { clearAdminSession, getAdminSession, setAuthErrorHandler } from '../api/admin';
 import { ConflictBanner } from '../components/ConflictBanner';
@@ -41,12 +42,24 @@ export function useHashRoute(): Route {
 
 export type ServerStatus = 'unknown' | 'ok' | 'error';
 
-export function useServerStatus(): { status: ServerStatus; text: string } {
+export interface ServerStatusSnapshot {
+  status: ServerStatus;
+  text: string;
+}
+
+const ServerStatusContext = createContext<ServerStatusSnapshot>({ status: 'unknown', text: '' });
+
+export function useServerStatus(): ServerStatusSnapshot {
+  return useContext(ServerStatusContext);
+}
+
+function useServerStatusProbe(): ServerStatusSnapshot {
   const [status, setStatus] = useState<ServerStatus>('unknown');
   const [text, setText] = useState<string>('');
 
   useEffect(() => {
     let cancelled = false;
+    let timer: number | undefined;
     const probe = async () => {
       try {
         const health = await fetchHealth();
@@ -59,13 +72,14 @@ export function useServerStatus(): { status: ServerStatus; text: string } {
           setStatus('error');
           setText((e as Error).message);
         }
+      } finally {
+        if (!cancelled) timer = window.setTimeout(() => void probe(), 8000);
       }
     };
-    probe();
-    const timer = window.setInterval(probe, 8000);
+    void probe();
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
 
@@ -79,12 +93,12 @@ interface ShellProps {
   children: ReactNode;
 }
 
-const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navDashboard' | 'shell.navProviders' | 'entry.tab' | 'shell.navRouting' | 'shell.navPlayground'; href: string }> = [
-  { route: 'dashboard', labelKey: 'shell.navDashboard', href: '#/dashboard' },
-  { route: 'providers', labelKey: 'shell.navProviders', href: '#/providers' },
-  { route: 'endpoints', labelKey: 'entry.tab', href: '#/endpoints' },
-  { route: 'routing', labelKey: 'shell.navRouting', href: '#/routing' },
-  { route: 'playground', labelKey: 'shell.navPlayground', href: '#/playground' },
+const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navDashboard' | 'shell.navProviders' | 'entry.tab' | 'shell.navRouting' | 'shell.navPlayground'; href: string; icon: LucideIcon }> = [
+  { route: 'dashboard', labelKey: 'shell.navDashboard', href: '#/dashboard', icon: LayoutDashboard },
+  { route: 'providers', labelKey: 'shell.navProviders', href: '#/providers', icon: Boxes },
+  { route: 'endpoints', labelKey: 'entry.tab', href: '#/endpoints', icon: DoorOpen },
+  { route: 'routing', labelKey: 'shell.navRouting', href: '#/routing', icon: Route },
+  { route: 'playground', labelKey: 'shell.navPlayground', href: '#/playground', icon: FlaskConical },
 ];
 
 /** design/01 §5 版式 × TeamSense 导航激活态（A6）× 方案 B 色 */
@@ -97,7 +111,7 @@ export function Shell({ route, children }: ShellProps) {
 }
 
 function ShellFrame({ route, children }: ShellProps) {
-  const server = useServerStatus();
+  const server = useServerStatusProbe();
   const { conflict, handlers } = useConflictControl();
   const { toasts } = useToast();
   const { t } = useI18n();
@@ -121,6 +135,7 @@ function ShellFrame({ route, children }: ShellProps) {
         : t('shell.connecting');
 
   return (
+    <ServerStatusContext.Provider value={server}>
     <div className="app-shell flex h-full min-h-0 flex-col bg-bg text-ink">
       <CommandPalette />
       {needLogin && (
@@ -171,7 +186,7 @@ function ShellFrame({ route, children }: ShellProps) {
                     key={item.route}
                     href={item.href}
                     aria-current={active ? 'page' : undefined}
-                    className="shrink-0 px-3 py-1.5 transition-colors"
+                    className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 transition-colors"
                     style={{
                       fontSize: 'var(--text-sm)',
                       borderRadius: 'var(--radius)',
@@ -180,6 +195,7 @@ function ShellFrame({ route, children }: ShellProps) {
                       background: active ? 'var(--surface-hover)' : 'transparent',
                     }}
                   >
+                    <item.icon size={15} strokeWidth={1.8} aria-hidden="true" />
                     {t(item.labelKey)}
                   </a>
                 );
@@ -277,5 +293,6 @@ function ShellFrame({ route, children }: ShellProps) {
         </div>
       )}
     </div>
+    </ServerStatusContext.Provider>
   );
 }

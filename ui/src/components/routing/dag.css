@@ -2,6 +2,8 @@
 .dag-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); }
 .dag-tools button,.dag-context button { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-hover); color: var(--text); }
 .dag-tools button:disabled { opacity: .45; cursor: default; }
+.dag-tools button.dag-icon-button { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; padding: 0; }
+.dag-tools button.dag-icon-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dag-help { flex: 1; min-width: 180px; color: var(--text-muted); }
 .dag-tool-group { display: flex; align-items: center; gap: 8px; }
 .dag-tool-group output { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }

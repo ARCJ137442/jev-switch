@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Redo2, RefreshCw, RotateCcw, Table2, Undo2 } from 'lucide-react';
 import { getBase } from '../api';
 import { findCyclicEdgeKeys, listProviders, listRoutes, normalizeRoute, putRoutes, type Route } from '../api/admin';
 import { listEndpoints } from '../api/endpoints';
@@ -208,11 +209,11 @@ export function RoutingPage() {
       <div className="dag-tools">
           <span aria-live="polite">{saving ? t('common.saving') : dirty ? t('routing.unsaved') : t('routing.synced')}</span>
           <span className="dag-help">{t('routing.edges', { n: doc.routes.length })}</span>
-          <button type="button" disabled={!history.current.canUndo || loading} onClick={undo} title="Ctrl+Z">{t('dag.undo')}</button>
-          <button type="button" disabled={!history.current.canRedo || loading} onClick={redo} title="Ctrl+Shift+Z">{t('dag.redo')}</button>
-          <button type="button" aria-pressed={showTable} onClick={() => setShowTable(v => !v)}>{t('routing.table')}</button>
-          <button type="button" disabled={dirty || saving || loading} onClick={() => void load()}>{t('common.refresh')}</button>
-          {dirty && !saving && <button type="button" onClick={() => { changeRoutes(baseline); setSelected(null); }}>{t('dag.discard')}</button>}
+          <button className="dag-icon-button" type="button" disabled={!history.current.canUndo || loading} onClick={undo} title={`${t('dag.undo')} (Ctrl+Z)`} aria-label={t('dag.undo')}><Undo2 size={16} aria-hidden="true" /></button>
+          <button className="dag-icon-button" type="button" disabled={!history.current.canRedo || loading} onClick={redo} title={`${t('dag.redo')} (Ctrl+Shift+Z)`} aria-label={t('dag.redo')}><Redo2 size={16} aria-hidden="true" /></button>
+          <button className="dag-icon-button" type="button" aria-pressed={showTable} onClick={() => setShowTable(v => !v)} title={t('routing.table')} aria-label={t('routing.table')}><Table2 size={16} aria-hidden="true" /></button>
+          <button className="dag-icon-button" type="button" disabled={dirty || saving || loading} onClick={() => void load()} title={t('common.refresh')} aria-label={t('common.refresh')}><RefreshCw size={15} aria-hidden="true" /></button>
+          {dirty && !saving && <button className="dag-icon-button" type="button" onClick={() => { changeRoutes(baseline); setSelected(null); }} title={t('dag.discard')} aria-label={t('dag.discard')}><RotateCcw size={16} aria-hidden="true" /></button>}
         </div>
         {saveError && <div className="dag-tools" role="alert" style={{ color: 'var(--danger)' }}><span>{saveError}</span>{saveFailed && <button type="button" onClick={() => setSaveFailed(false)}>{t('common.retry')}</button>}</div>}
         {loading ? <p className="py-8" role="status">{t('entry.loading')}</p> : loadError ? <div className="dag-tools" role="alert"><span>{loadError}</span><button type="button" onClick={() => void load()}>{t('common.retry')}</button></div> : <>

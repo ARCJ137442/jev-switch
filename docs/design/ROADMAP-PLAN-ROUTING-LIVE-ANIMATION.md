@@ -3,6 +3,8 @@
 **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 **AI 披露**：本文由 AI 协助整理。
 
+**当前状态（2026-09-30）**：单请求 route_trace 到真实 DAG 边的 success/failure/retry 短暂反馈已随 v0.2.0 发布；仅有可映射 trace 才显示反馈，并支持 `prefers-reduced-motion` 样式。新增并发可辨识、暂停/关动效设置和原生 Tauri 视觉取证仍待后续，不将配置图伪装为没有对应 trace 的执行记录。
+
 **目标**：让 Routing DAG 呈现真实调用的经过、成功、失败和重试，同时不把静态配置图伪装成历史事件。
 
 ## 现有入口

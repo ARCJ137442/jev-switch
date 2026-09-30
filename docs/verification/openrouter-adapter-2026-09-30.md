@@ -4,6 +4,8 @@
 **Author:** GPT-6 Luna xhigh (OpenAI Codex)  
 **AI disclosure:** AI-assisted implementation and verification record.
 
+> **Release status (2026-09-30):** The adapter shipped in v0.2.0 and remains in v0.4.0. The live-key boundary below remains open; release inclusion does not imply live-account validation. v0.4.0 has not received manual human acceptance.
+
 ## Protocol evidence
 
 OpenRouter's official OpenAPI specification reports the production server as `https://openrouter.ai/api/v1`. The current documented operations used here are:
@@ -35,6 +37,6 @@ Source: OpenRouter official API reference and `https://openrouter.ai/openapi.jso
 
 ## Remaining boundary
 
-No live OpenRouter key was used in this implementation turn. The adapter is source-complete and wiremock-tested, but it is not part of the v0.1.0 Release until a controlled live call, capability matrix review, and the next Windows/Docker release gates complete.
+No live OpenRouter key was used in this implementation turn. The adapter is source-complete, wiremock-tested, and shipped; a controlled live call and account-specific capability/usage review remain open. This verification file records the original adapter implementation scope, not the current release checklist.
 
 — GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理

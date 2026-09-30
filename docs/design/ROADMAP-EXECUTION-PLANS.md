@@ -1,33 +1,33 @@
 # Roadmap Execution Plans
 
-> **TL;DR**：这些是基于当前 `abc793f` 主线的执行草案，不是版本承诺。近期先完成已有 Standalone 的精确验收和性能基线，再做主题跟随系统、命令面板、路由动效与 GitHub Pages；OpenRouter 仍是最高优先级的范围扩展，但需要独立的协议核对与适配器设计。
+> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。v0.4.0 已发布 CLI Phase 1、UI 图标/健康探测/遥测调度整理；本版本尚未经人工实测。OpenRouter、系统主题、命令面板、路由反馈、Standalone 和 GitHub Pages 已进入发行版；全链路 gateway/SQLite 冷暖基线仍待完成。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 > **AI 披露**：本文由 AI 协助整理，执行顺序和最终范围由项目维护者确认。
 
 ## 现状判断
 
-当前代码和 v0.2.0 Release 已提供 TypeSafe 官方/兼容服务、Provider 模型发现、Standalone 资源嵌入与校验、五页控制台，以及 Dashboard Phase 1 运行遥测。新源码能力仍必须经过对应的候选包与人类验收后才能扩大能力承诺。
+当前代码和 v0.4.0 Release 已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、五页控制台、Dashboard 运行遥测和 headless CLI Phase 1，并包含高频 UI 图标、并发 provider probe、共享 health 与隐藏页遥测暂停。v0.4.0 尚未经人工实测；全链路性能基线和真实用户配置恢复仍须单独验收。
 
 `abc793f` 已把 upstream attempt timing 合入主线：`TimedUpstream` 在 daemon 组合边界记录每次真实 adapter attempt（包括失败与重试），并提供会话级 `avg_upstream_latency_ms` 与 `upstream_attempts`。它是 transport + parsing 的 adapter processing time，不是纯网络耗时；不写 SQLite，也不与 gateway latency 相加。性能计划应直接复用这组数据，再补固定场景的 p50/p95/p99。
 
-路线图候选按实施形态分为三组：
+路线图与维护项按当前状态分为三组：
 
-1. **验收收口**：Standalone 精确候选、发布材料和桌面边界。
-2. **已有数据源上的增量**：性能基线、跟随系统主题、命令面板、路由实时动效。
-3. **独立工程**：GitHub Pages 首页、OpenRouter adapter。
+1. **已进入 Release**：Standalone、系统主题、命令面板 Phase 1、路由动画 Phase 1、GitHub Pages、OpenRouter 上游 adapter、CLI Phase 1。
+2. **当前工作树小步改进**：高频 UI 图标化、Dashboard provider probes 并发和状态合并、共享 health poll、隐藏页 telemetry 调度。
+3. **未完成的跨层基线/独立方向**：全链路性能 p50/p95/p99、TUI、Android 原生可行性、服务发现、数据目录迁移和路由顾问。
 
-## 计划矩阵
+## 状态矩阵
 
-| 计划 | 当前基础 | 预计范围 | ICE（影响/信心/容易度） | 建议顺序 |
-|---|---|---:|---:|---:|
-| [Standalone 精确候选验收](ROADMAP-PLAN-STANDALONE-ACCEPTANCE.md) | `src-tauri/src/standalone.rs`、发布脚本、旧候选 E2E | 1 个验收轮次 | 9/8/7 = 50.4 | 1 |
-| [网关性能基线](ROADMAP-PLAN-PERFORMANCE-BASELINE.md) | `Telemetry`、route trace、SQLite history | 1 个基线迭代 | 8/8/6 = 38.4 | 2 |
-| [跟随系统主题](ROADMAP-PLAN-SYSTEM-THEME.md) | `main.tsx` 已读取 `prefers-color-scheme`，`ThemeToggle` 只有手动切换 | 小型 UI 功能 | 5/9/9 = 40.5 | 3 |
-| [GitHub Pages 首页](ROADMAP-PLAN-GITHUB-PAGES.md) | README、公开截图、Release 链接 | 独立静态站 | 7/8/6 = 33.6 | 4 |
-| [命令面板 Phase 1](ROADMAP-PLAN-COMMAND-PALETTE.md) | 顶栏导航、页面 hash 路由、现有动作入口 | 中型前端功能 | 8/8/6 = 38.4 | 5 |
-| [路由图实时动效](ROADMAP-PLAN-ROUTING-LIVE-ANIMATION.md) | route trace、事件/SSE、`DagCanvas` | 后端事件关联 + UI | 8/7/5 = 28.0 | 6 |
-| [OpenRouter adapter](ROADMAP-PLAN-OPENROUTER.md) | adapter trait、Vercel/TypeSafe 参考、Provider kind 注册 | 独立协议适配器 | 10/6/4 = 24.0 | 先做契约核对，再排实现 |
+| 方向 | 当前状态 | 保留的未完成边界 |
+|---|---|---|
+| [Standalone 精确候选验收](ROADMAP-PLAN-STANDALONE-ACCEPTANCE.md) | v0.2.0 随 Release；该精确候选 cold start/cache/health 已验证 | 托盘 OS 菜单、多硬件退出计时及未覆盖的干净账户行为 |
+| [跟随系统主题](ROADMAP-PLAN-SYSTEM-THEME.md) | light/dark/system 已随 v0.2.0 发布；webview UI gate 通过 | 最新 Tauri 原生 system-change screenshot 未单独重验 |
+| [命令面板 Phase 1](ROADMAP-PLAN-COMMAND-PALETTE.md) | 导航/search/keyboard Phase 1 已随 v0.2.0 发布 | 新业务动作、使用频率排序及原生快捷键验收 |
+| [路由图实时动效](ROADMAP-PLAN-ROUTING-LIVE-ANIMATION.md) | trace 驱动的单边 success/failure/retry Phase 1 已随 v0.2.0 发布 | 并发 trace 可辨识、暂停设置与 Tauri 实际调用画面 |
+| [GitHub Pages 首页](ROADMAP-PLAN-GITHUB-PAGES.md) | v0.2.0 页面已部署；v0.3.0 网站文案只在当前工作树同步 | 推送/部署更新及移动端正式截图 |
+| [OpenRouter adapter](ROADMAP-PLAN-OPENROUTER.md) | adapter 已随 v0.2.0 发布并通过离线/WireMock 门禁 | 未使用 live key 验证账户能力/费用 |
+| 图标/性能首轮 | v0.4.0 已实现，并通过 UI tests/build、Chrome 视口和 Windows 原生隔离核对 | **尚未经人工实测**；全链路 daemon/SQLite/UI 性能基线仍在本轮之后 |
 
 ## 共用交付门槛
 
