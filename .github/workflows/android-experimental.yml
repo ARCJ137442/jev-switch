@@ -83,6 +83,10 @@ jobs:
           $env:ANDROID_NDK_HOME = Join-Path $env:ANDROID_HOME 'ndk\27.2.12479018'
           $env:NDK_HOME = $env:ANDROID_NDK_HOME
           $env:TAURI_ANDROID_PROJECT_PATH = (Resolve-Path 'src-tauri/gen/android').Path
+          $env:WRY_ANDROID_PACKAGE = 'io.github.arcj137442.jevswitch'
+          $env:WRY_ANDROID_PACKAGE_UNESCAPED = $env:WRY_ANDROID_PACKAGE
+          $env:WRY_ANDROID_LIBRARY = 'jev_switch_shell'
+          $env:WRY_ANDROID_KOTLIN_FILES_OUT_DIR = (Resolve-Path 'src-tauri/gen/android/app/src/main/java/io/github/arcj137442/jevswitch/generated').Path
           $ndkBin = Join-Path $env:ANDROID_NDK_HOME 'toolchains\llvm\prebuilt\windows-x86_64\bin'
           $clang = Join-Path $ndkBin ("{0}24-clang.cmd" -f $target)
           if ($abi -eq 'aarch64') {
