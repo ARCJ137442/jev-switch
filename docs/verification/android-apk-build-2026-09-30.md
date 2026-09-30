@@ -16,7 +16,7 @@ Android `aarch64` release APK 已在本机 SDK/NDK 环境中构建成功。构�
 | 产物 | `app-arm64-release-unsigned.apk` |
 | 大小 | `13,778,362` bytes |
 | SHA-256 | `6B3CE6F86B9B64EA0AB68842D0511EE9BC6EBDE9339634A1368E2D4F72BE4F01` |
-| 签名 | unsigned；不能直接当作正式分发包 |
+| 签名 | unsigned；不能直接安装。后续 CI 安装验收改产 debug-signed experimental APK |
 | 运行验收 | 未开始 |
 
 ## 构建路径

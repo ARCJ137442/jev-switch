@@ -56,6 +56,18 @@ jobs:
         with:
           targets: aarch64-linux-android,x86_64-linux-android
 
+      - name: Cache Android Rust and Gradle builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-android-${{ hashFiles('rs/Cargo.lock', 'src-tauri/Cargo.lock', 'ui/package-lock.json', 'src-tauri/tauri.android.conf.json') }}
+          restore-keys: ${{ runner.os }}-android-
+
       - name: Install dependencies and Tauri CLI
         shell: pwsh
         run: |
@@ -116,7 +128,7 @@ jobs:
           $flavor = if ($abi -eq 'aarch64') { 'Arm64' } else { 'X86_64' }
           Push-Location src-tauri/gen/android
           try {
-            .\gradlew.bat ":app:assemble${flavor}Release" "-x" "rustBuild${flavor}Release" '-Pkotlin.incremental=false' --no-daemon
+            .\gradlew.bat ":app:assemble${flavor}Debug" "-x" "rustBuild${flavor}Debug" '-Pkotlin.incremental=false' --no-daemon
             if ($LASTEXITCODE -ne 0) { throw 'Android APK packaging failed.' }
           } finally {
             Pop-Location
@@ -127,10 +139,10 @@ jobs:
         run: |
           $version = (Get-Content ui/package.json | ConvertFrom-Json).version
           $commit = git rev-parse HEAD
-          $apk = Get-ChildItem -Path src-tauri/gen/android/app/build/outputs/apk -Recurse -Filter "app-*-release-unsigned.apk" | Select-Object -First 1
+          $apk = Get-ChildItem -Path src-tauri/gen/android/app/build/outputs/apk -Recurse -Filter "app-*-debug.apk" | Select-Object -First 1
           if (-not $apk) { throw 'No APK produced.' }
           $hash = (Get-FileHash -LiteralPath $apk.FullName -Algorithm SHA256).Hash
-          $meta = [ordered]@{ product = 'jev-switch'; version = $version; commit = $commit; abi = '${{ inputs.abi }}'; experimental = $true; apk = $apk.Name; sha256 = $hash; built_at = (Get-Date).ToUniversalTime().ToString('o') }
+          $meta = [ordered]@{ product = 'jev-switch'; version = $version; commit = $commit; abi = '${{ inputs.abi }}'; experimental = $true; signing = 'Android debug keystore'; apk = $apk.Name; sha256 = $hash; built_at = (Get-Date).ToUniversalTime().ToString('o') }
           $meta | ConvertTo-Json | Set-Content -Encoding UTF8 .tmp-android-manifest.json
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item $apk.FullName "artifacts/jev-switch-$version-android-${{ inputs.abi }}-experimental.apk"

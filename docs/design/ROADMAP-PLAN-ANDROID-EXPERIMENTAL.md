@@ -39,7 +39,7 @@ Android APP 是面向没有 Termux 环境的普通移动端用户的实验性 Ta
 
 - 在 GitHub Actions Windows runner 上安装 Java 17、Android SDK/NDK 和 Rust Android targets。
 - 执行 Tauri Android 初始化，生成受版本控制边界约束的 Android 工程。
-- 构建 unsigned/debug 或明确标注实验性 release APK，优先 `aarch64`，可选 `x86_64` 模拟器 APK；不依赖本机 Android SDK。
+- 构建明确标注实验性的 debug-signed APK，优先 `aarch64`，可选 `x86_64` 模拟器 APK；使用 Android debug keystore 只供安装验收，不作为正式签名或 Play 发布凭据；不依赖本机 Android SDK。
 - 构建必须编译 Android 目标所需的 daemon library，并由 Tauri Android 入口装配为可启停的进程内监听；不能只打包一个没有本地内核的 WebView。
 - 将 APK、构建日志、版本、commit SHA、ABI 和 SHA-256 上传为 workflow artifact；不自动发布为稳定桌面 Release 资产。
 - 首阶段不要求签名密钥；接入签名、公钥校验和 Play 发布前必须另设安全方案。
@@ -92,7 +92,7 @@ Jev daemon library + ListenSupervisor
 | 项目 | 通过条件 | 当前状态 |
 |---|---|---|
 | GitHub CI 构建 | 指定 commit 可生成包含 Android daemon 的 APK，artifact 可下载并能复算 SHA-256 | 本机构建 arm64 成功；CI workflow 已按同一路径改造，待运行 |
-| ABI/版本元数据 | APK 名称、版本、ABI、commit 和实验性标签一致 | 待实施 |
+| ABI/版本元数据 | APK 名称、版本、ABI、commit、签名类型和实验性标签一致 | 待实施 |
 | 真机启动 | 至少一台普通 Android 设备安装 APK，默认网关关闭，控制台可打开 | 未开始 |
 | 本机网关 | APP 内启动/停止成功；`/health`、`/v1/models` 和本机调用可用 | 进程内启停原型已写入工作树；未有 Android APK/真机证据 |
 | 系统级启停 | 通知动作和 Quick Settings tile 的 START/STOP/TOGGLE 与 Dashboard 状态一致 | 未开始；需 Android 原生 service/tile |
