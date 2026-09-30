@@ -73,7 +73,6 @@ jobs:
         shell: pwsh
         run: |
           cargo tauri android init --ci --skip-targets-install --config src-tauri/tauri.android.conf.json
-          if (-not (Test-Path 'src-tauri/gen/android/tauri.settings.gradle')) { throw 'Tauri Android project is missing tauri.settings.gradle.' }
 
       - name: Compile Android daemon library
         shell: pwsh
@@ -83,6 +82,7 @@ jobs:
           $jniAbi = if ($abi -eq 'aarch64') { 'arm64-v8a' } else { 'x86_64' }
           $env:ANDROID_NDK_HOME = Join-Path $env:ANDROID_HOME 'ndk\27.2.12479018'
           $env:NDK_HOME = $env:ANDROID_NDK_HOME
+          $env:TAURI_ANDROID_PROJECT_PATH = (Resolve-Path 'src-tauri/gen/android').Path
           $ndkBin = Join-Path $env:ANDROID_NDK_HOME 'toolchains\llvm\prebuilt\windows-x86_64\bin'
           $clang = Join-Path $ndkBin ("{0}24-clang.cmd" -f $target)
           if ($abi -eq 'aarch64') {
@@ -98,6 +98,7 @@ jobs:
           }
           cargo build --locked --manifest-path src-tauri/Cargo.toml --package jev-switch-shell --target $target --features tauri/custom-protocol --lib --release
           if ($LASTEXITCODE -ne 0) { throw 'Android Rust library build failed.' }
+          if (-not (Test-Path 'src-tauri/gen/android/tauri.settings.gradle')) { throw 'Tauri Android build script did not generate tauri.settings.gradle.' }
           $jniDir = "src-tauri/gen/android/app/src/main/jniLibs/$jniAbi"
           New-Item -ItemType Directory -Force $jniDir | Out-Null
           Copy-Item "src-tauri/target/$target/release/libjev_switch_shell.so" "$jniDir/libjev_switch_shell.so" -Force
