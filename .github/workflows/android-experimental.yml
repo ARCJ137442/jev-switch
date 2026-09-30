@@ -71,7 +71,9 @@ jobs:
 
       - name: Initialize Android project
         shell: pwsh
-        run: cargo tauri android init
+        run: |
+          cargo tauri android init --ci --skip-targets-install --config src-tauri/tauri.android.conf.json
+          if (-not (Test-Path 'src-tauri/gen/android/tauri.settings.gradle')) { throw 'Tauri Android project is missing tauri.settings.gradle.' }
 
       - name: Compile Android daemon library
         shell: pwsh
