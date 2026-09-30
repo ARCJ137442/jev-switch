@@ -378,6 +378,10 @@ pub fn build_app(state: AppState) -> Router {
         .allow_origin(AllowOrigin::list([
             HeaderValue::from_static("http://127.0.0.1:5173"),
             HeaderValue::from_static("http://localhost:5173"),
+            // Tauri 2 Android uses the app webview origin. The Android client
+            // still needs an explicit user-selected API address; this origin
+            // does not grant access to arbitrary network targets.
+            HeaderValue::from_static("http://tauri.localhost"),
         ]))
         .allow_methods([
             Method::GET,
@@ -1452,6 +1456,7 @@ mod tests {
             .allow_origin(AllowOrigin::list([
                 HeaderValue::from_static("http://127.0.0.1:5173"),
                 HeaderValue::from_static("http://localhost:5173"),
+                HeaderValue::from_static("http://tauri.localhost"),
             ]))
             .allow_methods([
                 Method::GET,

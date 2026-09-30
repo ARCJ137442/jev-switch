@@ -10,20 +10,32 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(target_os = "android")]
+mod android_gateway;
+#[cfg(not(target_os = "android"))]
 mod runtime_probe;
+#[cfg(not(target_os = "android"))]
 mod sidecar;
-#[cfg(feature = "standalone")]
+#[cfg(all(feature = "standalone", not(target_os = "android")))]
 mod standalone;
+#[cfg(not(target_os = "android"))]
 mod window_layout;
 
+#[cfg(not(target_os = "android"))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(target_os = "android"))]
 use std::sync::Mutex;
 
+#[cfg(not(target_os = "android"))]
 use tauri::menu::{Menu, MenuItem};
+#[cfg(not(target_os = "android"))]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::Manager;
+#[cfg(not(target_os = "android"))]
+use tauri::{RunEvent, WindowEvent};
 
 /// 壳层托管状态：sidecar 子进程 + 退出标记 + 配置目录。
+#[cfg(not(target_os = "android"))]
 pub struct ShellState {
     pub child: Mutex<Option<std::process::Child>>,
     pub quitting: AtomicBool,
@@ -31,84 +43,126 @@ pub struct ShellState {
     pub runtime_dir: Option<std::path::PathBuf>,
 }
 
-fn main() {
-    tauri::Builder::default()
+pub fn main() {
+    let mut builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    {
+        builder = builder.invoke_handler(tauri::generate_handler![
+            android_gateway::gateway_status,
+            android_gateway::start_gateway,
+            android_gateway::stop_gateway,
+            android_gateway::toggle_gateway,
+            android_gateway::android_debug_log_status,
+            android_gateway::android_set_debug_log,
+        ]);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
         // 单实例锁必须第一个注册：二次双击 → 聚焦已有窗口
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             show_main_window(app);
-        }))
+        }));
+    }
+    builder
         .setup(|app| {
-            let app_handle = app.handle().clone();
-
-            // 首次显示前调整，避免大窗口闪现；服务尚未就绪也要显示等待/错误页。
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(error) = window_layout::fit_initial_window(&window) {
-                    eprintln!("initial window layout: {error}");
+            #[cfg(target_os = "android")]
+            {
+                let (config_path, desired_state_path) =
+                    android_gateway::prepare_paths(app.handle())?;
+                let android_state =
+                    android_gateway::AndroidGatewayState::new(config_path, desired_state_path);
+                // A user who explicitly left the gateway running gets a best-effort
+                // process restoration. First install remains stopped because the
+                // desired-state marker is created only after an explicit start.
+                if android_state.wants_running() {
+                    if let Err(error) = android_state.start() {
+                        eprintln!("Android gateway restore failed: {error}");
+                    }
                 }
-                window.show()?;
-            }
-
-            // Standalone builds release their embedded daemon/UI before config or spawn.
-            #[cfg(feature = "standalone")]
-            let runtime_result = standalone::prepare_runtime().map(Some);
-            #[cfg(not(feature = "standalone"))]
-            let runtime_result: Result<Option<std::path::PathBuf>, String> = Ok(None);
-
-            let (runtime_dir, runtime_error) = match runtime_result {
-                Ok(runtime_dir) => (runtime_dir, None),
-                Err(error) => (None, Some(error)),
-            };
-
-            // 1. 配置目录（用户数据与可执行资源缓存分开存放）
-            let config_dir = sidecar::config_dir();
-
-            app.manage(ShellState {
-                child: Mutex::new(None),
-                quitting: AtomicBool::new(false),
-                config_dir: config_dir.clone(),
-                runtime_dir,
-            });
-
-            // 2. 托盘
-            build_tray(&app_handle)?;
-
-            if let Some(error) = runtime_error {
-                sidecar::set_status(&app_handle, &error);
+                app.manage(android_state);
                 return Ok(());
             }
+            #[cfg(not(target_os = "android"))]
+            {
+                let app_handle = app.handle().clone();
 
-            let config_path = match sidecar::seed_config(&config_dir) {
-                Ok(path) => path,
-                Err(error) => {
-                    sidecar::set_status(
-                        &app_handle,
-                        &format!("配置目录不可用：{error}（{}）", config_dir.display()),
-                    );
+                // 首次显示前调整，避免大窗口闪现；服务尚未就绪也要显示等待/错误页。
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Err(error) = window_layout::fit_initial_window(&window) {
+                        eprintln!("initial window layout: {error}");
+                    }
+                    window.show()?;
+                }
+
+                // Standalone builds release their embedded daemon/UI before config or spawn.
+                #[cfg(feature = "standalone")]
+                let runtime_result = standalone::prepare_runtime().map(Some);
+                #[cfg(not(feature = "standalone"))]
+                let runtime_result: Result<Option<std::path::PathBuf>, String> = Ok(None);
+
+                let (runtime_dir, runtime_error) = match runtime_result {
+                    Ok(runtime_dir) => (runtime_dir, None),
+                    Err(error) => (None, Some(error)),
+                };
+
+                // 1. 配置目录（用户数据与可执行资源缓存分开存放）
+                let config_dir = sidecar::config_dir();
+
+                app.manage(ShellState {
+                    child: Mutex::new(None),
+                    quitting: AtomicBool::new(false),
+                    config_dir: config_dir.clone(),
+                    runtime_dir,
+                });
+
+                // 2. 托盘
+                build_tray(&app_handle)?;
+
+                if let Some(error) = runtime_error {
+                    sidecar::set_status(&app_handle, &error);
                     return Ok(());
                 }
-            };
 
-            // 3. sidecar 拉起 + 就绪轮询（服务身份及版本通过 → 切入控制台 UI）
-            if let Err(e) = sidecar::start(app_handle.clone(), &config_path) {
-                sidecar::set_status(&app_handle, &e);
-                #[cfg(not(feature = "standalone"))]
-                sidecar::wait_for_daemon(app_handle);
+                let config_path = match sidecar::seed_config(&config_dir) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        sidecar::set_status(
+                            &app_handle,
+                            &format!("配置目录不可用：{error}（{}）", config_dir.display()),
+                        );
+                        return Ok(());
+                    }
+                };
+
+                // 3. sidecar 拉起 + 就绪轮询（服务身份及版本通过 → 切入控制台 UI）
+                if let Err(e) = sidecar::start(app_handle.clone(), &config_path) {
+                    sidecar::set_status(&app_handle, &e);
+                    #[cfg(not(feature = "standalone"))]
+                    sidecar::wait_for_daemon(app_handle);
+                }
+                Ok(())
             }
-            Ok(())
         })
-        .on_window_event(|window, event| {
-            // 关窗 → 最小化到托盘（退出标记置位时才真退）
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let quitting = window.state::<ShellState>().quitting.load(Ordering::SeqCst);
-                handle_window_close_request(window, api, quitting);
+        .on_window_event(|_window, _event| {
+            #[cfg(not(target_os = "android"))]
+            {
+                // 关窗 → 最小化到托盘（退出标记置位时才真退）
+                if let WindowEvent::CloseRequested { api, .. } = _event {
+                    let quitting = _window
+                        .state::<ShellState>()
+                        .quitting
+                        .load(Ordering::SeqCst);
+                    handle_window_close_request(_window, api, quitting);
+                }
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| match event {
+        .run(|_app, event| match event {
             // 退出兜底：无论从托盘/关窗路径来，子进程统一在此收尸
+            #[cfg(not(target_os = "android"))]
             RunEvent::Exit => {
-                let child = app.state::<ShellState>().child.lock().unwrap().take();
+                let child = _app.state::<ShellState>().child.lock().unwrap().take();
                 if let Some(mut child) = child {
                     sidecar::shutdown(&mut child);
                 }
@@ -117,6 +171,7 @@ fn main() {
         });
 }
 
+#[cfg(not(target_os = "android"))]
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -125,6 +180,7 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn handle_window_close_request<R: tauri::Runtime>(
     window: &tauri::Window<R>,
     api: &tauri::CloseRequestApi,
@@ -136,6 +192,7 @@ fn handle_window_close_request<R: tauri::Runtime>(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn handle_tray_menu_event(app: &tauri::AppHandle, menu_id: &str) {
     match menu_id {
         "show" => show_main_window(app),
@@ -155,6 +212,7 @@ fn handle_tray_menu_event(app: &tauri::AppHandle, menu_id: &str) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show_item = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
     let config_item = MenuItem::with_id(app, "open_config", "打开配置目录", true, None::<&str>)?;

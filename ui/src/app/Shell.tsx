@@ -1,13 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Boxes, DoorOpen, FlaskConical, LayoutDashboard, Route, type LucideIcon } from 'lucide-react';
+import { BarChart3, Boxes, DoorOpen, FlaskConical, LayoutDashboard, Route, Settings, type LucideIcon } from 'lucide-react';
 import { getBase, fetchHealth } from '../api';
 import { clearAdminSession, getAdminSession, setAuthErrorHandler } from '../api/admin';
 import { ConflictBanner } from '../components/ConflictBanner';
 import { AdminLogin } from '../components/AdminLogin';
 import { FeedbackProvider, useConflictControl, useToast } from './feedback';
 import { useI18n } from '../i18n';
-import { ThemeToggle } from '../components/ui/ThemeToggle';
-import { LangToggle } from '../components/ui/LangToggle';
 import { CommandPalette } from '../components/commands/CommandPalette';
 import pkg from '../../package.json';
 import { useAuth } from '../auth/AuthContext';
@@ -15,9 +13,9 @@ import './shell.css';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
 
-export type Route = 'home' | 'dashboard' | 'providers' | 'endpoints' | 'routing' | 'playground';
+export type Route = 'home' | 'dashboard' | 'providers' | 'endpoints' | 'routing' | 'playground' | 'stats' | 'settings';
 
-const ROUTES: readonly Route[] = ['home', 'dashboard', 'providers', 'endpoints', 'routing', 'playground'];
+const ROUTES: readonly Route[] = ['home', 'dashboard', 'providers', 'endpoints', 'routing', 'playground', 'stats', 'settings'];
 const DEFAULT_ROUTE: Route = 'dashboard';
 
 function parseHash(hash: string): Route {
@@ -93,12 +91,14 @@ interface ShellProps {
   children: ReactNode;
 }
 
-const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navDashboard' | 'shell.navProviders' | 'entry.tab' | 'shell.navRouting' | 'shell.navPlayground'; href: string; icon: LucideIcon }> = [
+const NAV: ReadonlyArray<{ route: Route; labelKey: 'shell.navDashboard' | 'shell.navProviders' | 'entry.tab' | 'shell.navRouting' | 'shell.navPlayground' | 'shell.navStats' | 'shell.navSettings'; href: string; icon: LucideIcon }> = [
   { route: 'dashboard', labelKey: 'shell.navDashboard', href: '#/dashboard', icon: LayoutDashboard },
   { route: 'providers', labelKey: 'shell.navProviders', href: '#/providers', icon: Boxes },
   { route: 'endpoints', labelKey: 'entry.tab', href: '#/endpoints', icon: DoorOpen },
   { route: 'routing', labelKey: 'shell.navRouting', href: '#/routing', icon: Route },
   { route: 'playground', labelKey: 'shell.navPlayground', href: '#/playground', icon: FlaskConical },
+  { route: 'stats', labelKey: 'shell.navStats', href: '#/stats', icon: BarChart3 },
+  { route: 'settings', labelKey: 'shell.navSettings', href: '#/settings', icon: Settings },
 ];
 
 /** design/01 §5 版式 × TeamSense 导航激活态（A6）× 方案 B 色 */
@@ -122,9 +122,15 @@ function ShellFrame({ route, children }: ShellProps) {
   // （极简：避免逐页接线重拉逻辑；local 态服务端不产 401，回调永不触发）。
   const [needLogin, setNeedLogin] = useState(false);
   const [contentVersion, setContentVersion] = useState(0);
+  const [, setApiBaseVersion] = useState(0);
   useEffect(() => {
     setAuthErrorHandler(() => setNeedLogin(true));
-    return () => setAuthErrorHandler(null);
+    const onApiBaseChange = () => setApiBaseVersion((version) => version + 1);
+    window.addEventListener('jev-api-base-change', onApiBaseChange);
+    return () => {
+      setAuthErrorHandler(null);
+      window.removeEventListener('jev-api-base-change', onApiBaseChange);
+    };
   }, []);
 
   const daemonLabel =
@@ -165,20 +171,10 @@ function ShellFrame({ route, children }: ShellProps) {
               className="app-shell__brand flex items-center gap-2 font-semibold"
               style={{ fontSize: 'var(--text-base)', color: 'var(--text)' }}
             >
-              <span
-                className="inline-flex h-6 w-6 shrink-0 items-center justify-center font-bold text-white"
-                style={{
-                  background: 'var(--accent)',
-                  borderRadius: 'var(--radius)',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
-                J
-              </span>
               <span>Jev-Switch</span>
             </a>
             <nav aria-label="primary" className="app-shell__nav flex min-w-0 items-center gap-1">
-              {NAV.filter((item) => !auth.isReadOnly || item.route === 'dashboard' || item.route === 'playground').map((item) => {
+              {NAV.filter((item) => !auth.isReadOnly || item.route === 'dashboard' || item.route === 'playground' || item.route === 'stats' || item.route === 'settings').map((item) => {
                 const active =
                   item.route === route || (item.route === 'dashboard' && route === 'home');
                 return (
@@ -244,8 +240,6 @@ function ShellFrame({ route, children }: ShellProps) {
               />
               <span className="tabular">v{pkg.version}</span>
             </span>
-            <ThemeToggle />
-            <LangToggle />
           </div>
         </div>
       </header>
@@ -256,7 +250,7 @@ function ShellFrame({ route, children }: ShellProps) {
       )}
 
       {/* 页面 */}
-      <main key={`${route}:${contentVersion}`} className="app-shell__main min-h-0 flex-1">{children}</main>
+      <main key={`${route}:${contentVersion}`} className={`app-shell__main min-h-0 flex-1${route === 'routing' ? ' app-shell__main--routing' : ''}`}>{children}</main>
 
       {/* footer：只留 endpoint 一项（可 hover 看全），去掉 file=truth 等内部术语 */}
       <footer className="app-shell__footer shrink-0 border-t" style={{ borderColor: 'var(--border)' }}>

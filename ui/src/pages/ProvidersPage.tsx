@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
 import {
   getAdminMode,
   listProviders,
@@ -14,6 +15,8 @@ import { ProviderCard } from '../components/providers/ProviderCard';
 import { AddProviderPanel } from '../components/providers/AddProviderPanel';
 import { ConfigFileSync } from '../components/providers/ConfigFileSync';
 import { useI18n, type MessageKey } from '../i18n';
+import { getAdminActivity } from '../api/access';
+import { summarizeProviderAvailability } from './providerAvailability';
 
 const toWrite = (p: AdminProvider): AdminProviderWrite => ({
   id: p.id,
@@ -36,6 +39,8 @@ export function ProvidersPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [availabilityEvents, setAvailabilityEvents] = useState<Awaited<ReturnType<typeof getAdminActivity>>['events']>([]);
   const [addTab, setAddTab] = useState<'form' | 'toml'>('form');
   const { toast } = useToast();
   const { t } = useI18n();
@@ -66,6 +71,7 @@ export function ProvidersPage() {
 
   useEffect(() => {
     load();
+    getAdminActivity(0, 50).then((result) => setAvailabilityEvents(result.events)).catch(() => setAvailabilityEvents([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -194,6 +200,13 @@ export function ProvidersPage() {
 
   const enabledCount = providers.filter((p) => p.enabled).length;
   const mode = getAdminMode();
+  const visibleProviders = useMemo(() => {
+    const query = filter.trim().toLocaleLowerCase();
+    if (!query) return providers;
+    return providers.filter((provider) => [provider.id, provider.name, provider.account, provider.kind, provider.base, ...(provider.models ?? [])]
+      .some((value) => value?.toLocaleLowerCase().includes(query)));
+  }, [filter, providers]);
+  const availability = useMemo(() => summarizeProviderAvailability(providers.map((provider) => provider.id), availabilityEvents), [availabilityEvents, providers]);
 
   const card: React.CSSProperties = {
     background: 'var(--surface)',
@@ -245,6 +258,13 @@ export function ProvidersPage() {
         </button>
       </div>
 
+      {!loading && !error && providers.length > 0 && <label className="mb-4 flex min-h-10 max-w-xl items-center gap-2 border px-3" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)' }}>
+        <Search size={16} aria-hidden="true" style={{ color: 'var(--text-muted)' }} />
+        <span className="sr-only">{t('providers.search' as MessageKey)}</span>
+        <input autoFocus type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t('providers.search' as MessageKey)} aria-label={t('providers.search' as MessageKey)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+        <span className="tabular text-xs" style={{ color: 'var(--text-subtle)' }}>{visibleProviders.length}/{providers.length}</span>
+      </label>}
+
       <div className="space-y-4">
         {showAdd && (
           <AddProviderPanel
@@ -294,11 +314,12 @@ export function ProvidersPage() {
             </div>
           </section>
         ) : (
-          <div className="provider-grid">
-            {providers.map((p) => (
+          visibleProviders.length === 0 ? <p className="py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>{t('providers.noSearchMatches' as MessageKey)}</p> : <div className="provider-grid">
+            {visibleProviders.map((p) => (
               <ProviderCard
                 key={p.id}
                 provider={p}
+                availability={availability[p.id]}
                 busy={busyId === p.id}
                 onToggle={(prov, en) => void onToggle(prov, en)}
                 onReplaceKey={onReplaceKey}

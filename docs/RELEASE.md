@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-09-30，GitHub 正式 Release 为 [`v0.4.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.4.0)，包含 Windows 桌面包、Linux/Windows CLI 和 Docker 镜像。v0.4.0 已通过 CI、Windows 原生隔离测试以及维护者对便携/Standalone 核心路径的人工验收；MSI/NSIS、Android 实验性 APK、全链路性能仍未覆盖。当前四个应用版本字段与锁文件均为 `0.4.0`。仓库另有历史 tag `v0.5.0-stable`、`v0.1.0`、`v0.2.0` 与 `v0.3.0`，用于历史追溯；它们不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
+截至 2026-09-30，GitHub 正式 Release 为 [`v0.4.1`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.4.1)，包含 Windows 桌面包、Linux/Windows CLI 和 Docker 镜像。v0.4.1 在 v0.4.0 基础上加入路由/演练场/设置/统计/Provider 可视化迭代、Android daemon library 与 arm64 APK 构建路径；便携/Standalone 桌面核心路径和官方 TypeSafe 调用仍以 v0.4.0 人工证据为基础，Android APK 尚未安装或真机验收，原生 service/tile/通知和全链路性能仍未覆盖。当前四个应用版本字段与锁文件均为 `0.4.1`。仓库另有历史 tag `v0.5.0-stable`、`v0.1.0`、`v0.2.0`、`v0.3.0` 与 `v0.4.0`，用于历史追溯；它们不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
@@ -15,12 +15,12 @@
 - `rs/Cargo.toml` 的 `[workspace.package].version`
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
-每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。v0.4.0 在 v0.3.0 基础上整理高频 UI 图标、provider probe 并发、共享 health 状态、遥测后台调度和原生验收脚本；维护者已人工确认便携/Standalone 桌面核心路径和官方 TypeSafe 调用，MSI/NSIS、Android 实验性 APK、TUI、OpenRouter live 与全链路性能仍按对应核验边界确认。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。v0.4.1 在 v0.4.0 基础上整理高频 UI 图标、provider probe 并发、共享 health 状态、遥测后台调度、Routing/Playground/Settings/Statistics 体验、Android daemon library 与实验性 APK 构建路径；便携/Standalone 桌面核心路径和官方 TypeSafe 调用仍有 v0.4.0 人工证据，Android APK、原生 service/tile/通知、TUI、OpenRouter live 与全链路性能仍按对应核验边界确认。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
 
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.4.0；统一修改上述四处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.4.1；统一修改上述四处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui
@@ -105,7 +105,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 
 若本轮确实要验安装器，在便携运行与页面/路由检查完成后使用同一构建的候选 MSI 升级，并在这一处处理 Windows UAC。确认 ProductCode/UpgradeCode、安装目录与 AppData migration；不要为每次 UI 或 daemon 修复重复安装。MSI 成功后，按同一 request ID / SQLite / 页面检查再抽查一次即可。
 
-有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.4.0` 的 CLI 自动门禁、local daemon smoke、Windows 原生隔离测试和维护者人工桌面验收必须分别记录；安装器、Android 和全链路性能仍开放，不能写成已验证能力。
+有一项失败时，记录结果并停止本次发布验收；优先在便携运行目录修复和复测。只有安装器专属问题才重新安排一次 MSI 验收。`v0.4.1` 的 CLI 自动门禁、local daemon smoke、Windows 原生隔离测试和维护者人工桌面验收必须分别记录；Android APK 构建成功不等于安装、service/tile/通知或真机生命周期已验证，安装器和全链路性能仍开放，不能写成已验证能力。
 
 ---
 
@@ -126,12 +126,12 @@ Actions → Release → Run workflow（`workflow_dispatch`）。
 | Linux / Windows CLI | Release 页 `jev-switch-cli-<版本>-<平台>` 附件；Termux/Android arm64 在设备本机 `cargo install --path rs/crates/jev-switch-cli --locked` |
 | Docker | `ghcr.io/<owner>/<repo>:<版本>` 与 `:latest`（owner 自动转小写） |
 
-发布页自动填入实际的小写镜像名称与版本，并提供带持久卷、管理员密码和 15 秒停机预算的启动命令。下面以本次 `0.4.0` 为例；部署其他版本时替换该值，并替换 `<owner>/<repo>`，再设置自己的 `JEV_ADMIN_PASSWORD`：
+发布页自动填入实际的小写镜像名称与版本，并提供带持久卷、管理员密码和 15 秒停机预算的启动命令。下面以本次 `0.4.1` 为例；部署其他版本时替换该值，并替换 `<owner>/<repo>`，再设置自己的 `JEV_ADMIN_PASSWORD`：
 
 ```bash
 : "${JEV_ADMIN_PASSWORD:?请先设置管理员密码}"
 export JEV_ADMIN_PASSWORD
-VERSION=0.4.0
+VERSION=0.4.1
 docker pull ghcr.io/<owner>/<repo>:${VERSION}
 docker run -d --name jev-switch \
   -p 127.0.0.1:11435:11435 \

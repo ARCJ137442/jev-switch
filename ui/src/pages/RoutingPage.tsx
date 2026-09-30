@@ -203,30 +203,24 @@ export function RoutingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
-  return <div className="w-full min-w-0 px-4 py-4 sm:px-6 lg:px-8">
-    <h1 className="mb-5 font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>{t('shell.navRouting')}</h1>
-    <div>
-      <div className="dag-tools">
-          <span aria-live="polite">{saving ? t('common.saving') : dirty ? t('routing.unsaved') : t('routing.synced')}</span>
-          <span className="dag-help">{t('routing.edges', { n: doc.routes.length })}</span>
-          <button className="dag-icon-button" type="button" disabled={!history.current.canUndo || loading} onClick={undo} title={`${t('dag.undo')} (Ctrl+Z)`} aria-label={t('dag.undo')}><Undo2 size={16} aria-hidden="true" /></button>
-          <button className="dag-icon-button" type="button" disabled={!history.current.canRedo || loading} onClick={redo} title={`${t('dag.redo')} (Ctrl+Shift+Z)`} aria-label={t('dag.redo')}><Redo2 size={16} aria-hidden="true" /></button>
-          <button className="dag-icon-button" type="button" aria-pressed={showTable} onClick={() => setShowTable(v => !v)} title={t('routing.table')} aria-label={t('routing.table')}><Table2 size={16} aria-hidden="true" /></button>
-          <button className="dag-icon-button" type="button" disabled={dirty || saving || loading} onClick={() => void load()} title={t('common.refresh')} aria-label={t('common.refresh')}><RefreshCw size={15} aria-hidden="true" /></button>
-          {dirty && !saving && <button className="dag-icon-button" type="button" onClick={() => { changeRoutes(baseline); setSelected(null); }} title={t('dag.discard')} aria-label={t('dag.discard')}><RotateCcw size={16} aria-hidden="true" /></button>}
-        </div>
-        {saveError && <div className="dag-tools" role="alert" style={{ color: 'var(--danger)' }}><span>{saveError}</span>{saveFailed && <button type="button" onClick={() => setSaveFailed(false)}>{t('common.retry')}</button>}</div>}
-        {loading ? <p className="py-8" role="status">{t('entry.loading')}</p> : loadError ? <div className="dag-tools" role="alert"><span>{loadError}</span><button type="button" onClick={() => void load()}>{t('common.retry')}</button></div> : <>
-          <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} errors={errors} liveEdges={liveEdges}
-            onSelect={setSelected} onCreate={createEdge}
-            onPatch={(key, patch) => patchAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key), patch)}
-            onDelete={key => removeAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key))}
-            onDeleteNode={id => { changeRoutes(history.current.current.routes.filter(r => r.left !== id && r.right !== id)); setSelected(null); }}
-            onInsertNode={insertNode}
-            onMove={(id, position) => commit({ ...history.current.current, positions: { ...history.current.current.positions, [id]: position } })}
-            onResetLayout={() => commit({ ...history.current.current, positions: {} })} />
-          {showTable && <div className="mt-4"><RouteTableForm routes={doc.routes} errorEdges={errors} onPatchAt={patchAt} onDeleteAt={removeAt} onAdd={() => changeRoutes([...history.current.current.routes, normalizeRoute({ left: entries[0]?.id ?? '', right: providers[0]?.id ?? '', match: 'exact', priority: 10 })])} /></div>}
-        </>}
+  return <div className="routing-page">
+    <div className="routing-page__status" aria-live="polite">
+      <span className="inline-flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${saving ? 'animate-pulse' : ''}`} style={{ background: saveError || loadError ? 'var(--danger)' : dirty ? 'var(--warning)' : 'var(--success)' }}/>{saving ? t('common.saving') : dirty ? t('routing.unsaved') : t('routing.synced')}<span style={{ color: 'var(--text-subtle)' }}>{t('routing.edges', { n: doc.routes.length })}</span></span>
+      <button className="dag-icon-button" type="button" disabled={!history.current.canUndo || loading} onClick={undo} title={`${t('dag.undo')} (Ctrl+Z)`} aria-label={t('dag.undo')}><Undo2 size={16} aria-hidden="true" /></button>
+      <button className="dag-icon-button" type="button" disabled={!history.current.canRedo || loading} onClick={redo} title={`${t('dag.redo')} (Ctrl+Shift+Z)`} aria-label={t('dag.redo')}><Redo2 size={16} aria-hidden="true" /></button>
+      <button className="dag-icon-button" type="button" aria-pressed={showTable} onClick={() => setShowTable(v => !v)} title={t('routing.table')} aria-label={t('routing.table')}><Table2 size={16} aria-hidden="true" /></button>
+      <button className="dag-icon-button" type="button" disabled={dirty || saving || loading} onClick={() => void load()} title={t('common.refresh')} aria-label={t('common.refresh')}><RefreshCw size={15} aria-hidden="true" /></button>
+      {dirty && !saving && <button className="dag-icon-button" type="button" onClick={() => { changeRoutes(baseline); setSelected(null); }} title={t('dag.discard')} aria-label={t('dag.discard')}><RotateCcw size={16} aria-hidden="true" /></button>}
     </div>
+    {(saveError || loadError) && <div className="routing-page__error" role="alert"><span>{saveError ?? loadError}</span>{saveFailed && <button type="button" onClick={() => setSaveFailed(false)}>{t('common.retry')}</button>}</div>}
+    {loading ? <p className="routing-page__loading" role="status">{t('entry.loading')}</p> : loadError ? <button className="routing-page__loading" type="button" onClick={() => void load()}>{t('common.retry')}</button> : <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} errors={errors} liveEdges={liveEdges}
+      onSelect={setSelected} onCreate={createEdge}
+      onPatch={(key, patch) => patchAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key), patch)}
+      onDelete={key => removeAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key))}
+      onDeleteNode={id => { changeRoutes(history.current.current.routes.filter(r => r.left !== id && r.right !== id)); setSelected(null); }}
+      onInsertNode={insertNode}
+      onMove={(id, position) => commit({ ...history.current.current, positions: { ...history.current.current.positions, [id]: position } })}
+      onResetLayout={() => commit({ ...history.current.current, positions: {} })} />}
+    {showTable && <aside className="routing-page__table" aria-label={t('routing.table')}><header><strong>{t('routing.table')}</strong><button className="dag-icon-button" type="button" onClick={() => setShowTable(false)} aria-label={t('common.close')} title={t('common.close')}>×</button></header><div className="routing-page__table-body"><RouteTableForm routes={doc.routes} errorEdges={errors} onPatchAt={patchAt} onDeleteAt={removeAt} onAdd={() => changeRoutes([...history.current.current.routes, normalizeRoute({ left: entries[0]?.id ?? '', right: providers[0]?.id ?? '', match: 'exact', priority: 10 })])} /></div></aside>}
   </div>;
 }

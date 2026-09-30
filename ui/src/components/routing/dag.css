@@ -1,5 +1,15 @@
-.dag-workbench { position: relative; margin-top: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.routing-page { position: relative; display: flex; width: 100%; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: var(--surface); }
+.routing-page__status { position: absolute; z-index: 12; top: 10px; left: 12px; display: flex; max-width: calc(100% - 24px); align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow-sm); color: var(--text-muted); font-size: var(--text-xs); backdrop-filter: blur(10px); }
+.routing-page__error { position: absolute; z-index: 14; top: 56px; left: 12px; right: 12px; display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--danger-bg); color: var(--danger); font-size: var(--text-sm); }
+.routing-page__loading { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%,-50%); z-index: 4; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-muted); }
+.routing-page__table { position: absolute; z-index: 15; left: 12px; right: 12px; bottom: 12px; max-height: min(44%, 420px); overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-lg); }
+.routing-page__table > header { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.routing-page__table-body { max-height: calc(min(44dvh, 420px) - 42px); overflow: auto; padding: 8px; }
+.routing-page__table .route-table-wrap { overflow-x: auto; }
+.dag-workbench { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; margin-top: 0; border: 0; border-radius: 0; background: var(--surface); overflow: hidden; }
 .dag-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); }
+.dag-workbench > .dag-tools:first-child { position: absolute; z-index: 10; top: 10px; right: 12px; max-width: min(70%, 650px); border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow-sm); backdrop-filter: blur(10px); }
+.dag-workbench > .dag-tools:nth-child(2) { position: absolute; z-index: 10; top: 58px; right: 12px; max-width: min(70%, 520px); border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: var(--shadow-sm); }
 .dag-tools button,.dag-context button { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-hover); color: var(--text); }
 .dag-tools button:disabled { opacity: .45; cursor: default; }
 .dag-tools button.dag-icon-button { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; padding: 0; }
@@ -9,7 +19,7 @@
 .dag-tool-group output { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
 .dag-insert { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .dag-insert input { width: 190px; max-width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--radius); }
-.dag-viewport { position: relative; width: 100%; height: clamp(240px, 60dvh, 900px); overflow: auto; overscroll-behavior: contain; touch-action: none; background: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
+.dag-viewport { position: relative; width: 100%; height: auto; min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; touch-action: none; background: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
 .dag-world { position: relative; transform-origin: 0 0; user-select: none; }
 .dag-wires { position: absolute; inset: 0; overflow: visible; }
 .dag-wire { fill: none; stroke: var(--text-subtle); stroke-width: 2; opacity: .7; }
@@ -39,14 +49,14 @@
 .dag-models em { font-family: var(--font-sans); font-style: normal; color: var(--text-subtle); }
 .dag-port { position: absolute; z-index: 3; width: 15px; height: 15px; padding: 0; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); cursor: crosshair; }
 .dag-port:hover,.dag-port.snapped,.dag-port:focus-visible { background: var(--accent); outline: 5px solid color-mix(in srgb, var(--accent) 20%, transparent); }
-.dag-reconnect { position: absolute; z-index: 5; width: 23px; height: 23px; transform: translate(-50%,-50%); color: white; background: var(--accent); border: 2px solid var(--surface); border-radius: 50%; font-size: 13px; cursor: crosshair; }
+.dag-reconnect { position: absolute; z-index: 5; display: grid; place-items: center; width: 26px; height: 26px; transform: translate(-50%,-50%); color: white; background: var(--accent); border: 2px solid var(--surface); border-radius: 50%; cursor: crosshair; }
 .dag-context { position: absolute; z-index: 8; min-width: 160px; padding: 6px; display: grid; gap: 5px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
 .dag-context button { text-align: left; }
-.dag-inspector { padding: 12px; border-top: 1px solid var(--border); }
+.dag-inspector { position: absolute; z-index: 11; right: 12px; bottom: 12px; width: min(420px, calc(100% - 24px)); max-height: min(48%, 430px); overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: var(--shadow-lg); backdrop-filter: blur(10px); }
 .dag-inspector > div > .space-y-2\.5 { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
 .dag-inspector > div > .space-y-2\.5 > * { margin-top: 0; }
 .dag-empty { position: absolute; top: 45%; left: 10%; right: 10%; text-align: center; color: var(--text-muted); pointer-events: none; }
 @media (max-width: 700px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 420px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: minmax(0,1fr); } .dag-tool-group { flex-wrap: wrap; } }
-@media (max-height: 560px) { .dag-viewport { height: clamp(200px, 55dvh, 300px); } }
+@media (max-width: 560px) { .dag-workbench > .dag-tools:first-child { max-width: calc(100% - 24px); top: 58px; left: 12px; right: 12px; justify-content: flex-end; } .dag-workbench > .dag-tools:first-child .dag-help { display: none; } .dag-workbench > .dag-tools:nth-child(2) { top: 104px; left: 12px; right: 12px; max-width: none; } .routing-page__status { top: 10px; } .routing-page__table { left: 6px; right: 6px; bottom: 6px; max-height: 48%; } }
 @media (prefers-reduced-motion: reduce) { .dag-edge.live-success .dag-wire, .dag-edge.live-failure .dag-wire, .dag-edge.live-retry .dag-wire { animation: none; filter: none; } }

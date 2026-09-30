@@ -6,15 +6,17 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { getLang, setLang as coreSetLang, t, type Lang, type MessageKey } from './core';
+import { getLang, setLang as coreSetLang, setSystemLang as coreSetSystemLang, t, type Lang, type MessageKey } from './core';
 import { supportedLanguages } from './languages';
 
 export { t, initLang } from './core';
+export { getLangPreference } from './core';
 export type { Lang, MessageKey };
 
 interface I18nContextValue {
   lang: Lang;
   setLang: (next: Lang) => void;
+  setSystemLang: () => void;
   /** Legacy convenience API; cycles through currently registered languages. */
   toggleLang: () => void;
   t: (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -30,6 +32,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     coreSetLang(next);
     setLangState(getLang());
   }, []);
+  const setSystemLang = useCallback(() => {
+    coreSetSystemLang();
+    setLangState(getLang());
+  }, []);
 
   const toggleLang = useCallback(() => {
     const currentIndex = supportedLanguages.findIndex((item) => item.code === getLang());
@@ -38,8 +44,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [setLang]);
 
   const value = useMemo<I18nContextValue>(
-    () => ({ lang, setLang, toggleLang, t: (key, vars) => t(key, vars) }),
-    [lang, setLang, toggleLang],
+    () => ({ lang, setLang, setSystemLang, toggleLang, t: (key, vars) => t(key, vars) }),
+    [lang, setLang, setSystemLang, toggleLang],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
@@ -48,7 +54,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) {
-    return { lang: getLang(), setLang: coreSetLang, toggleLang: () => {}, t };
+    return { lang: getLang(), setLang: coreSetLang, setSystemLang: coreSetSystemLang, toggleLang: () => {}, t };
   }
   return ctx;
 }

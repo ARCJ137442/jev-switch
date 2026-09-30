@@ -86,7 +86,7 @@ export function EndpointPanel({ disabled = false, onChanged }: Props) {
     {disabled && <p className="entry-message entry-muted">{t('entry.saveRoutesFirst')}</p>}
     {error && <div role="alert" className="entry-message entry-error">{error}</div>}
     {loading ? <p role="status" className="entry-message">{t('entry.loading')}</p> : <>
-      {entries.length > 0 && <input type="search" className="entry-input" aria-label={t('entry.search')} placeholder={t('entry.search')} value={filter} onChange={e => setFilter(e.target.value)}/>}
+      {entries.length > 0 && <input autoFocus type="search" className="entry-input" aria-label={t('entry.search')} placeholder={t('entry.search')} value={filter} onChange={e => setFilter(e.target.value)}/>}
       {shown.length === 0 && !error && <p className="entry-message entry-muted">{t(entries.length ? 'entry.noMatches' : 'entry.empty')}</p>}
       <div className="entry-grid">{shown.map(ep => <article key={ep.id} className="entry-card" data-enabled={ep.enabled}>
         <header><h3>{ep.id}</h3><span className="entry-badge" data-enabled={ep.enabled}>{t(ep.enabled ? 'entry.enabled' : 'entry.disabled')}</span></header>

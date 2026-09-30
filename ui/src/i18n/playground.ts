@@ -75,6 +75,19 @@ export const playgroundEn = {
   'cmp.directUnavailable': 'Direct upstream testing is unavailable until the daemon endpoint is installed.',
   'cmp.daemonConnected': 'daemon connected',
   'cmp.daemonUnavailable': 'daemon unavailable',
+  'cmp.repeats': 'Runs per sample',
+  'cmp.batchCase': 'Test sample',
+  'cmp.repeatIndex': 'Run {n}',
+  'cmp.batchLimit': 'This batch would send more than {n} requests. Reduce models, samples, or repeats.',
+  'cmp.clearHistory': 'Clear local history',
+  'pg.importExamples': 'Import examples',
+  'pg.exportExamples': 'Export examples',
+  'pg.batchExamples': 'Select samples for a model × sample batch',
+  'pg.batchCountHint': '{models} models × {examples} samples; repeat count is configured with run controls.',
+  'pg.localSaveFailed': 'Could not save the Playground workspace in this browser.',
+  'pg.importTooLarge': 'Example file exceeds the 1 MB limit.',
+  'pg.importInvalid': 'This file is not a valid Jev-Switch example bundle.',
+  'pg.importDuplicate': 'An example with the same ID already exists. Rename it before importing.',
 } as const;
 
 export const playgroundZh = {
@@ -154,6 +167,19 @@ export const playgroundZh = {
   'cmp.directUnavailable': '当前 daemon 尚未提供直连上游测试接口。',
   'cmp.daemonConnected': 'daemon 已连接',
   'cmp.daemonUnavailable': 'daemon 不可用',
+  'cmp.repeats': 'Runs per sample',
+  'cmp.batchCase': '测试样例',
+  'cmp.repeatIndex': '第 {n} 次',
+  'cmp.batchLimit': '本批次将发送超过 {n} 个请求，请减少模型、样例或重复次数。',
+  'cmp.clearHistory': '清空本机历史',
+  'pg.importExamples': '导入样例',
+  'pg.exportExamples': '导出样例',
+  'pg.batchExamples': '选择要进行模型 × 样例批量测试的样例',
+  'pg.batchCountHint': '{models} 个模型 × {examples} 个样例；重复次数在运行控件中设置。',
+  'pg.localSaveFailed': '无法在此浏览器中保存演练场工作区。',
+  'pg.importTooLarge': '样例文件超过 1 MB 限制。',
+  'pg.importInvalid': '这不是有效的 Jev-Switch 样例包。',
+  'pg.importDuplicate': '已存在相同 ID 的样例，请先重命名再导入。',
 } as const;
 
 export type PlaygroundKey = keyof typeof playgroundEn;

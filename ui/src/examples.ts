@@ -11,8 +11,7 @@
  *
  * 注：chip 点击**不再切换**用户的 model 选择（UI-1）——payload.model 仅作初始默认值记录。
  *
- * 验收反馈新增（v2）：中文填字 ×2、2022 高考真题 ×2（源：jev-decision-lab 实测 12 题同源
- * ts/math-dataset.ts，单选→choice）、网页点击目标 ×1。
+ * 验收反馈新增（v2）：中文填字 ×2、数学题 ×2、网页点击目标 ×1。
  * 含空格/标点的对象键一律加引号（基线 6247e1c TS1005 教训）。
  */
 
@@ -253,23 +252,21 @@ export const EXAMPLES: ExamplePayload[] = [
     },
   },
 
-  /* ---------- 高考真题 · 2022 新高考 I 卷（jev-decision-lab 实测同源） ---------- */
+  /* ---------- 数学题 ---------- */
   {
-    id: 'gaokao-2022-q1',
-    label: '高考2022·集合',
-    description: '来自 jev-decision-lab 实测 12 题 · 2022 新高考 I 卷 Q1 集合，单选题转 choice',
+    id: 'mathematics-set-intersection',
+    label: '数学题·集合',
+    description: '集合交集单项选择题',
     payload: {
       model: DEFAULT_MODEL_LAYA,
       state: {
-        考试: '2022 年普通高等学校招生全国统一考试（新高考 I 卷）数学',
-        题号: 1,
         领域: '集合',
         题干: '若集合 M={x | √x < 4}，N={x | 3x≥1}，则 M∩N=',
       },
       questions: {
         答案: {
           type: 'choice',
-          instructions: '这是一道 2022 新高考数学单项选择题。请只依据 state 中的题干，从候选选项中选择唯一正确的一项，不要输出解题过程。',
+          instructions: '这是一道数学单项选择题。请只依据 state 中的题干，从候选选项中选择唯一正确的一项，不要输出解题过程。',
           criteria: {
             A: '{x | 0≤x<2}',
             B: '{x | 1/3≤x<2}',
@@ -281,21 +278,19 @@ export const EXAMPLES: ExamplePayload[] = [
     },
   },
   {
-    id: 'gaokao-2022-q5',
-    label: '高考2022·概率',
-    description: '来自 jev-decision-lab 实测 12 题 · 2022 新高考 I 卷 Q5 概率，单选题转 choice',
+    id: 'mathematics-coprime-probability',
+    label: '数学题·概率',
+    description: '从有限整数集中抽取互质数的概率选择题',
     payload: {
       model: DEFAULT_MODEL_LAYA,
       state: {
-        考试: '2022 年普通高等学校招生全国统一考试（新高考 I 卷）数学',
-        题号: 5,
         领域: '概率',
         题干: '从 2 至 8 的 7 个整数中随机取 2 个不同的数，则这 2 个数互质的概率为',
       },
       questions: {
         答案: {
           type: 'choice',
-          instructions: '这是一道 2022 新高考数学单项选择题。请只依据 state 中的题干，从候选选项中选择唯一正确的一项，不要输出解题过程。',
+          instructions: '这是一道数学单项选择题。请只依据 state 中的题干，从候选选项中选择唯一正确的一项，不要输出解题过程。',
           criteria: {
             A: '1/6',
             B: '1/3',

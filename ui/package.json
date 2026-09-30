@@ -1,6 +1,6 @@
 {
   "name": "jev-switch-ui",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "Jev-Switch MVP React UI — providers toggle + model select + test panel",
@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@tauri-apps/api": "2.11.1",
     "lucide-react": "^1.47.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { JevRequest, JevResponse, ModelEntry } from '../../api';
+import { getBase, type JevRequest, type JevResponse, type ModelEntry } from '../../api';
 import { SystemOneError, postSystemOne } from '../../api';
 import { AdminApiError, type AdminProvider } from '../../api/admin';
 import { invokeProviderModel } from '../../api/playground';
@@ -14,6 +14,7 @@ import './comparison.css';
 export type ComparisonTarget =
   | { key: string; kind: 'public'; modelId: string; discovered?: boolean }
   | { key: string; kind: 'direct'; providerId: string; providerLabel: string; modelId: string; discovered: boolean };
+export interface BatchCase { id: string; label: string; stateJson: string; questionsJson: string }
 
 type Status = 'idle' | 'queued' | 'loading' | 'ok' | 'error' | 'cancelled';
 interface Attempt {
@@ -27,9 +28,15 @@ interface Attempt {
   durationMs?: number;
   startedAt?: number;
   finishedAt?: number;
+  caseId?: string;
+  caseLabel?: string;
+  repeatIndex?: number;
+  matrixRun?: boolean;
+  batchId?: string;
 }
 interface QueueJobPayload { attempt: Attempt }
 interface RunResult { response: JevResponse; durationMs: number; finishedAt: number }
+interface PlannedRun { target: ComparisonTarget; snapshot: Snapshot; caseId: string; caseLabel: string; repeatIndex: number; matrixRun: boolean; batchId?: string }
 
 interface Props {
   stateJson: string;
@@ -43,6 +50,30 @@ interface Props {
   providersError: boolean;
   targets: ComparisonTarget[];
   onTargetsChange: (targets: ComparisonTarget[]) => void;
+  batchCases?: BatchCase[];
+}
+
+const MAX_REPEATS = 5;
+const MAX_BATCH_REQUESTS = 80;
+const MAX_SAVED_ATTEMPTS = 100;
+const historyStorageKey = () => `jev-playground-history-v1:${getBase() || location.origin}`;
+
+function readAttemptHistory(): Attempt[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(historyStorageKey()) ?? '[]');
+    if (!Array.isArray(stored)) return [];
+    return stored.filter((item): item is Attempt => {
+      if (!item || typeof item !== 'object') return false;
+      const attempt = item as Partial<Attempt>;
+      return typeof attempt.attemptId === 'string' && typeof attempt.requestId === 'string' &&
+        !!attempt.target && !!attempt.snapshot && typeof attempt.snapshot.fingerprint === 'string' &&
+        ['idle', 'queued', 'loading', 'ok', 'error', 'cancelled'].includes(String(attempt.status));
+    }).slice(-MAX_SAVED_ATTEMPTS).map((attempt) => attempt.status === 'queued' || attempt.status === 'loading'
+      ? { ...attempt, status: 'cancelled', error: undefined, finishedAt: Date.now() }
+      : attempt);
+  } catch {
+    return [];
+  }
 }
 
 const cardStyle: React.CSSProperties = {
@@ -106,6 +137,7 @@ export function ComparisonPanel({
   providersError,
   targets,
   onTargetsChange,
+  batchCases = [],
 }: Props) {
   const { t } = useI18n();
   const auth = useAuth();
@@ -117,11 +149,13 @@ export function ComparisonPanel({
   const [publicToAdd, setPublicToAdd] = useState('');
   const [providerToAdd, setProviderToAdd] = useState('');
   const [upstreamModel, setUpstreamModel] = useState('');
-  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [attempts, setAttempts] = useState<Attempt[]>(readAttemptHistory);
+  const [repeatCount, setRepeatCount] = useState(1);
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [formValid, setFormValid] = useState(true);
   const [runningCount, setRunningCount] = useState(0);
-  const attemptsRef = useRef<Attempt[]>([]);
+  const attemptsRef = useRef<Attempt[]>(attempts);
   const mountedRef = useRef(true);
   const MAX_CONCURRENT = 3;
 
@@ -173,11 +207,19 @@ export function ComparisonPanel({
   }, [createQueue]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(historyStorageKey(), JSON.stringify(attempts.slice(-MAX_SAVED_ATTEMPTS)));
+    } catch {
+      // The running comparison remains usable if browser storage is unavailable/full.
+    }
+  }, [attempts]);
+
+  useEffect(() => {
     if (!auth.isReadOnly) return;
     const directKeys = new Set(targets.filter((target) => target.kind === 'direct').map((target) => target.key));
     if (directKeys.size === 0) return;
     for (const attempt of attemptsRef.current) {
-      if (attempt.target.kind === 'direct') queueRef.current?.cancel(attempt.target.key, attempt.attemptId);
+      if (attempt.target.kind === 'direct') queueRef.current?.cancel(attempt.attemptId, attempt.attemptId);
     }
     const publicTargets = targets.filter((target) => target.kind === 'public');
     const publicAttempts = attemptsRef.current.filter((attempt) => attempt.target.kind === 'public');
@@ -187,17 +229,23 @@ export function ComparisonPanel({
     onTargetsChange(publicTargets);
   }, [auth.isReadOnly, attemptsRef, onTargetsChange, targets]);
 
-  const enqueue = useCallback((targetsToRun: ComparisonTarget[], snapshot: Snapshot, previous?: Attempt[]) => {
-    const requestId = previous?.[0]?.requestId ?? uid();
-    const nextAttempts = targetsToRun.map((target) => ({
+  const enqueue = useCallback((plans: PlannedRun[], previousAttemptId?: string) => {
+    const previous = previousAttemptId ? attemptsRef.current.find((attempt) => attempt.attemptId === previousAttemptId) : undefined;
+    const requestId = previous?.requestId ?? uid();
+    const nextAttempts = plans.map((plan) => ({
       requestId,
       attemptId: uid(),
-      target,
-      snapshot,
+      target: plan.target,
+      snapshot: plan.snapshot,
       status: 'queued' as const,
+      caseId: plan.caseId,
+      caseLabel: plan.caseLabel,
+      repeatIndex: plan.repeatIndex,
+      matrixRun: plan.matrixRun,
+      batchId: plan.batchId,
     }));
-    const retained = previous
-      ? attemptsRef.current.filter((attempt) => !targetsToRun.some((target) => target.key === attempt.target.key))
+    const retained = previousAttemptId
+      ? attemptsRef.current.filter((attempt) => attempt.attemptId !== previousAttemptId)
       : [];
     const next = [...retained, ...nextAttempts];
     attemptsRef.current = next;
@@ -205,7 +253,8 @@ export function ComparisonPanel({
     setValidationError(null);
     for (const attempt of nextAttempts) {
       queueRef.current?.enqueue({
-        key: attempt.target.key,
+        // Each attempt gets its own fence; cancel addresses this exact job.
+        key: attempt.attemptId,
         attemptId: attempt.attemptId,
         payload: { attempt },
         execute: async (signal) => {
@@ -227,19 +276,32 @@ export function ComparisonPanel({
       setValidationError(copy.noTargets);
       return;
     }
-    let snapshot: Snapshot;
+    const cases = batchCases.length ? batchCases : [{ id: 'current-input', label: copy.input, stateJson, questionsJson }];
+    const matrixRun = cases.length > 1 || repeatCount > 1;
+    if (runnableTargets.length * cases.length * repeatCount > MAX_BATCH_REQUESTS) {
+      setValidationError(copy.batchLimit.replace('{n}', String(MAX_BATCH_REQUESTS)));
+      return;
+    }
+    const plans: PlannedRun[] = [];
+    const batchId = matrixRun ? uid() : undefined;
     try {
-      snapshot = getSnapshot(stateJson, questionsJson);
+      for (const batchCase of cases) {
+        const snapshot = getSnapshot(batchCase.stateJson, batchCase.questionsJson);
+        for (let repeatIndex = 1; repeatIndex <= repeatCount; repeatIndex++) {
+          for (const target of runnableTargets) plans.push({ target, snapshot, caseId: batchCase.id, caseLabel: batchCase.label, repeatIndex, matrixRun, batchId });
+        }
+      }
     } catch (error) {
       setValidationError(error instanceof Error && error.message === 'questions' ? copy.invalidQuestions : copy.invalidState);
       return;
     }
     stopAll();
-    enqueue(runnableTargets, snapshot);
+    setSelectedAttemptId(null);
+    enqueue(plans);
   };
 
   const stopOne = (attempt: Attempt) => {
-    queueRef.current?.cancel(attempt.target.key, attempt.attemptId);
+    queueRef.current?.cancel(attempt.attemptId, attempt.attemptId);
   };
 
   function stopAll() {
@@ -248,13 +310,21 @@ export function ComparisonPanel({
 
   const retryOne = (attempt: Attempt) => {
     if (auth.isReadOnly && attempt.target.kind === 'direct') return;
-    enqueue([attempt.target], attempt.snapshot, [attempt]);
+    enqueue([{ target: attempt.target, snapshot: attempt.snapshot, caseId: attempt.caseId ?? 'retry', caseLabel: attempt.caseLabel ?? copy.input, repeatIndex: attempt.repeatIndex ?? 1, matrixRun: attempt.matrixRun ?? false, batchId: attempt.batchId }], attempt.attemptId);
   };
   const currentFingerprint = useMemo(() => {
     try { return JSON.stringify([JSON.parse(stateJson), JSON.parse(questionsJson)]); }
     catch { return null; }
   }, [stateJson, questionsJson]);
   const visibleAttempts = auth.isReadOnly ? attempts.filter((attempt) => attempt.target.kind === 'public') : attempts;
+  const matrixBatchId = [...visibleAttempts].reverse().find((attempt) => attempt.matrixRun)?.batchId;
+  const matrixBatchAttempts = matrixBatchId
+    ? visibleAttempts.filter((attempt) => attempt.matrixRun && attempt.batchId === matrixBatchId)
+    : [];
+  const matrixAttempts = matrixBatchAttempts.length > 0;
+  const matrixTargets = [...new Map(matrixBatchAttempts.map((attempt) => [attempt.target.key, attempt.target])).values()];
+  const matrixRows = [...new Map(matrixBatchAttempts.map((attempt) => [`${attempt.caseId}:${attempt.repeatIndex}`, { caseId: attempt.caseId, caseLabel: attempt.caseLabel, repeatIndex: attempt.repeatIndex }])).values()];
+  const selectedAttempt = visibleAttempts.find((attempt) => attempt.attemptId === selectedAttemptId) ?? null;
   const hasStaleResult = visibleAttempts.some((attempt) => attempt.snapshot.fingerprint !== currentFingerprint);
 
   const uniquePublicModels = useMemo(() => [...new Set(publicModels.map((model) => model.id))], [publicModels]);
@@ -381,17 +451,21 @@ export function ComparisonPanel({
           <button type="button" aria-label={`${copy.remove} ${targetLabel(target, copy)}`} onClick={() => onTargetsChange(targets.filter((item) => item.key !== target.key))} style={{ color: 'var(--text-muted)' }}>×</button>
         </span>)}
         <span className="ml-auto flex gap-2">
+          <label className="inline-flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>{copy.repeats}<input type="number" min={1} max={MAX_REPEATS} step={1} value={repeatCount} onChange={(event) => setRepeatCount(Math.max(1, Math.min(MAX_REPEATS, Math.floor(Number(event.target.value) || 1))))} aria-label={copy.repeats} className="h-8 w-14 border px-1 text-center tabular" style={codeStyle}/></label>
           <button type="button" onClick={runAll} disabled={targets.length === 0 || (inputMode === 'form' && !formValid)} className="font-semibold" style={{ ...buttonStyle, borderColor: 'var(--accent)', background: 'var(--accent)', color: '#fff' }}>{copy.runAll}{runningCount > 0 ? ` · ${runningCount}` : ''}</button>
           <button type="button" onClick={stopAll} disabled={runningCount === 0} style={buttonStyle}>{copy.cancelAll}</button>
+          {attempts.length > 0 && <button type="button" onClick={() => { stopAll(); attemptsRef.current = []; setAttempts([]); setSelectedAttemptId(null); }} style={buttonStyle}>{copy.clearHistory}</button>}
         </span>
       </div>
+      {matrixAttempts && <div className="comparison-matrix-wrap border-t" style={{ borderColor: 'var(--border)' }}><table className="comparison-matrix"><thead><tr><th>{copy.batchCase}</th>{matrixTargets.map((target) => <th key={target.key}>{targetLabel(target, copy)}</th>)}</tr></thead><tbody>{matrixRows.map((row) => <tr key={`${row.caseId}:${row.repeatIndex}`}><th>{row.caseLabel}{(row.repeatIndex ?? 1) > 1 ? ` · ${copy.repeatIndex.replace('{n}', String(row.repeatIndex ?? 1))}` : ''}</th>{matrixTargets.map((target) => { const attempt = matrixBatchAttempts.find((item) => item.caseId === row.caseId && item.repeatIndex === row.repeatIndex && item.target.key === target.key); return <td key={target.key}>{attempt ? <button type="button" className="comparison-matrix-cell" data-status={attempt.status} onClick={() => setSelectedAttemptId(attempt.attemptId)} aria-pressed={attempt.attemptId === selectedAttemptId}><span>{attempt.status === 'ok' ? copy.success : attempt.status === 'error' ? copy.failed : attempt.status === 'loading' || attempt.status === 'queued' ? copy.running : attempt.status === 'cancelled' ? copy.cancelled : copy.waiting}</span><small>{attempt.durationMs == null ? '—' : `${attempt.durationMs} ms`}</small></button> : '—'}</td>; })}</tr>)}</tbody></table></div>}
       {validationError && <div role="alert" className="px-4 py-2 text-sm" style={{ color: 'var(--danger)', borderTop: '1px solid var(--border)' }}>{validationError}</div>}
       {hasStaleResult && <div role="status" className="px-4 py-2 text-sm" style={{ color: 'var(--warning)', borderTop: '1px solid var(--border)' }}>{copy.inputChanged}</div>}
 
-      <div className="grid border-t border-border" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
-        {visibleAttempts.map((attempt) => <AttemptCard key={attempt.target.key} attempt={attempt} copy={copy} onCancel={() => stopOne(attempt)} onRetry={() => retryOne(attempt)} stale={attempt.snapshot.fingerprint !== currentFingerprint} />)}
+      {!matrixAttempts && <div className="grid border-t border-border" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
+        {visibleAttempts.map((attempt) => <AttemptCard key={attempt.attemptId} attempt={attempt} copy={copy} onCancel={() => stopOne(attempt)} onRetry={() => retryOne(attempt)} stale={attempt.snapshot.fingerprint !== currentFingerprint} />)}
         {visibleAttempts.length === 0 && <div className="px-4 py-8 text-center text-sm" style={{ gridColumn: '1 / -1', color: 'var(--text-subtle)' }}>{targets.length === 0 ? copy.noTargets : copy.ready}</div>}
-      </div>
+      </div>}
+      {matrixAttempts && selectedAttempt && <AttemptCard key={selectedAttempt.attemptId} attempt={selectedAttempt} copy={copy} onCancel={() => stopOne(selectedAttempt)} onRetry={() => retryOne(selectedAttempt)} stale={selectedAttempt.snapshot.fingerprint !== currentFingerprint} />}
     </section>
   );
 }

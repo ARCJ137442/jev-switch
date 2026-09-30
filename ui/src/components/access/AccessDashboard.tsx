@@ -677,7 +677,7 @@ function MyUsage({ copy }: { copy: Copy }) {
   );
 }
 
-export function AccessDashboard() {
+export function AccessDashboard({ compact = false }: { compact?: boolean }) {
   const { t } = useI18n();
   const auth = useAuth();
   const identityKey = auth.identity
@@ -697,11 +697,12 @@ export function AccessDashboard() {
   const tabs = [
     ['activity', 'access.activityTab'], ['tokens', 'access.tokensTab'], ['mine', 'access.myTab'],
   ] as const;
+  const visibleTabs = compact ? tabs.slice(0, 1) : tabs;
   return (
     <section className="fade-in mb-6 space-y-4 rounded-md p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
       <h2 className="font-semibold" style={{ fontSize: 'var(--text-xl)' }}>{copy('access.title')}</h2>
       <nav className="flex flex-wrap gap-2" aria-label={copy('access.title')}>
-        {tabs.filter(([id]) => auth.isReadOnly ? id === 'mine' : true).map(([id, key]) => (
+        {visibleTabs.filter(([id]) => auth.isReadOnly ? id === 'mine' : true).map(([id, key]) => (
           <button type="button" key={id} aria-pressed={pane === id} onClick={() => setPane(id)} style={tabStyle(pane === id)}>
             {copy(key)}
           </button>

@@ -25,6 +25,7 @@
 .app-shell__actions { grid-area: actions; justify-self: end; }
 .admin-login-overlay { overscroll-behavior: contain; }
 .app-shell__main { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.app-shell__main--routing { display: flex; overflow: hidden; }
 .app-shell__footer-inner { padding: 0.5rem 1.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-shell__toasts { width: min(20rem, calc(100vw - 1rem)); max-height: min(40vh, calc(100dvh - 1rem)); overflow-y: auto; }
 

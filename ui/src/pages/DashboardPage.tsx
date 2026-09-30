@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Boxes, FlaskConical, GitBranch, Network, Plus, RefreshCw, Server, Settings, type LucideIcon } from 'lucide-react';
+import { BarChart3, Boxes, FlaskConical, GitBranch, Network, Plus, RefreshCw, Server, Settings, type LucideIcon } from 'lucide-react';
 import {
   AdminApiError,
   getStatus,
@@ -12,11 +12,12 @@ import {
 } from '../api/admin';
 import { useServerStatus } from '../app/Shell';
 import { useI18n, type MessageKey } from '../i18n';
-import { InstanceSettings } from '../components/settings/InstanceSettings';
 import { AccessDashboard } from '../components/access/AccessDashboard';
 import { useAuth } from '../auth/AuthContext';
 import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
 import { probeProvidersConcurrently, type ProviderHealth } from './dashboardHealth';
+import { readAutoProviderProbe, SETTINGS_CHANGE_EVENT, toggleFromStorage } from '../settings/preferences';
+import { AndroidGatewayControl } from '../components/dashboard/AndroidGatewayControl';
 
 /**
  * Dashboard（v2.0 · 设计稿 docs/design/UI-REDESIGN-v2.md §2）
@@ -66,10 +67,24 @@ export function DashboardPage() {
   const [providers, setProviders] = useState<AdminProvider[] | null>(null);
   const [routes, setRoutes] = useState<Route[] | null>(null);
   const [health, setHealth] = useState<Record<string, ProviderHealth>>({});
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [autoProbe, setAutoProbe] = useState(readAutoProviderProbe);
   const [loadError, setLoadError] = useState<'auth' | 'failed' | null>(null);
   const [refresh, setRefresh] = useState(0);
   const copy = (key: string, vars?: Record<string, string | number>) => t(key as MessageKey, vars);
+
+  useEffect(() => {
+    const update = () => setAutoProbe(readAutoProviderProbe());
+    const onStorage = (event: StorageEvent) => {
+      const enabled = toggleFromStorage(event);
+      if (enabled !== null) setAutoProbe(enabled);
+    };
+    window.addEventListener(SETTINGS_CHANGE_EVENT, update);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(SETTINGS_CHANGE_EVENT, update);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   /* 初始加载 —— 首次挂载时拉取所有数据 */
   useEffect(() => {
@@ -110,7 +125,7 @@ export function DashboardPage() {
 
   /* 健康自动探测 —— 不再要求用户手点 Probe（审查报告 §功能盲区） */
   useEffect(() => {
-    if (!providers || providers.length === 0) return;
+    if (!autoProbe || !providers || providers.length === 0) return;
     let cancelled = false;
     let inFlight = false;
     let timer: number | undefined;
@@ -130,7 +145,7 @@ export function DashboardPage() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [providers]);
+  }, [autoProbe, providers]);
 
   const daemonUp = server.status === 'ok';
   const totalCount = providers?.length ?? 0;
@@ -173,6 +188,8 @@ export function DashboardPage() {
         {t('shell.navDashboard')}
       </h1>
 
+      <AndroidGatewayControl />
+
       {loadError && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3" style={{ ...card, color: 'var(--text-muted)' }}>
           <span>{copy(loadError === 'auth' ? 'overview.authRequired' : 'overview.loadFailed')}</span>
@@ -213,10 +230,10 @@ export function DashboardPage() {
               <SummaryMark icon={Network} />
               {status?.mode ? t('dash.modeLabel', { mode: status.mode }) : '—'}
             </span>
-            <button type="button" onClick={() => setSettingsOpen(true)} style={{ ...btn, color: 'var(--accent)', padding: '0.3rem 0.6rem' }}>
+            <a href="#/settings" style={{ ...btn, color: 'var(--accent)', padding: '0.3rem 0.6rem', textDecoration: 'none' }}>
               <Settings size={14} className="mr-1 inline-block align-[-2px]" aria-hidden="true" />
               {copy('instance.manage')}
-            </button>
+            </a>
           </div>
           <div style={{ ...cardLabel, fontFamily: 'var(--font-mono)' }} className="tabular">
             {status?.bind ?? '—'}
@@ -300,17 +317,12 @@ export function DashboardPage() {
         </a>
       </div>
 
-      <InstanceSettings
-        status={status}
-        onStatusChange={setStatus}
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-      />
-
       <RuntimeTelemetry />
 
-      {/* ② Token 管理、调用归属与真实活动数据仍留在 Dashboard 内，不增加主导航。 */}
-      <AccessDashboard />
+      <section className="flex flex-wrap items-center justify-between gap-3 border px-4 py-3" style={{ ...card, color: 'var(--text-muted)' }}>
+        <span>{t('stats.subtitle' as MessageKey)}</span>
+        <a href="#/stats" className="inline-flex min-h-9 items-center gap-2 border px-3 text-sm" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', color: 'var(--accent)' }}><BarChart3 size={15} aria-hidden="true"/>{t('dash.openStats' as MessageKey)}</a>
+      </section>
 
       {/* ③ 快捷操作 */}
       <div className="fade-in flex flex-wrap gap-3">

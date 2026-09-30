@@ -4,6 +4,7 @@ import {
   LANG_STORAGE_KEY,
   languageDictionaries,
   languageRegistry,
+  isLang,
   resolveLang,
   type Lang,
   type MessageKey,
@@ -12,6 +13,7 @@ import {
 export type { Lang, MessageKey };
 
 let lang: Lang = 'en';
+const SYSTEM_LANGUAGE = 'system';
 
 export function getLang(): Lang {
   return lang;
@@ -30,6 +32,27 @@ export function setLang(next: unknown): void {
   }
 }
 
+export function setSystemLang(): void {
+  lang = detectBrowserLang();
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, SYSTEM_LANGUAGE);
+  } catch {
+    /* Keep the detected locale for this session if storage is unavailable. */
+  }
+  if (typeof document !== 'undefined') document.documentElement.lang = languageRegistry[lang].htmlLang;
+}
+
+export function getLangPreference(): Lang | typeof SYSTEM_LANGUAGE {
+  try {
+    const stored = localStorage.getItem(LANG_STORAGE_KEY);
+    if (stored === SYSTEM_LANGUAGE) return SYSTEM_LANGUAGE;
+    if (isLang(stored)) return stored;
+  } catch {
+    /* Unavailable storage uses system detection. */
+  }
+  return SYSTEM_LANGUAGE;
+}
+
 /** Resolve a valid saved locale first, then a supported browser locale, then English. */
 export function initLang(): void {
   let stored: string | null = null;
@@ -38,7 +61,7 @@ export function initLang(): void {
   } catch {
     /* Ignore unavailable storage and detect from the browser. */
   }
-  lang = stored !== null ? resolveLang(stored) : detectBrowserLang();
+  lang = stored !== null && stored !== SYSTEM_LANGUAGE ? resolveLang(stored) : detectBrowserLang();
   if (typeof document !== 'undefined') {
     document.documentElement.lang = languageRegistry[lang].htmlLang;
   }

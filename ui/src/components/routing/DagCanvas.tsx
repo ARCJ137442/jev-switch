@@ -1,4 +1,5 @@
 import { useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { CornerUpLeft, CornerUpRight, Minus, Plus, RotateCcw } from 'lucide-react';
 import { edgeKey, type Route } from '../../api/admin';
 import { useI18n } from '../../i18n';
 import { EdgeInspector } from './EdgeInspector';
@@ -20,7 +21,7 @@ interface Props {
 }
 type WireDrag = { type: 'wire'; fixed: DagPort; moving: Point; key?: string; end: 'left' | 'right' };
 type NodeDrag = { type: 'node'; id: string; offset: Point; point: Point };
-type PanDrag = { type: 'pan'; start: Point; scroll: Point };
+type PanDrag = { type: 'pan'; start: Point; scroll: Point; button: number };
 type Drag = WireDrag | NodeDrag | PanDrag;
 const samePort = (a: DagPort | null, b: DagPort) => a?.id === b.id && a.direction === b.direction && a.model === b.model;
 
@@ -33,7 +34,7 @@ export function DagCanvas(props: Props) {
   const [drag, setDragState] = useState<Drag | null>(null);
   const [zoom, setZoom] = useState(1);
   const [nodeId, setNodeId] = useState('');
-  const [context, setContext] = useState<{ x: number; y: number; edge?: string; node?: string } | null>(null);
+  const [context, setContext] = useState<{ x: number; y: number; edge?: string; node?: string; background?: boolean } | null>(null);
   const marker = useId().replace(/:/g, '');
   const setDrag = (next: Drag | null) => { dragRef.current = next; setDragState(next); };
   const positions = drag?.type === 'node' ? { ...props.positions, [drag.id]: drag.point } : props.positions;
@@ -71,10 +72,10 @@ export function DagCanvas(props: Props) {
     <div className="dag-tools">
       <span className="dag-help">{t('dag.hint')}</span>
       <div className="dag-tool-group">
-        <button type="button" onClick={() => setZoom(z => Math.max(.4, Math.round((z - .1) * 10) / 10))} aria-label={t('dag.zoomOut')}>−</button>
+        <button className="dag-icon-button" type="button" onClick={() => setZoom(z => Math.max(.4, Math.round((z - .1) * 10) / 10))} aria-label={t('dag.zoomOut')} title={t('dag.zoomOut')}><Minus size={15}/></button>
         <output>{Math.round(zoom * 100)}%</output>
-        <button type="button" onClick={() => setZoom(z => Math.min(1.6, Math.round((z + .1) * 10) / 10))} aria-label={t('dag.zoomIn')}>+</button>
-        <button type="button" onClick={() => { props.onResetLayout(); setZoom(1); viewport.current?.scrollTo(0, 0); }}>{t('dag.layout')}</button>
+        <button className="dag-icon-button" type="button" onClick={() => setZoom(z => Math.min(2.4, Math.round((z + .1) * 10) / 10))} aria-label={t('dag.zoomIn')} title={t('dag.zoomIn')}><Plus size={15}/></button>
+        <button className="dag-icon-button" type="button" onClick={() => { props.onResetLayout(); setZoom(1); viewport.current?.scrollTo(0, 0); }} aria-label={t('dag.layout')} title={t('dag.layout')}><RotateCcw size={15}/></button>
       </div>
     </div>
     {selectedRoute && <div className="dag-tools">
@@ -86,7 +87,29 @@ export function DagCanvas(props: Props) {
       onPointerDown={event => {
         if ((event.target as HTMLElement).closest('button,input,select,[data-node],.dag-edge')) return;
         setContext(null); props.onSelect(null);
-        if (event.button === 1 || event.button === 0) { capture(event); setDrag({ type: 'pan', start: { x: event.clientX, y: event.clientY }, scroll: { x: viewport.current!.scrollLeft, y: viewport.current!.scrollTop } }); }
+        if (event.button === 1 || event.button === 2 || event.button === 0) { capture(event); setDrag({ type: 'pan', start: { x: event.clientX, y: event.clientY }, scroll: { x: viewport.current!.scrollLeft, y: viewport.current!.scrollTop }, button: event.button }); }
+      }}
+      onContextMenu={event => {
+        if ((event.target as HTMLElement).closest('[data-node],.dag-edge,button,input,select')) return;
+        event.preventDefault();
+        setContext({ ...point(event), background: true });
+      }}
+      onWheel={event => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        const view = viewport.current;
+        if (!view) return;
+        const oldZoom = zoom;
+        const nextZoom = Math.min(2.4, Math.max(.4, Math.round((oldZoom * (event.deltaY < 0 ? 1.1 : .9)) * 100) / 100));
+        if (nextZoom === oldZoom) return;
+        const bounds = view.getBoundingClientRect();
+        const x = event.clientX - bounds.left;
+        const y = event.clientY - bounds.top;
+        setZoom(nextZoom);
+        requestAnimationFrame(() => {
+          view.scrollLeft = (view.scrollLeft + x) * nextZoom / oldZoom - x;
+          view.scrollTop = (view.scrollTop + y) * nextZoom / oldZoom - y;
+        });
       }}
       onPointerMove={event => {
         const active = dragRef.current;
@@ -151,12 +174,12 @@ export function DagCanvas(props: Props) {
           {selectedRoute && (() => {
             const from = outputPort(selectedRoute), to = inputPort(selectedRoute); if (!from || !to) return null;
             return <>
-              <button className="dag-reconnect" type="button" style={{ left: from.x + 15, top: from.y }} aria-label={t('dag.reconnectSource')} onPointerDown={e => startWire(to, e, props.selected!, 'left')} onClick={e => { if (e.detail === 0) startWire(to, undefined, props.selected!, 'left'); }}>↗</button>
-              <button className="dag-reconnect" type="button" style={{ left: to.x - 15, top: to.y }} aria-label={t('dag.reconnectTarget')} onPointerDown={e => startWire(from, e, props.selected!, 'right')} onClick={e => { if (e.detail === 0) startWire(from, undefined, props.selected!, 'right'); }}>↘</button>
+              <button className="dag-reconnect" type="button" style={{ left: from.x + 15, top: from.y }} aria-label={t('dag.reconnectSource')} title={t('dag.reconnectSource')} onPointerDown={e => startWire(to, e, props.selected!, 'left')} onClick={e => { if (e.detail === 0) startWire(to, undefined, props.selected!, 'left'); }}><CornerUpLeft size={14}/></button>
+              <button className="dag-reconnect" type="button" style={{ left: to.x - 15, top: to.y }} aria-label={t('dag.reconnectTarget')} title={t('dag.reconnectTarget')} onPointerDown={e => startWire(from, e, props.selected!, 'right')} onClick={e => { if (e.detail === 0) startWire(from, undefined, props.selected!, 'right'); }}><CornerUpRight size={14}/></button>
             </>;
           })()}
           {context && <div className="dag-context" role="menu" style={{ left: context.x, top: context.y }}>
-            <button type="button" role="menuitem" onClick={() => { if (context.edge) props.onDelete(context.edge); if (context.node) props.onDeleteNode(context.node); setContext(null); }}>{context.node ? t('dag.deleteNode') : t('common.delete')}</button>
+            {context.background ? <button type="button" role="menuitem" onClick={() => { props.onResetLayout(); setZoom(1); viewport.current?.scrollTo(0, 0); setContext(null); }}>{t('dag.layout')}</button> : <button type="button" role="menuitem" onClick={() => { if (context.edge) props.onDelete(context.edge); if (context.node) props.onDeleteNode(context.node); setContext(null); }}>{context.node ? t('dag.deleteNode') : t('common.delete')}</button>}
             <button type="button" role="menuitem" onClick={() => setContext(null)}>{t('common.cancel')}</button>
           </div>}
         </div>

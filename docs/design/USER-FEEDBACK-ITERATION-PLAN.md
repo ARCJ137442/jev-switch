@@ -23,7 +23,7 @@
 - HTTP 管理 API 总开关与 gateway 调用 API 共用监听服务，但鉴权/路由按既有 API 契约区分；设置必须如实说明关闭管理 API 对 Providers、Entries、统计、设置同步的影响，并保留不会被误锁死的本机恢复路径。
 - Provider 可用性时间条只从持久化调用事件/真实探测记录派生；成功率、调用频率、窗口长度和缺失样本不可相互替代。不得将页面打开时一次 probe 描述为历史成功率。
 - APP 图标采用彩色但克制、可识别的 Jev/Jev-Switch 品牌表达，并复用同一主资产生成桌面窗口、任务栏、托盘和 Android launcher 图标；已有窗口/托盘标识时，UI 内不重复堆放装饰图标。
-- Android 是实验性 Tauri APK，面向没有 Termux 的普通手机用户；首版连接已有云端/局域网 Jev-Switch，不默认在手机上托管 daemon。GitHub CI 构建 APK 不等于 Android 适配或真机验收。
+- Android 是实验性 Tauri APK，面向没有 Termux 的普通手机用户；首版必须包含可在 Android 目标上编译的 daemon 核心，首次安装默认关闭网关，用户可在 APP、通知和 Quick Settings tile 启动/停止，并由 Android 生命周期托管。常驻保活通知默认开启，设置可关闭但必须提示后台回收风险；调试日志默认关闭，开启后只落盘生命周期和错误元数据。云端/局域网连接是可选模式，不能替代本机网关完整性。GitHub CI 构建 APK 不等于 Android 适配或真机验收。
 
 ## 实施拆分
 
@@ -58,8 +58,8 @@
 
 ## 当前状态入口
 
-- v0.4.0 人工验收更新见[发布核验记录](../verification/v0.4.0-release-candidate-2026-09-30.md)。
-- Android CI 与真机阶段见[Android 实验性计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
+- v0.4.0 桌面人工验收证据见[发布核验记录](../verification/v0.4.0-release-candidate-2026-09-30.md)；v0.4.1 当前人工验收清单见[发布核验记录](../verification/v0.4.1-release-candidate-2026-09-30.md)。
+- Android CI、进程内 daemon、前台服务和真机生命周期阶段见[Android 实验性计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - 相关系统契约见[HTTP 契约](../contracts/05-HTTP契约.md)、[入口网关修订](../contracts/07-入口网关修订.md)及当前[入口网关实施计划](ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
 
 — GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理

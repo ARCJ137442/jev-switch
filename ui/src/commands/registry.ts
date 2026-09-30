@@ -14,6 +14,8 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: 'endpoints', labelKey: 'command.endpoints', keywords: ['entry', 'model entry', '入口', '模型入口'], href: '#/endpoints' },
   { id: 'routing', labelKey: 'command.routing', keywords: ['dag', 'route', '路由', '路由图'], href: '#/routing' },
   { id: 'playground', labelKey: 'command.playground', keywords: ['test', 'compare', '演练场', '测试', '对比'], href: '#/playground' },
+  { id: 'stats', labelKey: 'command.stats', keywords: ['statistics', 'history', 'usage', '统计', '历史', '用量'], href: '#/stats' },
+  { id: 'settings', labelKey: 'command.settings', keywords: ['preferences', 'config', '设置', '偏好', '配置'], href: '#/settings' },
 ];
 
 export function filterCommands(commands: readonly CommandDefinition[], query: string, translate: (key: MessageKey) => string) {

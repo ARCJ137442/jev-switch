@@ -4,9 +4,11 @@ import { KeyForm } from './KeyForm';
 import { ProviderConfigForm, type ProviderConfigFields } from './ProviderConfigForm';
 import { ProbeButton } from './ProbeButton';
 import { useI18n, type MessageKey } from '../../i18n';
+import type { ProviderAvailability } from '../../pages/providerAvailability';
 
 interface Props {
   provider: AdminProvider;
+  availability?: ProviderAvailability;
   /** 该卡有 PUT 在途（toggle/key/delete） */
   busy: boolean;
   onToggle: (provider: AdminProvider, enabled: boolean) => void;
@@ -82,7 +84,7 @@ function Sparkline({ hist }: { hist: ReadonlyArray<{ ms: number; ok: boolean }> 
  * 一个接入配置一张卡：账号、地址、密钥、适配器 kind 与模型资源共同归属此卡。
  * 密钥只出掩码（契约 04 §2），卡片内不存在任何明文；说明文字全部走 title tooltip。
  */
-export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onClearKey, onUpdate, onDelete }: Props) {
+export function ProviderCard({ provider, availability, busy, onToggle, onReplaceKey, onClearKey, onUpdate, onDelete }: Props) {
   const [probe, setProbe] = useState<ProbeResponse | null>(null);
   const [hist, setHist] = useState<ReadonlyArray<{ ms: number; ok: boolean }>>([]);
   const [showKeyForm, setShowKeyForm] = useState(false);
@@ -285,6 +287,13 @@ export function ProviderCard({ provider, busy, onToggle, onReplaceKey, onClearKe
           </span>
         )}
         <Sparkline hist={hist} />
+      </div>
+
+      <div className="flex items-center gap-2 px-4 pb-2" title={t('providers.availabilityHint' as MessageKey, { n: availability?.samples.length ?? 0 })}>
+        <div className="flex h-2 w-20 shrink-0 gap-px overflow-hidden" role="img" aria-label={availability?.rate === null || !availability ? t('providers.availabilityUnknown' as MessageKey) : t('providers.availabilityRate' as MessageKey, { rate: availability.rate.toFixed(0), n: availability.samples.length })}>
+          {(availability?.samples.length ? availability.samples : Array.from({ length: 15 }, () => 'unknown' as const)).map((sample, index) => <span key={index} className="min-w-0 flex-1" style={{ background: sample === 'success' ? 'var(--success)' : sample === 'failure' ? 'var(--danger)' : 'var(--border)' }} />)}
+        </div>
+        <span className="tabular text-xs" style={{ color: availability?.rate == null ? 'var(--text-subtle)' : 'var(--text-muted)' }}>{availability?.rate == null ? '—' : `${availability.rate.toFixed(0)}%`}</span>
       </div>
 
       <div className="px-4 pb-2 text-xs" style={{ color: 'var(--text-subtle)' }}>{t('providers.probeOnly' as MessageKey)}</div>

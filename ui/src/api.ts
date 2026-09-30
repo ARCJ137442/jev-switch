@@ -47,7 +47,7 @@ export type {
  * 端口与 base 的单一来源（single source of truth）。
  * ui/src 内任何展示/请求端点都必须从这里派生，禁止再写死字面量。
  */
-import { resolveApiBase } from './api/base';
+import { readApiBasePreference, resolveApiBase } from './api/base';
 
 export const PORT = 11435;
 export const BASE = `http://127.0.0.1:${PORT}`;
@@ -59,7 +59,7 @@ export function getBase(): string {
     const fromGlobal = (window as unknown as { __JEV_BASE__?: string }).__JEV_BASE__;
     // 正式构建始终随托管源走，不能以11435端口猜测是否由daemon提供。
     // Vite开发环境仍默认指向本机daemon；显式运行时override优先。
-    return resolveApiBase(window.location.href, Boolean(import.meta.env?.DEV), fromGlobal, DEFAULT_BASE);
+    return resolveApiBase(window.location.href, Boolean(import.meta.env?.DEV), fromGlobal ?? readApiBasePreference(), DEFAULT_BASE);
   }
   return DEFAULT_BASE;
 }
