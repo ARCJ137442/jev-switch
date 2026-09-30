@@ -1,17 +1,17 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前候选版本为 `v0.5.0`；Release CI 将附 Windows、CLI、Docker 与 Android arm64 实验性资产。v0.5.0 的跨平台通用代码和自动门禁已验证，桌面原生 WebView、Android service/tile/通知和全链路性能仍按[发布候选核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)等待人工确认。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前发布版为 `v0.5.0`；Release 已附 Windows、CLI、Docker 与 Android arm64 实验性资产。v0.5.0 的跨平台通用代码和自动门禁已验证，桌面原生 WebView、Android service/tile/通知和全链路性能仍按[发布候选核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)等待人工确认。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-30。
 
-> **2026-09-30 adapter 状态：**当前源码和 `v0.4.1` Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
+> **2026-10-01 adapter 状态：**当前源码和 `v0.5.0` Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **历史发布快照（截至 2026-09-27）**：当时最新正式版为 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，包含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。对应 Release gate 的 Rust、UI、Tauri 与版本检查通过；验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。用户提供的 Tauri 截图整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；这些材料不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。当前版本与能力以本文后续的 2026-09-30 产品基线、[发布手册](RELEASE.md)及对应核验记录为准。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段（2026-09-30）**：正式版为 v0.4.1；v0.4.0 的便携/Standalone 桌面核心路径和官方 TypeSafe 调用已有维护者人工确认，v0.4.1 新增 UI/运行时和 Android arm64 APK 构建已自动验证。MSI/NSIS 新包、Android 安装/真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、[CLI 验证记录](verification/cli-phase1-2026-09-30.md)、[0.4.0 桌面核验记录](verification/v0.4.0-release-candidate-2026-09-30.md)和[0.4.1 发布核验记录](verification/v0.4.1-release-candidate-2026-09-30.md)。
+> **当前产品基线与维护阶段（2026-10-01）**：正式版为 v0.5.0；v0.5.0 的便携/Standalone、通用 UI/daemon、LAN opt-in、网关启停、统计分页/矩阵、Android arm64 APK 构建和 CI 已完成。MSI/NSIS 原生交互、Android 安装/真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、[v0.5.0 发布候选核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)。
 
 ## 核心定位（一句话）
 
@@ -28,17 +28,17 @@
 | [verification/standalone-lmstudio-e2e-2026-09-29.md](verification/standalone-lmstudio-e2e-2026-09-29.md) | 较早 Standalone 候选的冷启动、缓存、五页 WebView 与 LM Studio 本地 SystemOne UI 路由 trace | 该记录只属于文档顶部候选哈希；真实系统托盘点击和第二次双击聚焦仍待人工确认 |
 | [verification/typesafe-model-discovery-2026-09-29.md](verification/typesafe-model-discovery-2026-09-29.md) | TypeSafe `/v1/models` 实测与 daemon/UI 自动模型发现 | 管理时目录/鉴权检查；不替代推理调用 |
 | [verification/runtime-telemetry-2026-09-30.md](verification/runtime-telemetry-2026-09-30.md) | Dashboard 当前 daemon 会话遥测、流量曲线、adapter attempt latency 与资源卡的实现和验证边界 | Phase 1/2 已落地；Tauri WebView 精确资源仍未提供 |
-| [verification/openrouter-adapter-2026-09-30.md](verification/openrouter-adapter-2026-09-30.md) | OpenRouter 官方 OpenAPI 核对、adapter 实现、模型目录和 WireMock 验证边界 | v0.2.0–v0.4.0 已发布；真实 key/live call 未验证 |
+| [verification/openrouter-adapter-2026-09-30.md](verification/openrouter-adapter-2026-09-30.md) | OpenRouter 官方 OpenAPI 核对、adapter 实现、模型目录和 WireMock 验证边界 | 已随 v0.5.0 发布；真实 key/live call 未验证 |
 | [verification/system-theme-2026-09-30.md](verification/system-theme-2026-09-30.md) | light/dark/system 首帧解析、系统切换和主题控件回归 | 源码与 UI 门禁通过；原生系统主题截图仍待验收 |
-| [verification/v0.2.0-human-acceptance-matrix-2026-09-30.md](verification/v0.2.0-human-acceptance-matrix-2026-09-30.md) | v0.2.0 Standalone、主题、OpenRouter、Pages、命令面板、路由动效、遥测和关闭性能的人类验收矩阵 | **v0.2.0 历史发布验收范围**；不得当作 v0.4.0 当前清单 |
-| [verification/windows-release-candidate-2026-09-29.md](verification/windows-release-candidate-2026-09-29.md) | v0.1.0/v0.2.0 Windows MSI、NSIS、Portable 与 Standalone 候选哈希和点时验证 | 历史候选证据；当前资产见 v0.4.0 Release |
+| [verification/v0.2.0-human-acceptance-matrix-2026-09-30.md](verification/v0.2.0-human-acceptance-matrix-2026-09-30.md) | v0.2.0 Standalone、主题、OpenRouter、Pages、命令面板、路由动效、遥测和关闭性能的人类验收矩阵 | **v0.2.0 历史发布验收范围**；不得当作 v0.5.0 当前清单 |
+| [verification/windows-release-candidate-2026-09-29.md](verification/windows-release-candidate-2026-09-29.md) | v0.1.0/v0.2.0 Windows MSI、NSIS、Portable 与 Standalone 候选哈希和点时验证 | 历史候选证据；当前资产见 v0.5.0 Release |
 | [verification/recovery-regression-2026-09-28.md](verification/recovery-regression-2026-09-28.md) | Windows 重启后的 Kev、Laya、Jev Switch 恢复、隔离 target 回归与小样本 Rime smoke | 恢复核对；不替代完整 benchmark |
 | [verification/jevk5-4b-lmstudio-2026-09-28.md](verification/jevk5-4b-lmstudio-2026-09-28.md) | JevK5-4B GGUF 经 LM Studio bridge 注册、路由与清理核对 | 实验性 one-hot 兼容路径；不代表原生 logits 或生产校准 |
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线、已发布体验与路线图用户旅程 | 前六节为历史构想；v0.2 旅程标已发布能力与边界；v0.3 旅程含 CLI/性能首轮体验 |
-| **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收边界** | **当前产品边界；v0.4.0 桌面核心路径已人工验收；UI 图标/性能范围见专项记录** |
+| **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收边界** | **当前产品边界；v0.5.0 通用代码已自动验证；原生人工边界见发布记录** |
 | [design/USER-FEEDBACK-ITERATION-PLAN.md](design/USER-FEEDBACK-ITERATION-PLAN.md) | 本轮用户反馈的实施顺序、UI 原则、数据/安全边界和验收门槛 | 当前迭代入口；各 Phase 不代表 Release 承诺 |
-| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | 已记录，尚未实现；不是 Release 承诺 |
-| [verification/v0.5.0-release-candidate-2026-10-01.md](verification/v0.5.0-release-candidate-2026-10-01.md) | v0.5.0 功能变更、自动门禁、人工基线与验收顺序 | 自动门禁完成；桌面/Android 原生人工项待确认 |
+| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.5.0 已实现通用部分；品牌/霓虹/Android 原生项仍待推进 |
+| [verification/v0.5.0-release-candidate-2026-10-01.md](verification/v0.5.0-release-candidate-2026-10-01.md) | v0.5.0 功能变更、自动门禁、人工基线与验收顺序 | Release/Android 构建完成；桌面/Android 原生人工项待确认 |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
 | [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
 | [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
@@ -70,17 +70,17 @@
 | `design/ICON-SYSTEM-DESIGN.md` | 初版图标系统方案（作者 Claude Opus 4.8） | 原稿状态为历史；当前 Lucide 应用范围和未覆盖页面见 UI 图标/性能核验 |
 | `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 设计规范参考；原稿阶段状态已过期，当前实现/验收以主计划为准 |
 | `design/I18N-DESIGN.md` | **国际化与可扩展语言列表**（作者 Claude Opus 4.8；GPT-6 Luna 实施记录） | 2026-09-24 状态快照；当前已提供语言见 README，新增语言方向见 ROADMAP |
-| `RELEASE.md` | **发版手册**（版本门禁 / 流水线结构 / Windows 与 CLI 产物） | `v0.4.1` 已发布 Windows、Linux/Windows CLI 与 Docker 资产；桌面核心人工证据沿用 v0.4.0 |
+| `RELEASE.md` | **发版手册**（版本门禁 / 流水线结构 / Windows、CLI、Docker 与 Android 产物） | `v0.5.0` 已发布 Windows、Linux/Windows CLI、Docker 与 Android 实验性资产；桌面/Android 原生人工边界见核验记录 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 用户提供的 v0.1.0 历史 UI 图册，不替代当前版截图 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
 | [verification/termux-build-deployment-2026-09-27.md](verification/termux-build-deployment-2026-09-27.md) | **Termux / Android arm64 构建与 daemon 烟测历史** | 点时源码固定到 `f1670e7`；后续 CLI 已实现，见 CLI 文档 |
-| [CLI.md](CLI.md) | **Termux/SSH/headless CLI Phase 1**：状态、模型、调用、路由与事件读取 | v0.4.0 独立 Rust 客户端；TUI 暂未包含 |
-| [verification/cli-phase1-2026-09-30.md](verification/cli-phase1-2026-09-30.md) | CLI 自动测试与 local daemon smoke | v0.4.0 实现证据；Termux 真机/cloud 会话仍未验证 |
+| [CLI.md](CLI.md) | **Termux/SSH/headless CLI Phase 1**：状态、模型、调用、路由与事件读取 | v0.5.0 独立 Rust 客户端；TUI 暂未包含 |
+| [verification/cli-phase1-2026-09-30.md](verification/cli-phase1-2026-09-30.md) | CLI 自动测试与 local daemon smoke | v0.5.0 实现证据；Termux 真机/cloud 会话仍未验证 |
 | [verification/ui-icon-performance-2026-09-30.md](verification/ui-icon-performance-2026-09-30.md) | 导航/Dashboard/Routing 图标化、共享 health poll、并发 provider probe 和 telemetry 后台暂停 | 当前未发布工作树验证；本机 fixture 数据不代表跨设备结论 |
 | [verification/v0.4.0-release-candidate-2026-09-30.md](verification/v0.4.0-release-candidate-2026-09-30.md) | v0.4.0 自动化、Windows 原生隔离核验与维护者人工桌面验收 | 安装器/Android/全链路性能仍未覆盖 |
 | [verification/android-apk-build-2026-09-30.md](verification/android-apk-build-2026-09-30.md) | Android arm64 unsigned APK 本机构建到 Gradle/AAPT 产物的核验 | 构建成功；未安装、未启动模拟器、未做 service/tile/后台验收 |
 | [verification/v0.4.1-release-candidate-2026-09-30.md](verification/v0.4.1-release-candidate-2026-09-30.md) | v0.4.1 自动门禁、Android 构建证据与人工验收引导 | 自动验证完成；新桌面包/Android 安装和真机生命周期待人工验收 |
-| [design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md](design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | Android APP 实验性完整网关计划：daemon library、FlClash 风格 service/action/通知/tile、普通移动端与生命周期验收边界 | arm64 debug-signed APK 已附 v0.4.1 Release；原生 service/tile 与安装/真机验收仍待完成 |
+| [design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md](design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | Android APP 实验性完整网关计划：daemon library、FlClash 风格 service/action/通知/tile、普通移动端与生命周期验收边界 | arm64 debug-signed APK 已附 v0.5.0 Release；原生 service/tile 与安装/真机验收仍待完成 |
 
 ## 阅读顺序（开发 Agent）
 
