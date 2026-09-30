@@ -94,6 +94,9 @@ export const getAdminStats = (from: number, to: number, credential?: string) =>
 export const getAdminActivity = (since = 0, limit = 50, credential?: string) =>
   managementRequest<EventsPage>(`/v1/admin/events?${new URLSearchParams({ since: String(since), limit: String(limit) })}`, credential);
 
+export const getAdminActivityBefore = (before: number, limit = 50, credential?: string) =>
+  managementRequest<ActivityPage>(`/v1/admin/events?${new URLSearchParams({ before: String(before), limit: String(limit) })}`, credential);
+
 async function callTokenRequest<T>(path: string, token: string): Promise<T> {
   const response = await fetch(`${getBase()}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -119,6 +122,11 @@ export const getMyCallerStats = async (token: string, from: number, to: number):
 
 export const getMyActivity = (token: string, since = 0, limit = 50) =>
   callTokenRequest<EventsPage>(`/v1/events/my?${new URLSearchParams({ since: String(since), limit: String(limit) })}`, token);
+
+export const getMyActivityBefore = (token: string, before: number, limit = 50) =>
+  callTokenRequest<ActivityPage>(`/v1/events/my?${new URLSearchParams({ before: String(before), limit: String(limit) })}`, token);
+
+export type ActivityPage = EventsPage & { next_before: number | null; has_more: boolean };
 
 export async function getCallerIdentity(token: string): Promise<CallerMe> {
   const result = await callTokenRequest<CallerMe>('/v1/auth/me', token);

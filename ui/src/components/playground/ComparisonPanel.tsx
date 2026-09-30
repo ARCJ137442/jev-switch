@@ -53,8 +53,6 @@ interface Props {
   batchCases?: BatchCase[];
 }
 
-const MAX_REPEATS = 5;
-const MAX_BATCH_REQUESTS = 80;
 const MAX_SAVED_ATTEMPTS = 100;
 const historyStorageKey = () => `jev-playground-history-v1:${getBase() || location.origin}`;
 
@@ -150,7 +148,7 @@ export function ComparisonPanel({
   const [providerToAdd, setProviderToAdd] = useState('');
   const [upstreamModel, setUpstreamModel] = useState('');
   const [attempts, setAttempts] = useState<Attempt[]>(readAttemptHistory);
-  const [repeatCount, setRepeatCount] = useState(1);
+  const [repeatInput, setRepeatInput] = useState('1');
   const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [formValid, setFormValid] = useState(true);
@@ -277,11 +275,11 @@ export function ComparisonPanel({
       return;
     }
     const cases = batchCases.length ? batchCases : [{ id: 'current-input', label: copy.input, stateJson, questionsJson }];
-    const matrixRun = cases.length > 1 || repeatCount > 1;
-    if (runnableTargets.length * cases.length * repeatCount > MAX_BATCH_REQUESTS) {
-      setValidationError(copy.batchLimit.replace('{n}', String(MAX_BATCH_REQUESTS)));
+    if (!repeatCountValid) {
+      setValidationError(copy.invalidRepeats);
       return;
     }
+    const matrixRun = cases.length > 1 || repeatCount > 1;
     const plans: PlannedRun[] = [];
     const batchId = matrixRun ? uid() : undefined;
     try {
@@ -330,10 +328,18 @@ export function ComparisonPanel({
   const uniquePublicModels = useMemo(() => [...new Set(publicModels.map((model) => model.id))], [publicModels]);
   const selectedProvider = providers.find((provider) => provider.id === providerToAdd);
   const providerModels = selectedProvider?.models ?? [];
+  const repeatCount = Number(repeatInput);
+  const repeatCountValid = Number.isSafeInteger(repeatCount) && repeatCount >= 1;
+  const repeatWarning = repeatCountValid && repeatCount > 100;
   const providerName = (provider: AdminProvider) => {
     const label = provider.name || provider.account || provider.kind;
     return label === provider.id ? label : `${label} (${provider.id})`;
   };
+
+  useEffect(() => {
+    const uniqueModels = [...new Set(providerModels.filter((model) => model.trim()))];
+    if (uniqueModels.length === 1 && !upstreamModel.trim()) setUpstreamModel(uniqueModels[0]);
+  }, [providerModels, providerToAdd, upstreamModel]);
 
   const addPublic = () => {
     if (!publicToAdd.trim()) return;
@@ -429,7 +435,7 @@ export function ComparisonPanel({
           <span className="font-semibold" style={{ color: 'var(--text)', fontSize: 'var(--text-sm)' }}>{copy.directEntry}</span>
           <span className="comparison-entry-hint" style={smallLabel}>{copy.directHint}</span>
           <div className="flex flex-wrap gap-2">
-            <select aria-label={copy.providerAccount} value={providerToAdd} onChange={(event) => { setProviderToAdd(event.target.value); setUpstreamModel(''); }} className="h-8 min-w-[160px] flex-1 px-2" style={codeStyle} disabled={providersLoading}>
+            <select aria-label={copy.chooseProvider} value={providerToAdd} onChange={(event) => { setProviderToAdd(event.target.value); setUpstreamModel(''); }} className="h-8 min-w-[160px] flex-1 px-2" style={codeStyle} disabled={providersLoading}>
               <option value="">{copy.chooseProvider}</option>
               {providers.map((provider) => <option key={provider.id} value={provider.id} disabled={!provider.enabled}>
                 {providerName(provider)}{!provider.enabled ? ` · ${copy.disabled}` : !provider.api_key_set ? ` · ${copy.noKey}` : ''}
@@ -451,13 +457,15 @@ export function ComparisonPanel({
           <button type="button" aria-label={`${copy.remove} ${targetLabel(target, copy)}`} onClick={() => onTargetsChange(targets.filter((item) => item.key !== target.key))} style={{ color: 'var(--text-muted)' }}>×</button>
         </span>)}
         <span className="ml-auto flex gap-2">
-          <label className="inline-flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>{copy.repeats}<input type="number" min={1} max={MAX_REPEATS} step={1} value={repeatCount} onChange={(event) => setRepeatCount(Math.max(1, Math.min(MAX_REPEATS, Math.floor(Number(event.target.value) || 1))))} aria-label={copy.repeats} className="h-8 w-14 border px-1 text-center tabular" style={codeStyle}/></label>
+          <label className="inline-flex items-center gap-2 text-xs" style={{ color: repeatWarning ? 'var(--danger)' : 'var(--text-muted)' }}>{copy.repeats}<input type="number" min={1} step={1} inputMode="numeric" value={repeatInput} onChange={(event) => setRepeatInput(event.target.value)} aria-label={copy.repeats} className="h-8 border px-1 text-center tabular" style={{ ...codeStyle, width: `${Math.max(4, repeatInput.length + 1)}ch`, color: repeatWarning ? 'var(--danger)' : 'var(--text)' }}/></label>
+          <span className="text-xs tabular" style={{ color: repeatWarning ? 'var(--danger)' : 'var(--text-muted)' }}>{copy.estimatedRequests.replace('{n}', String(Math.max(0, targets.length * (batchCases.length || 1) * (repeatCountValid ? repeatCount : 0))))}</span>
           <button type="button" onClick={runAll} disabled={targets.length === 0 || (inputMode === 'form' && !formValid)} className="font-semibold" style={{ ...buttonStyle, borderColor: 'var(--accent)', background: 'var(--accent)', color: '#fff' }}>{copy.runAll}{runningCount > 0 ? ` · ${runningCount}` : ''}</button>
           <button type="button" onClick={stopAll} disabled={runningCount === 0} style={buttonStyle}>{copy.cancelAll}</button>
           {attempts.length > 0 && <button type="button" onClick={() => { stopAll(); attemptsRef.current = []; setAttempts([]); setSelectedAttemptId(null); }} style={buttonStyle}>{copy.clearHistory}</button>}
         </span>
       </div>
       {matrixAttempts && <div className="comparison-matrix-wrap border-t" style={{ borderColor: 'var(--border)' }}><table className="comparison-matrix"><thead><tr><th>{copy.batchCase}</th>{matrixTargets.map((target) => <th key={target.key}>{targetLabel(target, copy)}</th>)}</tr></thead><tbody>{matrixRows.map((row) => <tr key={`${row.caseId}:${row.repeatIndex}`}><th>{row.caseLabel}{(row.repeatIndex ?? 1) > 1 ? ` · ${copy.repeatIndex.replace('{n}', String(row.repeatIndex ?? 1))}` : ''}</th>{matrixTargets.map((target) => { const attempt = matrixBatchAttempts.find((item) => item.caseId === row.caseId && item.repeatIndex === row.repeatIndex && item.target.key === target.key); return <td key={target.key}>{attempt ? <button type="button" className="comparison-matrix-cell" data-status={attempt.status} onClick={() => setSelectedAttemptId(attempt.attemptId)} aria-pressed={attempt.attemptId === selectedAttemptId}><span>{attempt.status === 'ok' ? copy.success : attempt.status === 'error' ? copy.failed : attempt.status === 'loading' || attempt.status === 'queued' ? copy.running : attempt.status === 'cancelled' ? copy.cancelled : copy.waiting}</span><small>{attempt.durationMs == null ? '—' : `${attempt.durationMs} ms`}</small></button> : '—'}</td>; })}</tr>)}</tbody></table></div>}
+      {repeatWarning && <div role="status" className="px-4 py-2 text-sm" style={{ color: 'var(--danger)', borderTop: '1px solid var(--border)' }}>{copy.largeRepeatWarning}</div>}
       {validationError && <div role="alert" className="px-4 py-2 text-sm" style={{ color: 'var(--danger)', borderTop: '1px solid var(--border)' }}>{validationError}</div>}
       {hasStaleResult && <div role="status" className="px-4 py-2 text-sm" style={{ color: 'var(--warning)', borderTop: '1px solid var(--border)' }}>{copy.inputChanged}</div>}
 

@@ -40,7 +40,7 @@
 .runtime-chart__line--in { stroke: var(--warning); }
 .runtime-chart__line--out { stroke: var(--accent); }
 .runtime-telemetry__chart-footer { margin-top: 0.35rem; color: var(--text-subtle); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
-.runtime-telemetry__metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.6rem; padding: 0 1.25rem 1rem; }
+.runtime-telemetry__metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.6rem; padding: 0 1.25rem 1rem; }
 .runtime-metric { display: flex; min-width: 0; gap: 0.6rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-hover); }
 .runtime-metric__icon { display: grid; place-items: center; flex: none; width: 1.9rem; height: 1.9rem; border-radius: 7px; color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
 .runtime-metric--good .runtime-metric__icon { color: var(--success); background: color-mix(in srgb, var(--success) 13%, transparent); }
@@ -52,6 +52,12 @@
 .runtime-telemetry__details { border-top: 1px solid var(--border); color: var(--text-muted); font-size: var(--text-xs); }
 .runtime-telemetry__details summary { cursor: pointer; padding: 0.75rem 1.25rem; }
 .runtime-telemetry__detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 1rem; padding: 0 1.25rem 1rem; line-height: 1.5; }
+
+.gateway-service-control { display: grid; justify-items: end; gap: 0.25rem; }
+.gateway-service-control__switch { display: inline-flex; min-height: 2rem; align-items: center; gap: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius); padding: 0 0.55rem; color: var(--text-muted); background: var(--surface-hover); font-size: var(--text-xs); }
+.gateway-service-control__switch[data-running='true'] { border-color: var(--success); color: var(--success); background: color-mix(in srgb, var(--success) 9%, var(--surface)); }
+.gateway-service-control__switch:disabled { cursor: not-allowed; opacity: .6; }
+.gateway-service-control__error { max-width: 15rem; overflow: hidden; color: var(--danger); font-size: .625rem; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 960px) { .runtime-telemetry__metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 600px) {

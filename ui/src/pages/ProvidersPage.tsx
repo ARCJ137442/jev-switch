@@ -10,6 +10,7 @@ import {
   type ProvidersResponse,
 } from '../api/admin';
 import { useConfigConflict } from '../hooks/useConfigConflict';
+import { useStatusBarItems } from '../app/statusBar';
 import { useToast } from '../app/feedback';
 import { ProviderCard } from '../components/providers/ProviderCard';
 import { AddProviderPanel } from '../components/providers/AddProviderPanel';
@@ -207,6 +208,12 @@ export function ProvidersPage() {
       .some((value) => value?.toLocaleLowerCase().includes(query)));
   }, [filter, providers]);
   const availability = useMemo(() => summarizeProviderAvailability(providers.map((provider) => provider.id), availabilityEvents), [availabilityEvents, providers]);
+  const statusItems = useMemo(() => [{
+    id: 'provider-summary',
+    label: t('prov.enabledCount', { n: enabledCount, total: providers.length }),
+    tone: enabledCount === providers.length ? 'good' as const : 'default' as const,
+  }], [enabledCount, providers.length, t]);
+  useStatusBarItems(statusItems);
 
   const card: React.CSSProperties = {
     background: 'var(--surface)',

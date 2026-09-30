@@ -1,6 +1,6 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前正式版为 `v0.4.1`，Release 已附 [Android arm64 实验性 APK](https://github.com/ARCJ137442/jev-switch/releases/download/v0.4.1/jev-switch-0.4.1-android-aarch64-experimental.apk)；v0.4.0 的便携/Standalone 桌面核心路径已有维护者人工验收，Android 安装/真机生命周期和全链路性能仍未验证。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前候选版本为 `v0.5.0`；Release CI 将附 Windows、CLI、Docker 与 Android arm64 实验性资产。v0.5.0 的跨平台通用代码和自动门禁已验证，桌面原生 WebView、Android service/tile/通知和全链路性能仍按[发布候选核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)等待人工确认。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-30。
 
@@ -37,6 +37,8 @@
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线、已发布体验与路线图用户旅程 | 前六节为历史构想；v0.2 旅程标已发布能力与边界；v0.3 旅程含 CLI/性能首轮体验 |
 | **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收边界** | **当前产品边界；v0.4.0 桌面核心路径已人工验收；UI 图标/性能范围见专项记录** |
 | [design/USER-FEEDBACK-ITERATION-PLAN.md](design/USER-FEEDBACK-ITERATION-PLAN.md) | 本轮用户反馈的实施顺序、UI 原则、数据/安全边界和验收门槛 | 当前迭代入口；各 Phase 不代表 Release 承诺 |
+| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | 已记录，尚未实现；不是 Release 承诺 |
+| [verification/v0.5.0-release-candidate-2026-10-01.md](verification/v0.5.0-release-candidate-2026-10-01.md) | v0.5.0 功能变更、自动门禁、人工基线与验收顺序 | 自动门禁完成；桌面/Android 原生人工项待确认 |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
 | [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
 | [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
@@ -83,12 +85,13 @@
 ## 阅读顺序（开发 Agent）
 
 1. `design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md`（最新用户决策、范围与施工顺序）
-2. `OPUS5-GOAL-REASSESSMENT.md`（原始目标、当前缺口与运行证据）
-3. `../ROADMAP.md`（未来候选，不作为当前版本能力承诺）
-4. 路由交互与国际化专项；服务入口和 Playground 两份专项文档仅作历史设计参考
-5. `contracts/00-INDEX` → 01–06 基线与 07 修订，再按需查 `08-CONTRACT`（保留未变更的不变量，后续批准的修订优先）
-6. `07-REVIEW`、历史验收与 `02`–`06`（需要追溯决策演变时阅读，不作当前范围或完成证明）
-7. `PROGRESS.md`（MVP 历史实测）
+2. `design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md`（下一轮用户反馈计划；开始该轮工作时核对并更新状态）
+3. `OPUS5-GOAL-REASSESSMENT.md`（原始目标、当前缺口与运行证据）
+4. `../ROADMAP.md`（未来候选，不作为当前版本能力承诺）
+5. 路由交互与国际化专项；服务入口和 Playground 两份专项文档仅作历史设计参考
+6. `contracts/00-INDEX` → 01–06 基线与 07 修订，再按需查 `08-CONTRACT`（保留未变更的不变量，后续批准的修订优先）
+7. `07-REVIEW`、历史验收与 `02`–`06`（需要追溯决策演变时阅读，不作当前范围或完成证明）
+8. `PROGRESS.md`（MVP 历史实测）
 
 旧设计稿、会话产物和专项计划用于解释设计演变，不作为当前能力或待办状态的来源。`12-路线收缩与三线作战计划.md` 保留为 2026-09-23 的范围收缩决策记录；后续明确授权和最新产品决策优先。当前实施与验收以主计划及对应版本记录为准；未来候选只记在 `../ROADMAP.md`。保留的历史记录均按各自标注的时间点和适用范围理解，不代表现行效力。
 

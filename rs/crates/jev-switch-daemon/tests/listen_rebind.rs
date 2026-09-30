@@ -302,6 +302,84 @@ async fn local_mode_non_loopback_peer_is_403_over_real_tcp() {
     cleanup(&path);
 }
 
+#[tokio::test]
+async fn lan_access_requires_opt_in_and_restores_loopback_after_disable() {
+    let port = ephemeral_port();
+    let loop_addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    let plan = ListenPlan {
+        addr: loop_addr,
+        explicit: false,
+        defaults: PairDefaults {
+            local: loop_addr,
+            cloud: loop_addr,
+        },
+    };
+    let (state, handle, path) = start_server("lan-access", &local_cfg(), plan).await;
+    let loop_base = format!("http://127.0.0.1:{port}");
+    let (status, body) = http_get(&loop_base, "/v1/admin/lan-access", None)
+        .await
+        .unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap()["enabled"],
+        false
+    );
+
+    let (status, body) = http_put(
+        &loop_base,
+        "/v1/admin/lan-access",
+        serde_json::json!({"enabled":true}),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, 200, "LAN opt-in should rebind successfully: {body}");
+    assert_eq!(handle.bound().ip(), std::net::Ipv4Addr::UNSPECIFIED);
+    assert!(state
+        .auth
+        .lan_access_enabled
+        .load(std::sync::atomic::Ordering::SeqCst));
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(saved.contains("lan_access_enabled = true"), "{saved}");
+    assert!(
+        saved.contains(&format!("bind = \"0.0.0.0:{port}\"")),
+        "{saved}"
+    );
+
+    if let Some(ip) = lan_ip() {
+        let lan_base = format!("http://{ip}:{port}");
+        let (status, body) = http_get(&lan_base, "/v1/admin/status", None).await.unwrap();
+        assert_eq!(
+            status, 200,
+            "private peer should reach local-mode management after opt-in: {body}"
+        );
+        let (status, body) = http_get(&lan_base, "/v1/models", None).await.unwrap();
+        assert_eq!(
+            status, 200,
+            "private peer should reach model discovery after opt-in: {body}"
+        );
+    }
+
+    let (status, body) = http_put(
+        &loop_base,
+        "/v1/admin/lan-access",
+        serde_json::json!({"enabled":false}),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(handle.bound(), loop_addr);
+    assert!(!state
+        .auth
+        .lan_access_enabled
+        .load(std::sync::atomic::Ordering::SeqCst));
+    let saved = std::fs::read_to_string(&path).unwrap();
+    assert!(!saved.contains("lan_previous_bind"), "{saved}");
+    assert!(!saved.contains("lan_access_enabled = true"), "{saved}");
+    cleanup(&path);
+}
+
 /// standard_plan 的 defaults 引用（0.0.0.0:11435 不会真用到 —— 仅占位；
 /// 本测试 plan 已显式给出 defaults）。收敛成小助手避免重复。
 fn standard_plan_addr() -> PairDefaults {

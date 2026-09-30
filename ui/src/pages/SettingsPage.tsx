@@ -8,7 +8,7 @@ import { useI18n, type MessageKey } from '../i18n';
 import { supportedLanguages } from '../i18n/languages';
 import { getLangPreference } from '../i18n/core';
 import { applyThemePreference, readThemePreference, type ThemePreference } from '../theme';
-import { readAutoProviderProbe, SETTINGS_CHANGE_EVENT, writeAutoProviderProbe } from '../settings/preferences';
+import { readAutoProviderProbe, readShowStatusBar, SETTINGS_CHANGE_EVENT, writeAutoProviderProbe, writeShowStatusBar } from '../settings/preferences';
 import { getAndroidDebugLogStatus, isAndroidTauriRuntime, setAndroidDebugLog, type AndroidDebugLogStatus } from '../api/androidDebug';
 
 const fieldClass = 'min-h-10 border px-3 text-sm';
@@ -21,6 +21,7 @@ export function SettingsPage() {
   const [theme, setTheme] = useState<ThemePreference>(readThemePreference);
   const [language, setLanguage] = useState(() => getLangPreference());
   const [autoProbe, setAutoProbe] = useState(readAutoProviderProbe);
+  const [showStatusBar, setShowStatusBar] = useState(readShowStatusBar);
   const [apiBase, setApiBase] = useState(() => readApiBasePreference() ?? '');
   const [saved, setSaved] = useState(false);
   const [status, setStatus] = useState<AdminStatus | null>(null);
@@ -37,8 +38,10 @@ export function SettingsPage() {
     });
     if (isAndroidTauriRuntime()) getAndroidDebugLogStatus().then((result) => { if (alive) setDebugLog(result); }).catch(() => undefined);
     const syncProbe = () => setAutoProbe(readAutoProviderProbe());
+    const syncStatusBar = () => setShowStatusBar(readShowStatusBar());
     window.addEventListener(SETTINGS_CHANGE_EVENT, syncProbe);
-    return () => { alive = false; window.removeEventListener(SETTINGS_CHANGE_EVENT, syncProbe); };
+    window.addEventListener(SETTINGS_CHANGE_EVENT, syncStatusBar);
+    return () => { alive = false; window.removeEventListener(SETTINGS_CHANGE_EVENT, syncProbe); window.removeEventListener(SETTINGS_CHANGE_EVENT, syncStatusBar); };
   }, []);
 
   const saveApiAddress = () => {
@@ -55,7 +58,7 @@ export function SettingsPage() {
   };
 
   const groups = [
-    { id: 'appearance', label: t('settings.appearance' as MessageKey), terms: 'appearance theme language 外观 主题 语言', content: (
+    { id: 'appearance', label: t('settings.appearance' as MessageKey), terms: 'appearance theme language status bar 外观 主题 语言 状态栏', content: (
       <div className="grid gap-4 sm:grid-cols-2">
         {matches('theme 主题 appearance 外观') && <label className="grid gap-2 text-sm">
           <span>{t('settings.theme' as MessageKey)}</span>
@@ -75,6 +78,10 @@ export function SettingsPage() {
             <option value="system">{t('settings.themeSystem' as MessageKey)}</option>
             {availableLanguages.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
           </select>
+        </label>}
+        {matches('status bar footer 状态栏 底栏') && <label className="flex items-start gap-3 text-sm sm:col-span-2">
+          <input type="checkbox" checked={showStatusBar} onChange={(event) => { setShowStatusBar(event.target.checked); writeShowStatusBar(event.target.checked); }} className="mt-1 h-4 w-4 accent-[var(--accent)]" />
+          <span className="grid gap-1"><strong>{t('settings.showStatusBar' as MessageKey)}</strong><span style={{ color: 'var(--text-muted)' }}>{t('settings.showStatusBarHint' as MessageKey)}</span></span>
         </label>}
       </div>
     ) },

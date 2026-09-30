@@ -1,16 +1,16 @@
 # Jev-Switch Roadmap
 
-> **TL;DR**：v0.4.1 已正式发布；维护者已人工确认的便携/Standalone 桌面核心路径和官方 TypeSafe 调用来自 v0.4.0。本轮 UI/运行时改动、Android arm64 APK 构建已完成自动验证；Android 安装/真机 service、安装器、全链路 p50/p95/p99 与跨硬件性能仍待人工验收。TUI、OpenRouter live key、真实用户配置恢复等边界见对应核验文档。
+> **TL;DR**：v0.5.0 已进入发布候选；本轮 UI/运行时、LAN opt-in、网关启停、历史分页和 Android 默认不启动服务语义已完成自动验证。维护者已报告 Android 初步安装与官方 Jev 调用通过；原生 service/tile/通知、Tauri 原生 WebView、安装器、全链路性能和 TUI 仍按核验记录等待人工验收。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）<br>
 > **AI 披露**：本文由 AI 协助整理；范围与优先顺序以项目维护者后续确认为准。<br>
-> **更新日期**：2026-09-30
+> **更新日期**：2026-10-01
 
 ## 目标方向
 
 Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的路由过程。后续体验改进应服务这些目标：减少开发者重复操作，让每次调用的真实路径容易理解；不以装饰动效或未验证的性能宣传代替可测结果。
 
-当前正式发布为 [v0.4.1](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.4.1)。桌面核心路径的人工证据来自 v0.4.0；下述规划不属于已发布版本；仓库中的 `v0.5.0-stable` 是较早的源代码 tag，没有对应 GitHub Release，不能代表当前应用版本。
+当前发布候选为 [v0.5.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.5.0)。桌面核心路径和 Android 初步安装/调用的人工证据分别来自维护者报告；下述规划不属于已完成人工验收的能力承诺。
 
 配套的前后变化与用户场景见[用户旅程文档第七、八节](docs/USER-JOURNEYS.md)，作为本路线图方向的体验叙事；两处内容均属未来提案，优先级与验收边界以本文件为准。
 

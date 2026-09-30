@@ -255,6 +255,7 @@ async fn endpoint_routes_are_persisted_replaced_and_disabled_at_runtime() {
         service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         db_conn: db.clone(),
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
+        gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
     };
     let registry_handle = state.registry.clone();
     let app = build_app(state);
@@ -931,6 +932,7 @@ async fn endpoint_and_global_strategy_settings_drive_real_scheduler_paths() {
         service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         db_conn: db,
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
+        gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
     };
     let app = build_app(state);
     let request = r#"{"model":"strategy-public","state":"s","questions":{"q":{"type":"noul","instructions":"test","criteria":{"true":"yes","false":"no"}}}}"#;
@@ -1094,6 +1096,7 @@ async fn managed_tokens_enforce_roles_and_isolate_stats_and_events() {
         service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         db_conn: db.clone(),
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
+        gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
     };
     *state.auth.mode.write().unwrap() = jev_switch_daemon::config::RunMode::Cloud;
     let app = build_app(state);

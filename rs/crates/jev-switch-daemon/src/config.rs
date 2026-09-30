@@ -250,9 +250,19 @@ pub struct Config {
     /// env `JEV_ADMIN_PASSWORD` 优先。**永不回传、不进日志**（contracts/04 §2）。
     #[serde(default)]
     pub admin_password: Option<String>,
+    /// Allow private-network peers in local mode when the user explicitly opens LAN access.
+    #[serde(default)]
+    pub lan_access_enabled: bool,
+    /// Whether the Jev call path accepts work. Android defaults to stopped; other targets default on.
+    #[serde(default)]
+    pub gateway_enabled: Option<bool>,
 }
 
 impl Config {
+    pub fn effective_gateway_enabled(&self) -> bool {
+        self.gateway_enabled.unwrap_or(!cfg!(target_os = "android"))
+    }
+
     /// 生效模式：文件 `mode` ← env `JEV_SWITCH_MODE`（非法 env 值 → [`ConfigError::InvalidMode`]）。
     pub fn effective_mode(&self) -> Result<RunMode, ConfigError> {
         resolve_mode(self.mode, std::env::var("JEV_SWITCH_MODE").ok().as_deref())
@@ -280,11 +290,26 @@ impl Config {
         &self,
         mode: RunMode,
     ) -> Result<(std::net::SocketAddr, bool), ConfigError> {
-        resolve_bind(
-            self.bind.as_deref(),
-            std::env::var("JEV_BIND").ok().as_deref(),
-            mode,
-        )
+        let env_bind = std::env::var("JEV_BIND").ok();
+        if self.lan_access_enabled
+            && env_bind
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+            && self
+                .bind
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+        {
+            return Ok((
+                std::net::SocketAddr::from(([0, 0, 0, 0], DEFAULT_PORT)),
+                false,
+            ));
+        }
+        resolve_bind(self.bind.as_deref(), env_bind.as_deref(), mode)
     }
 }
 
@@ -794,6 +819,12 @@ enabled = true
         assert_eq!(cfg.mode, RunMode::Local, "缺省 mode 必须 local（现状回归）");
         assert!(cfg.auth_tokens.is_empty());
         assert!(cfg.admin_password.is_none());
+        assert_eq!(
+            cfg.effective_gateway_enabled(),
+            !cfg!(target_os = "android")
+        );
+        let stopped: Config = toml::from_str("gateway_enabled = false").unwrap();
+        assert!(!stopped.effective_gateway_enabled());
     }
 
     #[test]

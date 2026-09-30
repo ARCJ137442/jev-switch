@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AlertCircle, CheckCircle2, CircleDollarSign, Clock3, Radar, RefreshCw, Settings2, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Radar, RefreshCw, Settings2, XCircle } from 'lucide-react';
 import {
   createCallerToken,
   getAdminActivity,
+  getAdminActivityBefore,
   getAdminStats,
   getCallerStats,
   getMyActivity,
+  getMyActivityBefore,
   getMyCallerStats,
   listCallerTokens,
   revokeCallerToken,
@@ -20,11 +22,14 @@ import {
 import { useI18n, type MessageKey } from '../../i18n';
 import { useToast } from '../../app/feedback';
 import { useAuth } from '../../auth/AuthContext';
+import { useStatusBarItems } from '../../app/statusBar';
 import { getCallerToken } from '../../auth/callerSession';
 import { parseRequestActivityDetail } from './activityDetail';
+import { buildHealthRows, type HealthRow } from '../../pages/statisticsMatrix';
 
 type Pane = 'activity' | 'tokens' | 'mine';
 type Copy = (key: string, vars?: Record<string, string | number>) => string;
+const ACTIVITY_RANGE_HOURS: Readonly<Record<string, number>> = { '24h': 24, '7d': 168, '30d': 720, '90d': 2160 };
 
 function last30Days() {
   const to = Date.now();
@@ -407,27 +412,40 @@ function OneTimeSecret({ secret, copy, onClose }: { secret: string; copy: Copy; 
 
 function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy }) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const eventsRef = useRef<ActivityEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [olderAvailable, setOlderAvailable] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [pageSize, setPageSize] = useState('50');
+  const [pageIndex, setPageIndex] = useState(0);
+  const [entryFilter, setEntryFilter] = useState('all');
+  const [providerFilter, setProviderFilter] = useState('all');
+  const [timeFilter, setTimeFilter] = useState('30d');
+  const [kindFilter, setKindFilter] = useState('all');
+  const [matrixDimension, setMatrixDimension] = useState<'entry' | 'provider'>('entry');
+  const statusItems = useMemo(() => [{ id: 'activity-count', label: copy('access.loadedCount', { count: events.length }) }], [copy, events.length]);
+  useStatusBarItems(statusItems);
   const cursorRef = useRef(0);
   const loadedRef = useRef(false);
   const mergeEvents = useCallback((incoming: ActivityEvent[]) => {
     if (!incoming.length) return;
     cursorRef.current = Math.max(cursorRef.current, ...incoming.map((event) => event.id));
-    setEvents((current) => {
-      const merged = new Map(current.map((event) => [event.id, event]));
+    const merged = new Map(eventsRef.current.map((event) => [event.id, event]));
       for (const event of incoming) merged.set(event.id, event);
-      return [...merged.values()].sort((a, b) => b.id - a.id).slice(0, 50);
-    });
+    eventsRef.current = [...merged.values()].sort((a, b) => b.id - a.id);
+    setEvents(eventsRef.current);
   }, []);
 
   useEffect(() => {
     let active = true;
     cursorRef.current = 0;
     loadedRef.current = false;
+    eventsRef.current = [];
     setEvents([]);
+    setOlderAvailable(false);
     setError(null);
     setStreaming(false);
     setInitialLoading(true);
@@ -435,12 +453,31 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
     const refresh = async () => {
       if (loadedRef.current) setRefreshing(true);
       try {
+        const initialPage = !loadedRef.current;
         const result = callerToken
-          ? await getMyActivity(callerToken, cursorRef.current)
-          : await getAdminActivity(cursorRef.current);
+          ? await getMyActivity(callerToken, cursorRef.current, initialPage ? 500 : 100)
+          : await getAdminActivity(cursorRef.current, initialPage ? 500 : 100);
         if (!active) return;
         mergeEvents(result.events);
         cursorRef.current = Math.max(cursorRef.current, result.next_since);
+        if (initialPage) {
+          let before = result.next_before;
+          let hasMore = result.has_more;
+          let oldestTimestamp = result.events[0]?.timestamp ?? Date.now();
+          const historyStart = Date.now() - 90 * 24 * 60 * 60 * 1000;
+          setOlderAvailable(hasMore);
+          while (active && hasMore && before != null && oldestTimestamp >= historyStart) {
+            const older = callerToken
+              ? await getMyActivityBefore(callerToken, before, 500)
+              : await getAdminActivityBefore(before, 500);
+            if (!active) return;
+            mergeEvents(older.events);
+            hasMore = older.has_more;
+            before = older.next_before;
+            oldestTimestamp = older.events[0]?.timestamp ?? oldestTimestamp;
+            setOlderAvailable(hasMore);
+          }
+        }
         setError(null);
       } catch (cause) {
         if (active) setError((cause as Error).message);
@@ -489,9 +526,53 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
     }
   };
 
+  const loadOlderUntil = async (targetCount: number) => {
+    if (loadingOlder || !olderAvailable) return;
+    setLoadingOlder(true);
+    try {
+      let hasMore: boolean = olderAvailable;
+      while (hasMore && eventsRef.current.length < targetCount) {
+        const before = eventsRef.current.at(-1)?.id;
+        if (before == null) break;
+        const page = callerToken
+          ? await getMyActivityBefore(callerToken, before, 500)
+          : await getAdminActivityBefore(before, 500);
+        mergeEvents(page.events);
+        hasMore = page.has_more;
+        setOlderAvailable(hasMore);
+        if (page.events.length === 0) break;
+      }
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  const requestDetails = events.map((event) => ({ event, detail: parseRequestActivityDetail(event.kind, event.detail) }));
+  const entryOptions = [...new Set(requestDetails.map(({ detail }) => detail?.endpointId).filter((id): id is string => id !== null && id !== undefined))].sort();
+  const providerOptions = [...new Set(requestDetails.map(({ detail }) => detail?.provider).filter((id): id is string => id !== null && id !== undefined))].sort();
+  const rangeStart = timeFilter === 'all' ? null : Date.now() - (ACTIVITY_RANGE_HOURS[timeFilter] ?? 720) * 60 * 60 * 1000;
+  const filteredEvents = requestDetails.filter(({ event, detail }) => {
+    if (kindFilter !== 'all' && event.kind !== kindFilter) return false;
+    if (rangeStart !== null && event.timestamp < rangeStart) return false;
+    if (entryFilter !== 'all' && detail?.endpointId !== entryFilter) return false;
+    if (providerFilter !== 'all' && detail?.provider !== providerFilter) return false;
+    return true;
+  }).map(({ event }) => event);
+  const parsedPageSize = Number(pageSize);
+  const pageSizeValid = Number.isSafeInteger(parsedPageSize) && parsedPageSize > 0;
+  const pageSizeNumber = pageSizeValid ? parsedPageSize : 50;
+  const pageCount = Math.max(1, Math.ceil(filteredEvents.length / pageSizeNumber));
+  const safePageIndex = Math.min(pageIndex, pageCount - 1);
+  const pageEvents = filteredEvents.slice(safePageIndex * pageSizeNumber, (safePageIndex + 1) * pageSizeNumber);
+  const pageFrom = filteredEvents.length === 0 ? 0 : safePageIndex * pageSizeNumber + 1;
+  const pageTo = Math.min((safePageIndex + 1) * pageSizeNumber, filteredEvents.length);
+
   const card: React.CSSProperties = {
     background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
   };
+  const fieldStyle: React.CSSProperties = { borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--text)' };
   return (
     <section className="space-y-3 rounded-md p-4" style={card}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -505,6 +586,24 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
       </div>
       {error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{copy(callerToken ? 'access.myLoadFailed' : 'access.eventsFailed', { reason: error })}</p>}
       {!streaming && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{copy('access.streamPaused')}</p>}
+      <SystemStatusMatrix events={events} dimension={matrixDimension} onDimensionChange={setMatrixDimension} copy={copy} />
+      <div className="flex flex-wrap items-end gap-2" aria-label={copy('access.filters')}>
+        <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.endpoint')}
+          <select value={entryFilter} onChange={(event) => { setEntryFilter(event.target.value); setPageIndex(0); }} className="h-9 min-w-32 border px-2" style={fieldStyle}><option value="all">{copy('access.all')}</option>{entryOptions.map((id) => <option key={id} value={id}>{id}</option>)}</select>
+        </label>
+        <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.provider')}
+          <select value={providerFilter} onChange={(event) => { setProviderFilter(event.target.value); setPageIndex(0); }} className="h-9 min-w-32 border px-2" style={fieldStyle}><option value="all">{copy('access.all')}</option>{providerOptions.map((id) => <option key={id} value={id}>{id}</option>)}</select>
+        </label>
+        <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.timeRange')}
+          <select value={timeFilter} onChange={(event) => { setTimeFilter(event.target.value); setPageIndex(0); }} className="h-9 border px-2" style={fieldStyle}><option value="24h">{copy('access.last24Hours')}</option><option value="7d">{copy('access.last7Days')}</option><option value="30d">{copy('access.last30Days')}</option><option value="90d">{copy('access.last90Days')}</option><option value="all">{copy('access.allTime')}</option></select>
+        </label>
+        <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.kind')}
+          <select value={kindFilter} onChange={(event) => { setKindFilter(event.target.value); setPageIndex(0); }} className="h-9 border px-2" style={fieldStyle}><option value="all">{copy('access.all')}</option>{['request', 'probe', 'config_change', 'error'].map((kind) => <option key={kind} value={kind}>{eventKindLabel(kind, copy)}</option>)}</select>
+        </label>
+        <label className="grid gap-1 text-xs" style={{ color: pageSizeValid ? 'var(--text-muted)' : 'var(--danger)' }}>{copy('access.pageSize')}
+          <input type="number" min={1} step={1} value={pageSize} onChange={(event) => { setPageSize(event.target.value); setPageIndex(0); }} className="h-9 border px-2 text-center tabular" style={{ ...fieldStyle, width: `${Math.max(5, pageSize.length + 1)}ch`, color: pageSizeValid ? 'var(--text)' : 'var(--danger)' }} aria-invalid={!pageSizeValid} />
+        </label>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
@@ -516,7 +615,7 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
             </tr>
           </thead>
           <tbody>
-            {events.map((event) => (
+            {pageEvents.map((event) => (
               <tr key={event.id} className="border-b align-top" style={{ borderColor: 'var(--border)' }}>
                 <td className="whitespace-nowrap px-2 py-2 text-xs tabular sm:text-sm" style={{ color: 'var(--text-muted)' }}>{formatDate(event.timestamp, '—')}</td>
                 <td className="hidden whitespace-nowrap px-2 py-2 sm:table-cell"><span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span></td>
@@ -531,10 +630,70 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
               </tr>
             ))}
             {initialLoading && events.length === 0 && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy('access.loadingEvents')}</td></tr>}
-            {!initialLoading && events.length === 0 && !error && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy('access.noEvents')}</td></tr>}
+            {!initialLoading && pageEvents.length === 0 && !error && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{filteredEvents.length === 0 ? copy('access.noEvents') : copy('access.noFilteredEvents')}</td></tr>}
           </tbody>
         </table>
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <span className="tabular">{copy('access.pageRange', { from: pageFrom, to: pageTo, total: filteredEvents.length })}</span>
+        <div className="flex items-center gap-1">
+          <button type="button" disabled={safePageIndex === 0} onClick={() => setPageIndex((index) => Math.max(0, index - 1))} className="grid h-8 w-8 place-items-center border" style={fieldStyle} title={copy('access.previousPage')} aria-label={copy('access.previousPage')}><ChevronLeft size={15} /></button>
+          <span className="tabular px-2">{copy('access.pageNumber', { page: safePageIndex + 1, pages: pageCount })}</span>
+          <button type="button" disabled={safePageIndex + 1 >= pageCount && !olderAvailable} onClick={() => { const nextPage = safePageIndex + 1; setPageIndex(nextPage); if (nextPage >= pageCount && olderAvailable) void loadOlderUntil(eventsRef.current.length + pageSizeNumber); }} className="grid h-8 w-8 place-items-center border" style={fieldStyle} title={copy('access.nextPage')} aria-label={copy('access.nextPage')}><ChevronRight size={15} /></button>
+          {olderAvailable && <button type="button" disabled={loadingOlder} onClick={() => void loadOlderUntil(eventsRef.current.length + 500)} className="h-8 border px-2" style={fieldStyle}>{loadingOlder ? copy('access.loadingOlder') : copy('access.loadOlder')}</button>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SystemStatusMatrix({ events, dimension, onDimensionChange, copy }: {
+  events: readonly ActivityEvent[];
+  dimension: 'entry' | 'provider';
+  onDimensionChange: (dimension: 'entry' | 'provider') => void;
+  copy: Copy;
+}) {
+  const rows: HealthRow[] = buildHealthRows(events, dimension, Date.now(), 90);
+  const days = rows[0]?.cells.map((cell) => cell.day) ?? [];
+  const cellColor = (rate: number | null) => {
+    if (rate === null) return 'var(--surface-hover)';
+    if (rate >= 0.98) return 'color-mix(in srgb, var(--success) 45%, var(--surface))';
+    if (rate >= 0.8) return 'color-mix(in srgb, var(--warning) 50%, var(--surface))';
+    return 'color-mix(in srgb, var(--danger) 45%, var(--surface))';
+  };
+  const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' };
+  return (
+    <section className="overflow-hidden p-3 sm:p-4" style={card} aria-labelledby="system-status-title">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h3 id="system-status-title" className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('access.systemStatus')}</h3>
+        <div className="inline-flex border p-0.5" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)' }} role="group" aria-label={copy('access.heatmapDimension')}>
+          {(['entry', 'provider'] as const).map((item) => <button key={item} type="button" aria-pressed={dimension === item} onClick={() => onDimensionChange(item)} className="min-h-8 px-2 text-xs" style={{ borderRadius: 'var(--radius)', background: dimension === item ? 'var(--accent)' : 'transparent', color: dimension === item ? '#fff' : 'var(--text-muted)' }}>{copy(item === 'entry' ? 'access.entries' : 'access.providers')}</button>)}
+        </div>
+      </div>
+      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <span>{copy('access.heatmapWindow')}</span>
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 border" style={{ borderColor: 'var(--border)', background: 'var(--surface-hover)' }} />{copy('access.noSamples')}</span>
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5" style={{ background: 'var(--success)' }} />{copy('access.healthy')}</span>
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5" style={{ background: 'var(--warning)' }} />{copy('access.degraded')}</span>
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5" style={{ background: 'var(--danger)' }} />{copy('access.unhealthy')}</span>
+      </div>
+      {rows.length === 0 ? <p className="py-5 text-center text-sm" style={{ color: 'var(--text-muted)' }}>{copy('access.noHeatmapData')}</p> : (
+        <div className="overflow-x-auto" role="region" aria-label={copy('access.systemStatus')} tabIndex={0}>
+          <div className="min-w-[820px] space-y-1.5">
+            <div className="grid items-end gap-1" style={{ gridTemplateColumns: `minmax(9rem, 1.4fr) repeat(${days.length}, minmax(7px, 1fr))` }}>
+              <span className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{dimension === 'entry' ? copy('access.endpoint') : copy('access.provider')}</span>
+              {days.map((day, index) => <span key={day} className="text-center font-mono text-[9px] tabular" title={day} style={{ color: 'var(--text-subtle)' }}>{index % 10 === 0 || index === days.length - 1 ? day.slice(8) : ''}</span>)}
+            </div>
+            {rows.map((row) => <div key={row.id} className="grid items-center gap-1" style={{ gridTemplateColumns: `minmax(9rem, 1.4fr) repeat(${row.cells.length}, minmax(7px, 1fr))` }}>
+              <span className="truncate font-mono text-xs" title={row.label} style={{ color: 'var(--text)' }}>{row.label}</span>
+              {row.cells.map((cell) => {
+                const label = copy('access.heatCell', { day: cell.day, count: cell.count, success: cell.success, failure: cell.failure, rate: cell.rate === null ? copy('access.noSamples') : `${(cell.rate * 100).toFixed(0)}%` });
+                return <button key={cell.day} type="button" aria-label={label} title={label} className="h-4 min-w-0 border transition-colors focus-visible:outline focus-visible:outline-2" style={{ borderColor: cell.rate === null ? 'var(--border)' : 'transparent', borderRadius: 2, background: cellColor(cell.rate), outlineColor: 'var(--accent)' }} />;
+              })}
+            </div>)}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

@@ -1,0 +1,13 @@
+{
+  "tag_name": "v0.5.0",
+  "name": "v0.5.0 release candidate",
+  "published_at": "2026-10-01T00:00:00Z",
+  "assets": [
+    { "name": "jev-switch-portable-0.5.0-windows-x64.zip" },
+    { "name": "jev-switch-standalone-0.5.0-windows-x64.exe" },
+    { "name": "jev-switch_0.5.0_x64_en-US.msi" },
+    { "name": "jev-switch-0.5.0-android-aarch64-experimental.apk" },
+    { "name": "jev-switch-cli-0.5.0-linux-x64" },
+    { "name": "jev-switch-cli-0.5.0-windows-x64.exe" }
+  ]
+}

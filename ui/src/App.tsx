@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Shell, useHashRoute, type Route } from './app/Shell';
 import { I18nProvider } from './i18n';
 import { DashboardPage } from './pages/DashboardPage';
@@ -8,9 +7,6 @@ import { RoutingPage } from './pages/RoutingPage';
 import { PlaygroundPage } from './pages/PlaygroundPage';
 import { StatisticsPage } from './pages/StatisticsPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { MobileConnectPage } from './pages/MobileConnectPage';
-import { readApiBasePreference } from './api/base';
-import { isAndroidTauri } from './api/androidGateway';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 
 /**
@@ -30,11 +26,6 @@ export default function App() {
 
 function AppContent({ route }: { route: Route }) {
   const { isReadOnly } = useAuth();
-  const androidMobile = import.meta.env.VITE_JEV_MOBILE && isAndroidTauri();
-  const [mobileConnected, setMobileConnected] = useState(() => !androidMobile || Boolean(readApiBasePreference()));
-  if (androidMobile && !mobileConnected) {
-    return <MobileConnectPage onConnected={() => setMobileConnected(true)} onUseLocalGateway={() => setMobileConnected(true)} />;
-  }
   const visibleRoute = isReadOnly && route !== 'dashboard' && route !== 'home' && route !== 'playground' && route !== 'stats' && route !== 'settings'
     ? 'dashboard'
     : route;

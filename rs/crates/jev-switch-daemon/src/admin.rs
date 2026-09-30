@@ -939,6 +939,233 @@ pub struct GetListenResponse {
     pub addr: String,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutLanAccessBody {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct LanAccessResponse {
+    pub enabled: bool,
+    pub bind: String,
+}
+
+pub async fn get_lan_access(State(state): State<AppState>) -> Response {
+    let enabled = state.auth.lan_access_enabled.load(Ordering::SeqCst);
+    let bind = state
+        .listen
+        .get()
+        .map(|handle| handle.bound().to_string())
+        .unwrap_or_default();
+    Json(LanAccessResponse { enabled, bind }).into_response()
+}
+
+pub async fn put_lan_access(State(state): State<AppState>, body: Bytes) -> Response {
+    let request: PutLanAccessBody = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid LAN access body: {error}"),
+            )
+        }
+    };
+    if crate::auth::current_mode(&state) != crate::config::RunMode::Local {
+        return err(
+            &state,
+            StatusCode::CONFLICT,
+            "LAN access mode is only available in local mode",
+        );
+    }
+    if std::env::var("JEV_BIND")
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return err(&state, StatusCode::CONFLICT, "JEV_BIND overrides the application listen setting; clear it before changing LAN access");
+    }
+    let Some(handle) = state.listen.get() else {
+        return err(
+            &state,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "listen supervisor unavailable",
+        );
+    };
+    let current_enabled = state.auth.lan_access_enabled.load(Ordering::SeqCst);
+    let current_addr = handle.bound();
+    if current_enabled == request.enabled {
+        return Json(LanAccessResponse {
+            enabled: current_enabled,
+            bind: current_addr.to_string(),
+        })
+        .into_response();
+    }
+
+    let mut config = match read_value(&state.config_path) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let Some(table) = config.as_table_mut() else {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "config root is not a table",
+        );
+    };
+
+    let (target, explicit_after, previous_bind) = if request.enabled {
+        let previous = table
+            .get("bind")
+            .and_then(toml::Value::as_str)
+            .unwrap_or("auto")
+            .to_owned();
+        (
+            std::net::SocketAddr::from(([0, 0, 0, 0], current_addr.port())),
+            true,
+            Some(previous),
+        )
+    } else {
+        let previous = table
+            .get("lan_previous_bind")
+            .and_then(toml::Value::as_str)
+            .unwrap_or("auto");
+        if previous == "auto" {
+            (handle.defaults().local, false, None)
+        } else {
+            match previous.parse::<std::net::SocketAddr>() {
+                Ok(addr) => (addr, true, None),
+                Err(error) => {
+                    return err(
+                        &state,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("invalid saved listen address: {error}"),
+                    )
+                }
+            }
+        }
+    };
+
+    if let Err(error) = handle.rebind(target).await {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("LAN listen rebind failed: {error}"),
+        );
+    }
+    if request.enabled {
+        table.insert(
+            "lan_previous_bind".into(),
+            toml::Value::String(previous_bind.unwrap_or_else(|| "auto".into())),
+        );
+        table.insert("bind".into(), toml::Value::String(target.to_string()));
+        table.insert("lan_access_enabled".into(), toml::Value::Boolean(true));
+    } else {
+        table.remove("lan_previous_bind");
+        table.insert("lan_access_enabled".into(), toml::Value::Boolean(false));
+        if explicit_after {
+            table.insert("bind".into(), toml::Value::String(target.to_string()));
+        } else {
+            table.remove("bind");
+        }
+    }
+    if let Err(response) = write_value(&state.config_path, &config) {
+        if let Err(restore_error) = handle.rebind(current_addr).await {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("save LAN setting failed and listen rollback failed: {restore_error}"),
+            );
+        }
+        return response;
+    }
+    handle.set_explicit(explicit_after);
+    state
+        .auth
+        .lan_access_enabled
+        .store(request.enabled, Ordering::SeqCst);
+    tracing::info!(enabled = request.enabled, bind = %target, "LAN access updated");
+    Json(LanAccessResponse {
+        enabled: request.enabled,
+        bind: target.to_string(),
+    })
+    .into_response()
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct PutGatewayBody {
+    pub running: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct GatewayControlResponse {
+    pub running: bool,
+}
+
+pub async fn get_gateway(State(state): State<AppState>) -> Json<GatewayControlResponse> {
+    Json(GatewayControlResponse {
+        running: state.gateway_enabled.load(Ordering::SeqCst),
+    })
+}
+
+/// Suspend or resume new model calls while leaving the console and admin API available.
+pub async fn put_gateway(State(state): State<AppState>, body: Bytes) -> Response {
+    let request: PutGatewayBody = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid gateway state body: {error}"),
+            )
+        }
+    };
+    let mut config = match read_value(&state.config_path) {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let Some(table) = config.as_table_mut() else {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "config root is not a table",
+        );
+    };
+    table.insert(
+        "gateway_enabled".into(),
+        toml::Value::Boolean(request.running),
+    );
+    if let Err(response) = write_value(&state.config_path, &config) {
+        return response;
+    }
+    state
+        .gateway_enabled
+        .store(request.running, Ordering::SeqCst);
+    Json(GatewayControlResponse {
+        running: request.running,
+    })
+    .into_response()
+}
+
 /// 进程启动时刻（`build_state` 初始化一次；`GET /v1/admin/status.uptime_s` 用）。
 pub(crate) static PROCESS_START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
@@ -1349,12 +1576,19 @@ pub async fn put_password(
     headers: axum::http::HeaderMap,
     body: Bytes,
 ) -> Response {
-    use crate::auth::{addr_is_loopback, bearer_token, current_mode, has_valid_session};
+    use crate::auth::{
+        addr_allowed_in_local_mode, addr_is_loopback, bearer_token, current_mode, has_valid_session,
+    };
     // in-handler 鉴权（password 不在 admin 中间件门内 —— login 同理）
     let loopback = addr_is_loopback(connect.as_ref().map(|axum::extract::ConnectInfo(a)| a));
     match current_mode(&state) {
         crate::config::RunMode::Local => {
-            if !loopback {
+            if !addr_allowed_in_local_mode(
+                &state,
+                connect
+                    .as_ref()
+                    .map(|axum::extract::ConnectInfo(addr)| addr),
+            ) {
                 return crate::auth::forbidden(&state, "local mode: loopback only");
             }
         }
@@ -1646,6 +1880,13 @@ pub async fn invoke_provider(
     AxumPath(id): AxumPath<String>,
     body: Bytes,
 ) -> Response {
+    if !state.gateway_enabled.load(Ordering::SeqCst) {
+        return err(
+            &state,
+            StatusCode::SERVICE_UNAVAILABLE,
+            "gateway service is stopped",
+        );
+    }
     let req: jev_protocol::JevRequest = match serde_json::from_slice(&body) {
         Ok(req) => req,
         Err(e) => {

@@ -6,6 +6,7 @@ export interface CommandDefinition {
   keywords: string[];
   href: string;
   adminOnly?: boolean;
+  action?: 'toggle_gateway';
 }
 
 export const COMMANDS: readonly CommandDefinition[] = [
@@ -16,6 +17,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: 'playground', labelKey: 'command.playground', keywords: ['test', 'compare', '演练场', '测试', '对比'], href: '#/playground' },
   { id: 'stats', labelKey: 'command.stats', keywords: ['statistics', 'history', 'usage', '统计', '历史', '用量'], href: '#/stats' },
   { id: 'settings', labelKey: 'command.settings', keywords: ['preferences', 'config', '设置', '偏好', '配置'], href: '#/settings' },
+  { id: 'toggle-gateway', labelKey: 'command.toggleGateway', keywords: ['start gateway', 'stop gateway', '启停网关', '启动网关', '停止网关'], href: '#/dashboard', adminOnly: true, action: 'toggle_gateway' },
 ];
 
 export function filterCommands(commands: readonly CommandDefinition[], query: string, translate: (key: MessageKey) => string) {

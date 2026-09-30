@@ -138,8 +138,11 @@ impl AndroidGatewayState {
             return Ok(self.status(Some(gateway.bound)));
         }
 
-        let config = Config::load(&self.config_path)
+        let mut config = Config::load(&self.config_path)
             .map_err(|error| format!("load Android gateway config failed: {error}"))?;
+        // A user-initiated service start activates model calls for this process. The
+        // Android default remains stopped until start() is explicitly requested.
+        config.gateway_enabled = Some(true);
         let mode = config
             .effective_mode()
             .map_err(|error| format!("resolve Android gateway mode failed: {error}"))?;

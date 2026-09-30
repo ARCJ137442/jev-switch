@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Redo2, RefreshCw, RotateCcw, Table2, Undo2 } from 'lucide-react';
 import { getBase } from '../api';
 import { findCyclicEdgeKeys, listProviders, listRoutes, normalizeRoute, putRoutes, type Route } from '../api/admin';
@@ -9,6 +9,7 @@ import { DocumentHistory } from '../components/routing/documentHistory';
 import { RouteTableForm } from '../components/routing/RouteTableForm';
 import { useToast } from '../app/feedback';
 import { useI18n } from '../i18n';
+import { useStatusBarItems } from '../app/statusBar';
 import { getAdminActivity, streamActivity, type ActivityEvent } from '../api/access';
 
 interface GraphDocument { routes: Route[]; positions: Record<string, Point> }
@@ -83,6 +84,11 @@ export function RoutingPage() {
   const dirty = serialize(doc.routes) !== serialize(baseline);
   const cycleEdges = findCyclicEdgeKeys(doc.routes);
   const errors = new Set(cycleEdges);
+  const statusItems = useMemo(() => [
+    { id: 'routing-edges', label: t('routing.edges', { n: doc.routes.length }) },
+    { id: 'routing-save-state', label: t(dirty ? 'routing.unsaved' : 'routing.synced'), tone: saveError || loadError ? 'danger' as const : dirty ? 'warning' as const : 'good' as const },
+  ], [dirty, doc.routes.length, loadError, saveError, t]);
+  useStatusBarItems(statusItems);
 
   const load = async () => {
     const generation = ++loadGeneration.current;

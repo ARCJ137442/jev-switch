@@ -2,6 +2,7 @@ import { Pause, Play, RefreshCw, Activity, Cpu, HardDrive, ArrowDownToLine, Arro
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getTelemetry, type RuntimeTelemetry as RuntimeTelemetrySnapshot } from '../../api/admin';
 import { useI18n } from '../../i18n';
+import { buildTrafficWindow, TRAFFIC_WINDOW_MS } from '../../pages/telemetryWindow';
 import './runtime-telemetry.css';
 
 const REFRESH_OPTIONS = [1000, 5000] as const;
@@ -58,7 +59,7 @@ function Metric({ icon, label, value, detail, tone = 'default' }: { icon: React.
   );
 }
 
-export function RuntimeTelemetry() {
+export function RuntimeTelemetry({ onActiveRequestsChange }: { onActiveRequestsChange?: (count: number) => void }) {
   const { t } = useI18n();
   const [data, setData] = useState<RuntimeTelemetrySnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +69,9 @@ export function RuntimeTelemetry() {
   const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
   const mounted = useRef(false);
   const inFlight = useRef(false);
+  const activeRequestsCallback = useRef(onActiveRequestsChange);
+
+  useEffect(() => { activeRequestsCallback.current = onActiveRequestsChange; }, [onActiveRequestsChange]);
 
   useEffect(() => {
     mounted.current = true;
@@ -82,6 +86,7 @@ export function RuntimeTelemetry() {
       const next = await getTelemetry();
       if (mounted.current) {
         setData(next);
+        activeRequestsCallback.current?.(next.active_requests);
         setError(null);
       }
     } catch (cause) {
@@ -113,7 +118,7 @@ export function RuntimeTelemetry() {
   }, [load, paused, refreshMs, visible]);
 
   const chart = useMemo(() => {
-    const samples = data?.samples ?? [];
+    const samples = data ? buildTrafficWindow(data.samples, Date.now()) : [];
     const ingress = samples.map((sample) => sample.ingress_bps);
     const egress = samples.map((sample) => sample.egress_bps);
     const max = Math.max(1, ...ingress, ...egress);
@@ -125,6 +130,8 @@ export function RuntimeTelemetry() {
   const shellMemory = data?.shell.memory_bytes ?? null;
   const width = 900;
   const height = 170;
+  const chartEnd = Date.now();
+  const chartStart = chartEnd - TRAFFIC_WINDOW_MS;
 
   return (
     <section className="runtime-telemetry" aria-labelledby="runtime-telemetry-title">
@@ -172,16 +179,15 @@ export function RuntimeTelemetry() {
           )}
         </div>
         <div className="runtime-telemetry__chart-footer">
-          <span>{data ? new Date(data.session_started_at_ms).toLocaleTimeString() : '—'}</span>
+          <span>{data ? new Date(chartStart).toLocaleTimeString() : '—'}</span>
           <span>{data ? t('telemetry.live', { ms: refreshMs }) : '—'}</span>
-          <span>{data ? new Date(data.sampled_at_ms).toLocaleTimeString() : '—'}</span>
+          <span>{data ? new Date(chartEnd).toLocaleTimeString() : '—'}</span>
         </div>
       </div>
 
       <div className="runtime-telemetry__metrics">
         <Metric icon={<ArrowUpFromLine size={16} />} label={t('telemetry.ingressRate')} value={data ? formatRate(data.ingress_bps) : '—'} tone="good" />
         <Metric icon={<ArrowDownToLine size={16} />} label={t('telemetry.egressRate')} value={data ? formatRate(data.egress_bps) : '—'} tone="default" />
-        <Metric icon={<Activity size={16} />} label={t('telemetry.active')} value={data ? String(data.active_requests) : '—'} detail={data ? `${data.total_requests} ${t('telemetry.requests')}` : undefined} />
         <Metric icon={<Cpu size={16} />} label={t('telemetry.daemon')} value={data ? formatBytes(daemonMemory) : '—'} detail={data?.daemon.cpu_percent == null ? t('telemetry.unavailable') : `${formatPercent(data.daemon.cpu_percent)} CPU`} />
         <Metric icon={<HardDrive size={16} />} label={t('telemetry.totalIn')} value={data ? formatBytes(data.ingress_bytes_total) : '—'} />
         <Metric icon={<HardDrive size={16} />} label={t('telemetry.totalOut')} value={data ? formatBytes(data.egress_bytes_total) : '—'} />

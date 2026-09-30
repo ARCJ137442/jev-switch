@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Check, Copy, Pencil, Plus, Power, RefreshCw, Trash2, X } from 'lucide-react';
 import { createEndpoint, deleteEndpoint, listEndpoints, updateDefaultStrategy, updateEndpoint,
   type ServiceEndpointView, type StrategyConfig } from '../../api/endpoints';
@@ -6,6 +6,7 @@ import { listProviders, listRoutes, type AdminProvider } from '../../api/admin';
 import type { RouteEdge } from '../../generated/RouteEdge';
 import { useI18n } from '../../i18n';
 import { useToast } from '../../app/feedback';
+import { useStatusBarItems } from '../../app/statusBar';
 import './entry.css';
 
 const strategyTypes = ['failover', 'race', 'load_balance', 'shadow'] as const;
@@ -71,6 +72,12 @@ export function EndpointPanel({ disabled = false, onChanged }: Props) {
     } catch (e) { setError(message(e)); }
   };
   const shown = entries.filter(ep => ep.id.toLowerCase().includes(filter.toLowerCase()));
+  const statusItems = useMemo(() => [{
+    id: 'entry-summary',
+    label: t('entry.entriesCount', { n: shown.length }),
+    tone: error ? 'danger' as const : 'default' as const,
+  }], [error, shown.length, t]);
+  useStatusBarItems(statusItems);
   const globalConfig = storedStrategy(globalStrategy);
   return <section className="entry-workspace" aria-label={t('entry.tab')}>
     <div className="entry-toolbar">

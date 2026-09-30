@@ -23,6 +23,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 - 开始跨层功能前先看 [当前实施计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)、[HTTP 契约](docs/contracts/05-HTTP契约.md)和[入口网关修订](docs/contracts/07-入口网关修订.md)，再按涉及范围读其他契约。
 - [ROADMAP.md](ROADMAP.md) 记录未排期的未来方向，不代表当前发布包含或承诺了这些能力。
 - [路线图执行计划总表](docs/design/ROADMAP-EXECUTION-PLANS.md)及其专项计划用于把近期候选拆成可执行任务；计划不等于 Release 承诺。
+- [下一轮用户反馈迭代计划](docs/design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md)记录近期 UI/交互工作包和验收边界；开始相关实现时更新任务状态，不能把计划当作当前能力或 Release 承诺。
 - Android APP 当前属于实验性完整网关应用计划，面向没有 Termux 的普通移动端；APK 必须包含 Android daemon 核心，首次安装默认关闭，APP、常驻通知和 Quick Settings tile 共用启停状态机，后台/Activity 重建不得意外重启已运行网关。未有 APK/真机/原生 service/tile/生命周期证据前不得写成稳定平台支持。详见 [Android 实验性计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - Rust workspace 位于 `rs/`，React UI 位于 `ui/`，Tauri 桌面壳位于 `src-tauri/`。`ts-rs` 的 UI 类型来自 Rust 导出。
 - 保持改动局部化；验证与改动职责相称。不要用历史测试计数或旧版运行报告替代当前工作树的结果。
@@ -41,7 +42,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 | 本地 daemon | 设置 `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"` 后运行 `cargo run --manifest-path rs/Cargo.toml` |
 | 健康检查 | `curl http://127.0.0.1:11435/health` |
 
-版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.4.0`；版本字段、发行产物、README 与核验记录必须保持一致。v0.4.0 的便携/Standalone 桌面核心路径和官方 TypeSafe 调用已由维护者人工确认；MSI/NSIS、Android 实验性 APK 和全链路性能仍必须单独标注边界。
+版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.5.0`；版本字段、发行产物、README 与核验记录必须保持一致。v0.5.0 的跨平台通用代码和自动门禁已验证；Tauri 原生 WebView、安装器、Android 原生 service/tile/通知和全链路性能仍必须单独标注边界。
 
 ## 文档入口
 
@@ -51,3 +52,4 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 - 契约目录：[docs/contracts/00-INDEX.md](docs/contracts/00-INDEX.md)
 - 发布流程：[docs/RELEASE.md](docs/RELEASE.md)
 - 原目标恢复与评估：[docs/OPUS5-GOAL-REASSESSMENT.md](docs/OPUS5-GOAL-REASSESSMENT.md)
+- 下一轮用户反馈计划：[docs/design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](docs/design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md)

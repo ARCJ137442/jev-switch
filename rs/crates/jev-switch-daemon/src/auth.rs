@@ -68,6 +68,8 @@ pub struct AuthState {
     /// cloud admin 登录密码（明文 —— 仅存在内存；None = fail-closed）。
     /// 运行时可经统一入口 `admin::set_admin_password` 热更（持久化+会话作废）。
     pub admin_password: RwLock<Option<String>>,
+    /// Local mode may trust private peers only after an explicit persisted opt-in.
+    pub lan_access_enabled: AtomicBool,
     /// admin 会话：token → **过期时刻**（内存态，不落盘；重启全废）。
     /// 存 `expires_at` 而非签发时刻 —— prune 判断不依赖 `now - created` 的
     /// 时钟回退语义（Instant 单调，但存到期点让测试可注入 1s 前的过期戳，
@@ -92,6 +94,7 @@ impl Default for AuthState {
             auth_tokens: Vec::new(),
             managed_tokens_only: AtomicBool::new(false),
             admin_password: RwLock::new(None),
+            lan_access_enabled: AtomicBool::new(false),
             sessions: RwLock::new(HashMap::new()),
             env_mode_override: AtomicBool::new(false),
             env_password_override: AtomicBool::new(false),
@@ -137,6 +140,7 @@ impl AuthState {
             auth_tokens,
             managed_tokens_only: AtomicBool::new(false),
             admin_password: RwLock::new(admin_password),
+            lan_access_enabled: AtomicBool::new(cfg.lan_access_enabled),
             sessions: RwLock::new(HashMap::new()),
             env_mode_override: AtomicBool::new(env_nonempty("JEV_SWITCH_MODE")),
             env_password_override: AtomicBool::new(env_nonempty("JEV_ADMIN_PASSWORD")),
@@ -196,14 +200,41 @@ pub(crate) fn addr_is_loopback(addr: Option<&std::net::SocketAddr>) -> bool {
     addr.map_or(true, |a| a.ip().is_loopback())
 }
 
-/// 从请求扩展取 `ConnectInfo<SocketAddr>` 判 loopback（中间件路径）。
-pub(crate) fn peer_is_loopback(req: &axum::extract::Request) -> bool {
+fn ip_is_private_lan(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(ip) => ip.is_private() || ip.is_link_local(),
+        std::net::IpAddr::V6(ip) => {
+            if let Some(mapped) = ip.to_ipv4_mapped() {
+                return mapped.is_private() || mapped.is_link_local();
+            }
+            let octets = ip.octets();
+            (octets[0] & 0xfe) == 0xfc || (octets[0] == 0xfe && (octets[1] & 0xc0) == 0x80)
+        }
+    }
+}
+
+/// Local mode permits loopback by default and RFC1918/link-local/ULA peers only
+/// while the persisted LAN opt-in is active.
+pub(crate) fn peer_allowed_in_local_mode(state: &AppState, req: &Request) -> bool {
     use axum::extract::ConnectInfo;
     let addr = req
         .extensions()
         .get::<ConnectInfo<std::net::SocketAddr>>()
-        .map(|ConnectInfo(a)| a);
-    addr_is_loopback(addr)
+        .map(|ConnectInfo(addr)| addr);
+    addr_allowed_in_local_mode(state, addr)
+}
+
+pub(crate) fn addr_allowed_in_local_mode(
+    state: &AppState,
+    addr: Option<&std::net::SocketAddr>,
+) -> bool {
+    match addr {
+        None => true,
+        Some(addr) if addr.ip().is_loopback() => true,
+        Some(addr) => {
+            state.auth.lan_access_enabled.load(Ordering::SeqCst) && ip_is_private_lan(addr.ip())
+        }
+    }
 }
 
 /// 401 统一错误体（contracts/05 §3 形状；经 redact —— 红线 4）。
@@ -246,7 +277,7 @@ pub async fn require_call_token(
     if current_mode(&state) == crate::config::RunMode::Local {
         // local：loopback 全放行（现状语义）；非 loopback → 403 应用层兜底
         // （显式 bind=0.0.0.0 时 LAN 可达的残留保护；非显式默认已绑 127.0.0.1）
-        if !peer_is_loopback(&req) {
+        if !peer_allowed_in_local_mode(&state, &req) {
             return forbidden(&state, "local mode: loopback only");
         }
         if let Some(identity) = identity.clone() {
@@ -289,7 +320,9 @@ pub async fn require_managed_caller(
     mut req: Request,
     next: Next,
 ) -> Response {
-    if current_mode(&state) == crate::config::RunMode::Local && !peer_is_loopback(&req) {
+    if current_mode(&state) == crate::config::RunMode::Local
+        && !peer_allowed_in_local_mode(&state, &req)
+    {
         return forbidden(&state, "local mode: loopback only");
     }
     let Some(identity) = call_identity(&state, &req) else {
@@ -306,7 +339,7 @@ pub async fn require_admin_session(
     next: Next,
 ) -> Response {
     if current_mode(&state) == crate::config::RunMode::Local {
-        if !peer_is_loopback(&req) {
+        if !peer_allowed_in_local_mode(&state, &req) {
             return forbidden(&state, "local mode: loopback only");
         }
         return next.run(req).await; // 现状回归：loopback 零校验
@@ -779,6 +812,23 @@ auth_tokens = ["tok-test-call-bbbb"]
         assert_eq!(mk("Basic dXNlcjpwdw=="), None);
         assert_eq!(mk("Bearer   "), None);
         assert_eq!(mk("Bearer"), None); // 无空格分隔
+    }
+
+    #[test]
+    fn lan_peer_classifier_accepts_private_ranges_but_not_public_addresses() {
+        for value in [
+            "10.1.2.3",
+            "172.20.0.9",
+            "192.168.8.4",
+            "169.254.1.2",
+            "fc00::4",
+            "fe80::1",
+        ] {
+            assert!(ip_is_private_lan(value.parse().unwrap()), "{value}");
+        }
+        for value in ["8.8.8.8", "172.40.0.1", "2001:4860:4860::8888"] {
+            assert!(!ip_is_private_lan(value.parse().unwrap()), "{value}");
+        }
     }
 
     /* ════════════════════════════════════════════════════════════

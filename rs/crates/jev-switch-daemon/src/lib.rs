@@ -96,6 +96,8 @@ pub struct AppState {
     pub db_conn: Arc<Mutex<rusqlite::Connection>>,
     /// Process-local session telemetry for the Dashboard; never persisted.
     pub telemetry: telemetry::Telemetry,
+    /// Gate public/direct model calls while keeping the control plane available.
+    pub gateway_enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -137,6 +139,7 @@ fn known_keys_snapshot(state: &AppState) -> Vec<String> {
 /// - `read_api_key` 现为「明文 api_key 优先、api_key_env 兼容」（Q4=b）
 /// - 启动即收集已知密钥供 redact
 pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
+    let gateway_enabled = config.effective_gateway_enabled();
     // 进程启动时刻（status.uptime_s 基准；多次 build_state 只取首次 —— 测试同进程共享）
     admin::PROCESS_START.get_or_init(std::time::Instant::now);
     // SQLite is the runtime authority for providers and routes; the first startup imports
@@ -237,6 +240,7 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         service_endpoints: Arc::new(RwLock::new(endpoints)),
         db_conn: Arc::new(Mutex::new(db_conn)),
         telemetry,
+        gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(gateway_enabled)),
     };
     if let Err(e) = admin::endpoints::refresh_endpoint_routes(&state, &[]) {
         tracing::warn!(error = %e, "failed to load persisted endpoint routes into runtime registry");
@@ -474,6 +478,14 @@ pub fn build_app(state: AppState) -> Router {
             "/v1/admin/listen",
             get(admin::get_listen).put(admin::put_listen),
         )
+        .route(
+            "/v1/admin/lan-access",
+            get(admin::get_lan_access).put(admin::put_lan_access),
+        )
+        .route(
+            "/v1/admin/gateway",
+            get(admin::get_gateway).put(admin::put_gateway),
+        )
         .route("/v1/admin/status", get(admin::get_status))
         .route("/v1/admin/telemetry", get(admin::get_telemetry))
         // Phase 4.2: 服务入口配置端点
@@ -574,7 +586,20 @@ struct ModelsResponse {
     upstreams: Vec<UpstreamCapabilityEntry>,
 }
 
-async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
+async fn models_handler(State(state): State<AppState>) -> Response {
+    if !state
+        .gateway_enabled
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        let keys = known_keys_snapshot(&state);
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "gateway service is stopped",
+            None,
+            false,
+            &keys,
+        );
+    }
     let router = state.registry.router();
     let published: std::collections::HashSet<String> = state
         .service_endpoints
@@ -621,6 +646,7 @@ async fn models_handler(State(state): State<AppState>) -> Json<ModelsResponse> {
         data,
         upstreams,
     })
+    .into_response()
 }
 
 async fn systemone_handler(
@@ -629,6 +655,18 @@ async fn systemone_handler(
     body: Bytes,
 ) -> Response {
     let keys = known_keys_snapshot(&state);
+    if !state
+        .gateway_enabled
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "gateway service is stopped",
+            None,
+            false,
+            &keys,
+        );
+    }
     // 0. 协议解析：本地 400（criteria 缺失/错形态、未知 type、必填缺失、
     //    questions 非 record…）—— 按 contracts/01 §6 不发上游。
     //    手工 Bytes 提取：axum Json 提取器对 data 类错误回 422，契约要求 400。

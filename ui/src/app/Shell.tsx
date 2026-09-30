@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BarChart3, Boxes, DoorOpen, FlaskConical, LayoutDashboard, Route, Settings, type LucideIcon } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauri } from '@tauri-apps/api/core';
 import { getBase, fetchHealth } from '../api';
 import { clearAdminSession, getAdminSession, setAuthErrorHandler } from '../api/admin';
 import { ConflictBanner } from '../components/ConflictBanner';
@@ -9,6 +11,8 @@ import { useI18n } from '../i18n';
 import { CommandPalette } from '../components/commands/CommandPalette';
 import pkg from '../../package.json';
 import { useAuth } from '../auth/AuthContext';
+import { readShowStatusBar, SETTINGS_CHANGE_EVENT } from '../settings/preferences';
+import { StatusBarContributionProvider, type StatusBarItem } from './statusBar';
 import './shell.css';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
@@ -123,6 +127,10 @@ function ShellFrame({ route, children }: ShellProps) {
   const [needLogin, setNeedLogin] = useState(false);
   const [contentVersion, setContentVersion] = useState(0);
   const [, setApiBaseVersion] = useState(0);
+  const [showStatusBar, setShowStatusBar] = useState(readShowStatusBar);
+  const [pageStatusItems, setPageStatusItems] = useState<readonly StatusBarItem[]>([]);
+  const registerPageStatusItems = useCallback((items: readonly StatusBarItem[]) => setPageStatusItems(items), []);
+  const currentNav = useMemo(() => NAV.find((item) => item.route === route) ?? NAV[0], [route]);
   useEffect(() => {
     setAuthErrorHandler(() => setNeedLogin(true));
     const onApiBaseChange = () => setApiBaseVersion((version) => version + 1);
@@ -131,6 +139,23 @@ function ShellFrame({ route, children }: ShellProps) {
       setAuthErrorHandler(null);
       window.removeEventListener('jev-api-base-change', onApiBaseChange);
     };
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setShowStatusBar(readShowStatusBar());
+    window.addEventListener(SETTINGS_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(SETTINGS_CHANGE_EVENT, sync);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'F11' || !isTauri()) return;
+      if ((event.target as HTMLElement | null)?.closest('input,textarea,select,[contenteditable="true"]')) return;
+      event.preventDefault();
+      void getCurrentWindow().isFullscreen().then((fullscreen) => getCurrentWindow().setFullscreen(!fullscreen));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   const daemonLabel =
@@ -250,21 +275,28 @@ function ShellFrame({ route, children }: ShellProps) {
       )}
 
       {/* 页面 */}
-      <main key={`${route}:${contentVersion}`} className={`app-shell__main min-h-0 flex-1${route === 'routing' ? ' app-shell__main--routing' : ''}`}>{children}</main>
+      <StatusBarContributionProvider register={registerPageStatusItems}>
+        <main key={`${route}:${contentVersion}`} className={`app-shell__main min-h-0 flex-1${route === 'routing' ? ' app-shell__main--routing' : ''}`}>{children}</main>
+      </StatusBarContributionProvider>
 
-      {/* footer：只留 endpoint 一项（可 hover 看全），去掉 file=truth 等内部术语 */}
-      <footer className="app-shell__footer shrink-0 border-t" style={{ borderColor: 'var(--border)' }}>
-        <div className="app-shell__footer-inner mx-auto max-w-7xl"
-          style={{
-            fontSize: 'var(--text-xs)',
-            color: 'var(--text-subtle)',
-            fontFamily: 'var(--font-mono)',
-          }}
-          title="Daemon endpoint · POST /v1/systemone"
-        >
-          {endpointLabel}
+      {showStatusBar && <footer className="app-shell__footer shrink-0 border-t" style={{ borderColor: 'var(--border)' }}>
+        <div className="app-shell__footer-inner" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
+          <span className="app-shell__footer-endpoint" title="Daemon endpoint · POST /v1/systemone">{endpointLabel}</span>
+          <span className="app-shell__footer-page"><currentNav.icon size={13} aria-hidden="true" />{t(currentNav.labelKey)}</span>
+          <span className="app-shell__footer-contributions">
+            {pageStatusItems.map((item) => {
+              const className = `app-shell__status-item app-shell__status-item--${item.tone ?? 'default'}`;
+              const content = <><span>{item.label}</span></>;
+              return item.href
+                ? <a key={item.id} className={className} href={item.href} title={item.title}>{content}</a>
+                : <span key={item.id} className={className} title={item.title}>{content}</span>;
+            })}
+          </span>
+          <span className={`app-shell__footer-daemon app-shell__footer-daemon--${server.status}`} title={daemonLabel} aria-label={daemonLabel}>
+            <span aria-hidden="true" />{daemonLabel}
+          </span>
         </div>
-      </footer>
+      </footer>}
 
       {/* toast 槽位 — B1 tint 胶囊 */}
       {toasts.length > 0 && (

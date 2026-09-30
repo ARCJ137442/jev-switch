@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { BarChart3, Boxes, FlaskConical, GitBranch, Network, Plus, RefreshCw, Server, Settings, type LucideIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, ArrowRight, Boxes, FlaskConical, GitBranch, Plus, RefreshCw, Server, Settings, type LucideIcon } from 'lucide-react';
+import { getBase } from '../api';
 import {
   AdminApiError,
   getStatus,
@@ -11,13 +12,14 @@ import {
   type Route,
 } from '../api/admin';
 import { useServerStatus } from '../app/Shell';
+import { useStatusBarItems } from '../app/statusBar';
 import { useI18n, type MessageKey } from '../i18n';
 import { AccessDashboard } from '../components/access/AccessDashboard';
 import { useAuth } from '../auth/AuthContext';
 import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
 import { probeProvidersConcurrently, type ProviderHealth } from './dashboardHealth';
 import { readAutoProviderProbe, SETTINGS_CHANGE_EVENT, toggleFromStorage } from '../settings/preferences';
-import { AndroidGatewayControl } from '../components/dashboard/AndroidGatewayControl';
+import { GatewayServiceControl } from '../components/dashboard/GatewayServiceControl';
 
 /**
  * Dashboard（v2.0 · 设计稿 docs/design/UI-REDESIGN-v2.md §2）
@@ -70,6 +72,14 @@ export function DashboardPage() {
   const [autoProbe, setAutoProbe] = useState(readAutoProviderProbe);
   const [loadError, setLoadError] = useState<'auth' | 'failed' | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [activeRequests, setActiveRequests] = useState<number | null>(null);
+  const [gatewayRunning, setGatewayRunning] = useState<boolean | null>(null);
+  const previousGatewayState = useRef<boolean | null>(null);
+  const handleGatewayStateChange = useCallback((running: boolean | null) => {
+    if (running === true && previousGatewayState.current !== true) setRefresh((value) => value + 1);
+    previousGatewayState.current = running;
+    setGatewayRunning(running);
+  }, []);
   const copy = (key: string, vars?: Record<string, string | number>) => t(key as MessageKey, vars);
 
   useEffect(() => {
@@ -148,10 +158,18 @@ export function DashboardPage() {
   }, [autoProbe, providers]);
 
   const daemonUp = server.status === 'ok';
+  const runtimeUp = gatewayRunning ?? daemonUp;
+  const apiAddress = (getBase() || window.location.origin).replace(/^https?:\/\//, '');
+  const runtimeMode = status?.mode ? t('dash.modeLabel', { mode: status.mode }) : gatewayRunning === false ? t('dash.modeLabel', { mode: 'local' }) : '—';
   const totalCount = providers?.length ?? 0;
   const reachableCount = Object.values(health).filter((h) => h.state === 'reachable').length;
   const prefixCount = routes?.filter((r) => r.match === 'prefix').length ?? 0;
   const exactCount = routes?.filter((r) => r.match === 'exact').length ?? 0;
+  const statusItems = useMemo(() => [
+    { id: 'dashboard-active', label: `${t('telemetry.active')}: ${activeRequests ?? '—'}` },
+    { id: 'dashboard-health', label: providers === null ? '—' : copy('overview.reachableCount', { reachable: reachableCount, total: totalCount }), tone: providers !== null && reachableCount === totalCount ? 'good' as const : 'default' as const },
+  ], [activeRequests, providers, reachableCount, t, totalCount]);
+  useStatusBarItems(statusItems);
 
   const card: React.CSSProperties = {
     background: 'var(--surface)',
@@ -188,8 +206,6 @@ export function DashboardPage() {
         {t('shell.navDashboard')}
       </h1>
 
-      <AndroidGatewayControl />
-
       {loadError && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3" style={{ ...card, color: 'var(--text-muted)' }}>
           <span>{copy(loadError === 'auth' ? 'overview.authRequired' : 'overview.loadFailed')}</span>
@@ -199,51 +215,39 @@ export function DashboardPage() {
 
       {/* ① 状态速览 */}
       <div className="mb-5 grid gap-3 sm:mb-6 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {/* daemon */}
+        {/* runtime + address */}
         <section className="fade-in p-4 sm:p-5" style={card}>
           <div className="mb-2 flex items-center gap-2.5">
             <SummaryMark icon={Server} />
             <span
-              className={daemonUp ? '' : 'status-danger'}
               style={{
                 width: 10,
                 height: 10,
                 borderRadius: '50%',
-                background: daemonUp ? 'var(--success)' : 'var(--danger)',
+                background: runtimeUp ? 'var(--success)' : gatewayRunning === false ? 'var(--text-subtle)' : 'var(--danger)',
                 display: 'inline-block',
               }}
               aria-hidden
             />
-            <span className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
-              {daemonUp ? t('dash.running') : t('dash.unreachable')}
+            <span className="min-w-0 font-semibold" style={{ fontSize: 'var(--text-lg)', color: runtimeUp ? 'var(--text)' : gatewayRunning === false ? 'var(--text-muted)' : 'var(--danger)' }}>
+              {t('dash.runtimeMode', { state: runtimeUp ? t('dash.running') : gatewayRunning === false ? t('dash.stopped') : t('dash.unreachable'), mode: runtimeMode })}
             </span>
+            <GatewayServiceControl onStateChange={handleGatewayStateChange} />
           </div>
-          <div style={cardLabel} className="tabular">
-            {status ? `${t('dash.uptimePrefix')} ${fmtUptime(status.uptime_s)} · v${status.version}` : '—'}
+          <div className="flex flex-wrap items-center justify-between gap-1" style={cardLabel}>
+            <span className="tabular">{status ? `${t('dash.uptimePrefix')} ${fmtUptime(status.uptime_s)} · v${status.version}` : '—'}</span>
+            <a href="#/settings" className="inline-flex items-center gap-1" style={{ color: 'var(--text-muted)' }} title={copy('instance.manage')} aria-label={copy('instance.manage')}><Settings size={14} aria-hidden="true" /></a>
           </div>
+          <div className="mt-2 min-w-0 truncate text-xs" style={{ color: 'var(--text-muted)' }} title={apiAddress}>{t('dash.apiAddress')}: <code className="font-mono">{apiAddress}</code></div>
         </section>
 
-        {/* mode + bind：设置在 Dashboard 内部展开，避免跳出当前概览 */}
-        <section className="fade-in p-4 sm:p-5" style={card}>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-2 font-semibold capitalize" style={{ fontSize: 'var(--text-lg)' }}>
-              <SummaryMark icon={Network} />
-              {status?.mode ? t('dash.modeLabel', { mode: status.mode }) : '—'}
-            </span>
-            <a href="#/settings" style={{ ...btn, color: 'var(--accent)', padding: '0.3rem 0.6rem', textDecoration: 'none' }}>
-              <Settings size={14} className="mr-1 inline-block align-[-2px]" aria-hidden="true" />
-              {copy('instance.manage')}
-            </a>
+        <a href="#/stats" className="fade-in card-hover block p-4 sm:p-5" style={card} title={t('dash.openActiveRequests')}>
+          <div className="mb-2 flex items-center gap-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
+            <SummaryMark icon={Activity} />{t('telemetry.active')}
           </div>
-          <div style={{ ...cardLabel, fontFamily: 'var(--font-mono)' }} className="tabular">
-            {status?.bind ?? '—'}
-          </div>
-          {status && !status.password_set && status.mode === 'cloud' && (
-            <div className="mt-2" style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)' }}>
-              {t('dash.pwUnsetWarn')}
-            </div>
-          )}
-        </section>
+          <div className="tabular font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>{activeRequests ?? '—'}</div>
+          <div className="mt-2 flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{t('dash.openActiveRequests')}<ArrowRight size={13} aria-hidden="true" /></div>
+        </a>
 
         {/* provider 连通性探测（不是推理健康检查） */}
         <a href="#/providers" className="fade-in card-hover block p-4 sm:p-5" style={card}>
@@ -311,18 +315,13 @@ export function DashboardPage() {
           <div style={cardLabel} className="tabular">
             {routes === null ? '—' : t('dash.routesSummary', { exact: exactCount, prefix: prefixCount })}
           </div>
-          <div className="mt-2" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>
-            {t('dash.editRoutes')}
+          <div className="mt-2 inline-flex items-center gap-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            {t('dash.editRoutes')}<ArrowRight size={14} aria-hidden="true" />
           </div>
         </a>
       </div>
 
-      <RuntimeTelemetry />
-
-      <section className="flex flex-wrap items-center justify-between gap-3 border px-4 py-3" style={{ ...card, color: 'var(--text-muted)' }}>
-        <span>{t('stats.subtitle' as MessageKey)}</span>
-        <a href="#/stats" className="inline-flex min-h-9 items-center gap-2 border px-3 text-sm" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', color: 'var(--accent)' }}><BarChart3 size={15} aria-hidden="true"/>{t('dash.openStats' as MessageKey)}</a>
-      </section>
+      <RuntimeTelemetry onActiveRequestsChange={setActiveRequests} />
 
       {/* ③ 快捷操作 */}
       <div className="fade-in flex flex-wrap gap-3">

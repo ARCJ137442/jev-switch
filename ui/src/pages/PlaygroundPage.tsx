@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Upload } from 'lucide-react';
+import { Check, Copy, Download, Upload } from 'lucide-react';
 import { getBase, fetchModels, type ModelEntry } from '../api';
 import { listProviders, type AdminProvider } from '../api/admin';
 import { ComparisonPanel, type ComparisonTarget } from '../components/playground/ComparisonPanel';
 import { ExampleChips } from '../components/playground/ExampleChips';
 import { useServerStatus } from '../app/Shell';
+import { useStatusBarItems } from '../app/statusBar';
 import { EXAMPLES, type ExamplePayload } from '../examples';
 import { useI18n, type MessageKey } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
 import type { JevRequest } from '../api';
+import { selectExample } from '../components/playground/sampleSelection';
 
 const PLAYGROUND_STORAGE_KEY = 'jev-playground-workspace-v1';
 const EXAMPLE_FILE_MAX_BYTES = 1024 * 1024;
@@ -96,7 +98,7 @@ export function PlaygroundPage() {
   const [questionsJson, setQuestionsJson] = useState(() => savedWorkspace?.questionsJson ?? JSON.stringify(EXAMPLES[0].payload.questions, null, 2));
   const [activeExampleId, setActiveExampleId] = useState<string>(() => savedWorkspace?.activeExampleId ?? EXAMPLES[0].id);
   const [targets, setTargets] = useState<ComparisonTarget[]>(() => savedWorkspace?.targets ?? []);
-  const [selectedBatchExampleIds, setSelectedBatchExampleIds] = useState<string[]>(() => savedWorkspace?.selectedBatchExampleIds ?? []);
+  const [selectedBatchExampleIds, setSelectedBatchExampleIds] = useState<string[]>(() => savedWorkspace?.selectedBatchExampleIds.length ? savedWorkspace.selectedBatchExampleIds : [savedWorkspace?.activeExampleId ?? EXAMPLES[0].id]);
   const [exampleError, setExampleError] = useState<string | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const userEditedTargets = useRef(savedWorkspace !== null);
@@ -153,13 +155,19 @@ export function PlaygroundPage() {
     return () => { cancelled = true; };
   }, [server.status, auth.isReadOnly]);
 
-  const curlModel = targets.find((target) => target.kind === 'public')?.modelId ?? 'your-public-model-id';
-  const onPickExample = (example: ExamplePayload) => {
+  const curlModel = targets[0]?.modelId ?? 'your-public-model-id';
+  const onPickExample = (example: ExamplePayload, shiftKey: boolean) => {
     setActiveExampleId(example.id);
+    setSelectedBatchExampleIds((current) => selectExample(current, example.id, shiftKey));
     setStateJson(JSON.stringify(example.payload.state, null, 2));
     setQuestionsJson(JSON.stringify(example.payload.questions, null, 2));
   };
   const batchCases = examples.filter((example) => selectedBatchExampleIds.includes(example.id)).map((example) => ({ id: example.id, label: example.label, stateJson: JSON.stringify(example.payload.state), questionsJson: JSON.stringify(example.payload.questions) }));
+  const statusItems = useMemo(() => [
+    { id: 'playground-models', label: t('pg.modelTargets' as MessageKey, { count: targets.length }) },
+    { id: 'playground-samples', label: t('pg.selectedSamples' as MessageKey, { count: batchCases.length }) },
+  ], [batchCases.length, targets.length, t]);
+  useStatusBarItems(statusItems);
   const importExamples = async (file?: File) => {
     if (!file) return;
     if (file.size > EXAMPLE_FILE_MAX_BYTES) { setExampleError(t('pg.importTooLarge' as MessageKey)); return; }
@@ -196,7 +204,7 @@ export function PlaygroundPage() {
         </div>
         <section className="playground-examples-row mb-3 flex flex-wrap items-center justify-between gap-3" aria-label={t('pg.examples')}>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <ExampleChips examples={examples} onPick={onPickExample} activeId={activeExampleId} />
+            <ExampleChips examples={examples} selectedIds={selectedBatchExampleIds} onPick={onPickExample} />
             <input ref={importInput} type="file" accept="application/json,.json" className="sr-only" onChange={(event) => void importExamples(event.currentTarget.files?.[0])}/>
             <button type="button" className="inline-flex h-9 items-center gap-1.5 border px-2 text-xs" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', color: 'var(--text-muted)' }} title={t('pg.importExamples' as MessageKey)} aria-label={t('pg.importExamples' as MessageKey)} onClick={() => importInput.current?.click()}><Upload size={14}/>{t('pg.importExamples' as MessageKey)}</button>
             <button type="button" className="inline-flex h-9 items-center gap-1.5 border px-2 text-xs" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', color: 'var(--text-muted)' }} title={t('pg.exportExamples' as MessageKey)} aria-label={t('pg.exportExamples' as MessageKey)} onClick={() => downloadExamples(examples)}><Download size={14}/>{t('pg.exportExamples' as MessageKey)}</button>
@@ -207,11 +215,6 @@ export function PlaygroundPage() {
           </div>
         </section>
       </div>
-      <details className="mb-3 border px-4 py-3" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)' }}>
-        <summary className="cursor-pointer text-sm font-medium">{t('pg.batchExamples' as MessageKey)}{selectedBatchExampleIds.length > 0 ? ` · ${selectedBatchExampleIds.length}` : ''}</summary>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{examples.map((example) => <label key={example.id} className="flex min-w-0 items-center gap-2 text-sm"><input type="checkbox" checked={selectedBatchExampleIds.includes(example.id)} onChange={(event) => setSelectedBatchExampleIds((current) => event.target.checked ? [...current, example.id] : current.filter((id) => id !== example.id))}/><span className="truncate" title={example.description}>{example.label}</span></label>)}</div>
-        <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>{t('pg.batchCountHint' as MessageKey, { models: targets.length, examples: selectedBatchExampleIds.length || 1 })}</p>
-      </details>
       {exampleError && <p role="alert" className="mb-3 text-sm" style={{ color: 'var(--danger)' }}>{exampleError}</p>}
       {auth.isReadOnly && <p className="mb-4 rounded-md px-3 py-2 text-sm" style={{ color: 'var(--text-muted)', background: 'var(--surface-hover)' }}>{t('access.readonlyPlaygroundHint' as MessageKey)}</p>}
 
@@ -237,14 +240,45 @@ export function PlaygroundPage() {
             {showCurl ? t('pg.hideCurl') : t('pg.showCurl')}
           </button>
         </div>
-        {showCurl && <pre className="mt-3 overflow-x-auto whitespace-pre-wrap p-3" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface-hover)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text)' }}>{`curl -X POST ${curlBase}/v1/systemone \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${curlModel}",
-    "state": { "test": true },
-    "questions": { "q": { "type": "noul", "instructions": "is this a test?", "criteria": { "true": "yes", "false": "no" } } }
-  }'`}</pre>}
+        {showCurl && <CurlExample base={curlBase} model={curlModel} stateJson={stateJson} questionsJson={questionsJson} />}
       </section>
+    </div>
+  );
+}
+
+function CurlExample({ base, model, stateJson, questionsJson }: { base: string; model: string; stateJson: string; questionsJson: string }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const command = useMemo(() => {
+    try {
+      const body = JSON.stringify({ model, state: JSON.parse(stateJson), questions: JSON.parse(questionsJson) }, null, 2);
+      const quote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+      return [
+        `curl -X POST ${quote(`${base}/v1/systemone`)}` ,
+        `-H ${quote('Content-Type: application/json')}` ,
+        `--data ${quote(body)}` ,
+      ].join(` ${String.fromCharCode(92)}\n  `);
+    } catch {
+      return '';
+    }
+  }, [base, model, questionsJson, stateJson]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="relative mt-3">
+      <button type="button" onClick={() => void copy()} disabled={!command} className="absolute right-2 top-2 inline-flex h-8 items-center gap-1.5 border px-2 text-xs" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: copied ? 'var(--success)' : 'var(--text-muted)' }} title={t(copied ? 'pg.copied' as MessageKey : 'pg.copyCurl' as MessageKey)} aria-label={t(copied ? 'pg.copied' as MessageKey : 'pg.copyCurl' as MessageKey)}>
+        {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+        {t(copied ? 'pg.copied' as MessageKey : 'pg.copyCurl' as MessageKey)}
+      </button>
+      <pre className="overflow-x-auto whitespace-pre-wrap p-3 pr-28" style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface-hover)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text)' }}>{command || t('pg.invalidCurlInput' as MessageKey)}</pre>
+      <span className="sr-only" aria-live="polite">{copied ? t('pg.copied' as MessageKey) : ''}</span>
     </div>
   );
 }

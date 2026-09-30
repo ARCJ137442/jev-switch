@@ -179,12 +179,17 @@ pub struct EventsPage {
     pub events: Vec<crate::events::Event>,
     #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
     pub next_since: u64,
+    #[cfg_attr(feature = "ts-rs", ts(type = "number | null"))]
+    pub next_before: Option<u64>,
+    pub has_more: bool,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PageQuery {
     #[serde(default)]
     pub since: u64,
+    #[serde(default)]
+    pub before: Option<u64>,
     #[serde(default = "default_limit")]
     pub limit: usize,
 }
@@ -539,7 +544,7 @@ pub async fn events_admin(
         Ok(conn) => conn,
         Err(db_error) => return error(StatusCode::INTERNAL_SERVER_ERROR, db_error.to_string()),
     };
-    match request_events(&conn, None, query.since, query.limit) {
+    match request_events(&conn, None, query.since, query.before, query.limit) {
         Ok(page) => Json(page).into_response(),
         Err(db_error) => error(StatusCode::INTERNAL_SERVER_ERROR, db_error.to_string()),
     }
@@ -554,7 +559,7 @@ pub async fn events_my(
         Ok(conn) => conn,
         Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    match caller_events(&conn, &caller.id, query.since, query.limit) {
+    match caller_events(&conn, &caller.id, query.since, query.before, query.limit) {
         Ok(page) => Json(page).into_response(),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
@@ -566,9 +571,10 @@ fn caller_events(
     conn: &Connection,
     token_id: &str,
     since: u64,
+    before: Option<u64>,
     limit: usize,
 ) -> rusqlite::Result<EventsPage> {
-    request_events(conn, Some(token_id), since, limit)
+    request_events(conn, Some(token_id), since, before, limit)
 }
 
 /// Admin and caller activity use the call-log primary key as their durable
@@ -578,11 +584,17 @@ fn request_events(
     conn: &Connection,
     token_id: Option<&str>,
     since: u64,
+    before: Option<u64>,
     limit: usize,
 ) -> rusqlite::Result<EventsPage> {
     let limit = limit.clamp(1, 500);
-    let initial_page = since == 0;
-    let sql = if initial_page {
+    let fetch_limit = limit.saturating_add(1);
+    let older_page = before.is_some();
+    let initial_page = since == 0 && !older_page;
+    let sql = if older_page {
+        "SELECT id,timestamp,success,http_status,endpoint_id,route_key,error_message,upstream_provider,upstream_model,latency_ms,upstream_calls,cost_usd,usage_json,request_id,route_trace_json,token_id
+         FROM call_logs WHERE id<?1 AND (?2 IS NULL OR token_id=?2) ORDER BY id DESC LIMIT ?3"
+    } else if initial_page {
         "SELECT id,timestamp,success,http_status,endpoint_id,route_key,error_message,upstream_provider,upstream_model,latency_ms,upstream_calls,cost_usd,usage_json,request_id,route_trace_json,token_id
          FROM call_logs WHERE (?1 IS NULL OR token_id=?1) ORDER BY id DESC LIMIT ?2"
     } else {
@@ -590,20 +602,36 @@ fn request_events(
          FROM call_logs WHERE id>?1 AND (?2 IS NULL OR token_id=?2) ORDER BY id LIMIT ?3"
     };
     let mut stmt = conn.prepare(sql)?;
-    let rows = if initial_page {
-        stmt.query_map(rusqlite::params![token_id, limit], activity_event_from_row)?
+    let rows = if older_page {
+        stmt.query_map(
+            rusqlite::params![before, token_id, fetch_limit],
+            activity_event_from_row,
+        )?
+    } else if initial_page {
+        stmt.query_map(
+            rusqlite::params![token_id, fetch_limit],
+            activity_event_from_row,
+        )?
     } else {
         stmt.query_map(
-            rusqlite::params![since, token_id, limit],
+            rusqlite::params![since, token_id, fetch_limit],
             activity_event_from_row,
         )?
     };
     let mut events = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-    if initial_page {
+    let has_more = events.len() > limit;
+    events.truncate(limit);
+    if initial_page || older_page {
         events.reverse();
     }
     let next_since = events.last().map(|event| event.id).unwrap_or(since);
-    Ok(EventsPage { events, next_since })
+    let next_before = events.first().map(|event| event.id);
+    Ok(EventsPage {
+        events,
+        next_since,
+        next_before,
+        has_more,
+    })
 }
 
 fn activity_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<crate::events::Event> {
@@ -702,7 +730,9 @@ fn caller_event_stream(
         let (db, since, token_id) = state?;
         tokio::time::sleep(Duration::from_millis(500)).await;
         let page = match db.lock() {
-            Ok(conn) => caller_events(&conn, &token_id, since, 100).map_err(std::io::Error::other),
+            Ok(conn) => {
+                caller_events(&conn, &token_id, since, None, 100).map_err(std::io::Error::other)
+            }
             Err(e) => Err(std::io::Error::other(e.to_string())),
         };
         let (items, next) = match page {
@@ -754,7 +784,7 @@ mod tests {
         };
         insert(&conn, 101, &first.token.id);
         insert(&conn, 102, &other.token.id);
-        let history = caller_events(&conn, &first.token.id, 0, 50).unwrap();
+        let history = caller_events(&conn, &first.token.id, 0, None, 50).unwrap();
         assert_eq!(history.next_since, 101);
         assert_eq!(history.events.len(), 1);
         let db = std::sync::Arc::new(std::sync::Mutex::new(conn));
@@ -792,7 +822,7 @@ mod tests {
         assert!(frame.contains("id: 103"));
         assert!(!frame.contains(&other.token.id));
         assert_eq!(
-            caller_events(&db.lock().unwrap(), &first.token.id, 101, 50)
+            caller_events(&db.lock().unwrap(), &first.token.id, 101, None, 50)
                 .unwrap()
                 .next_since,
             103
@@ -814,16 +844,18 @@ mod tests {
             ).unwrap();
         }
 
-        let latest = request_events(&conn, None, 0, 50).unwrap();
+        let latest = request_events(&conn, None, 0, None, 50).unwrap();
         assert_eq!(latest.events.len(), 50);
         assert_eq!(latest.events.first().unwrap().id, 11);
         assert_eq!(latest.events.last().unwrap().id, 60);
         assert_eq!(latest.next_since, 60);
+        assert_eq!(latest.next_before, Some(11));
+        assert!(latest.has_more);
         let detail: serde_json::Value =
             serde_json::from_str(&latest.events.last().unwrap().detail).unwrap();
         assert_eq!(detail["route_trace"]["request_id"], "jev-60");
 
-        let forward = request_events(&conn, None, 10, 3).unwrap();
+        let forward = request_events(&conn, None, 10, None, 3).unwrap();
         assert_eq!(
             forward
                 .events
@@ -832,9 +864,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![11, 12, 13]
         );
-        let caught_up = request_events(&conn, None, latest.next_since, 50).unwrap();
+        let caught_up = request_events(&conn, None, latest.next_since, None, 50).unwrap();
         assert!(caught_up.events.is_empty());
         assert_eq!(caught_up.next_since, latest.next_since);
+        let older = request_events(&conn, None, 0, latest.next_before, 50).unwrap();
+        assert_eq!(older.events.len(), 10);
+        assert_eq!(older.events.first().unwrap().id, 1);
+        assert_eq!(older.events.last().unwrap().id, 10);
+        assert!(!older.has_more);
     }
 
     #[test]

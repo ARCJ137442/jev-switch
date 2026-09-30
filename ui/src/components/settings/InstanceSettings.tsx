@@ -4,6 +4,8 @@ import {
   getStatus,
   loginAdmin,
   putListen,
+  getLanAccess,
+  putLanAccess,
   putMode,
   putPassword,
   type AdminStatus,
@@ -12,7 +14,7 @@ import {
 import { useToast } from '../../app/feedback';
 import { useI18n, type MessageKey } from '../../i18n';
 
-type DialogState = { type: 'mode'; mode: AdminStatus['mode'] } | { type: 'password' } | null;
+type DialogState = { type: 'mode'; mode: AdminStatus['mode'] } | { type: 'password' } | { type: 'lan-warning' } | null;
 
 interface InstanceSettingsProps {
   status: AdminStatus | null;
@@ -32,6 +34,8 @@ export function InstanceSettings({
   const [listenAddress, setListenAddress] = useState(status?.bind ?? '');
   const [editingListen, setEditingListen] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [lanAccessEnabled, setLanAccessEnabled] = useState<boolean | null>(null);
+  const [lanCountdown, setLanCountdown] = useState(5);
   const [secret, setSecret] = useState('');
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,6 +43,20 @@ export function InstanceSettings({
   const sectionRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => setListenAddress(status?.bind ?? ''), [status?.bind]);
+
+  useEffect(() => {
+    if (status?.mode !== 'local') return;
+    let active = true;
+    getLanAccess().then((result) => { if (active) setLanAccessEnabled(result.enabled); }).catch(() => { if (active) setLanAccessEnabled(false); });
+    return () => { active = false; };
+  }, [status?.mode]);
+
+  useEffect(() => {
+    if (dialog?.type !== 'lan-warning') return;
+    setLanCountdown(5);
+    const timer = window.setInterval(() => setLanCountdown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [dialog]);
 
   useEffect(() => {
     if (open) sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -93,6 +111,15 @@ export function InstanceSettings({
     setBusy(true);
     setDialogError(null);
     try {
+      if (dialog.type === 'lan-warning') {
+        if (lanCountdown > 0) return;
+        const result = await putLanAccess(true);
+        setLanAccessEnabled(result.enabled);
+        setDialog(null);
+        await refreshStatus();
+        toast('warn', copy('instance.lanEnabled', { bind: result.bind }));
+        return;
+      }
       if (dialog.type === 'password') {
         const result = await putPassword(secret);
         clearAdminSession();
@@ -146,6 +173,8 @@ export function InstanceSettings({
       setDialogError(reason);
       if (dialog.type === 'mode') {
         toast('danger', copy('instance.modeFailed', { reason }));
+      } else if (dialog.type === 'lan-warning') {
+        toast('danger', copy('instance.lanFailed', { reason }));
       } else {
         toast('danger', copy('instance.passwordFailed', { reason }));
       }
@@ -165,6 +194,21 @@ export function InstanceSettings({
       await refreshStatus();
     } catch (error) {
       toast('danger', copy('instance.listenFailed', { reason: (error as Error).message }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disableLanAccess = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await putLanAccess(false);
+      setLanAccessEnabled(result.enabled);
+      await refreshStatus();
+      toast('ok', copy('instance.lanDisabled'));
+    } catch (error) {
+      toast('danger', copy('instance.lanFailed', { reason: (error as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -245,6 +289,20 @@ export function InstanceSettings({
             </button>
           </section>
 
+          {status?.mode === 'local' && <section className="space-y-3 border-t p-5 md:col-span-2" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="grid gap-1">
+                <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('instance.lanTitle')}</h2>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{copy('instance.lanHint')}</p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={lanAccessEnabled === true} disabled={busy || lanAccessEnabled === null} onChange={(event) => { if (event.target.checked) openDialog({ type: 'lan-warning' }); else void disableLanAccess(); }} className="h-4 w-4 accent-[var(--accent)]" />
+                {copy(lanAccessEnabled ? 'instance.lanOn' : 'instance.lanOff')}
+              </label>
+            </div>
+            <p className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{status.bind}</p>
+          </section>}
+
           <section className="space-y-3 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -324,14 +382,18 @@ export function InstanceSettings({
               <h2 className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
                 {dialog.type === 'mode'
                   ? copy('instance.confirmModeTitle')
-                  : copy(status?.password_set ? 'instance.changePassword' : 'instance.passwordActionTitle')}
+                  : dialog.type === 'lan-warning'
+                    ? copy('instance.lanWarningTitle')
+                    : copy(status?.password_set ? 'instance.changePassword' : 'instance.passwordActionTitle')}
               </h2>
               <p className="mt-2" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
                 {dialog.type === 'mode'
                   ? needsPassword
                     ? copy('instance.cloudPasswordRequired')
                     : copy('instance.confirmModeBody', { mode: dialog.mode })
-                  : copy('instance.passwordActionBody')}
+                  : dialog.type === 'lan-warning'
+                    ? copy('instance.lanWarningBody')
+                    : copy('instance.passwordActionBody')}
               </p>
               {needsAuthentication && (
                 <p className="mt-2" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
@@ -364,10 +426,10 @@ export function InstanceSettings({
               <button type="button" disabled={busy} onClick={closeDialog} style={button}>{copy('instance.cancel')}</button>
               <button
                 type="submit"
-                disabled={busy || ((needsPassword || needsAuthentication || dialog.type === 'password') && !secret.trim())}
+                disabled={busy || (dialog.type === 'lan-warning' && lanCountdown > 0) || ((needsPassword || needsAuthentication || dialog.type === 'password') && !secret.trim())}
                 style={{ ...button, background: 'var(--accent)', borderColor: 'var(--accent)', color: '#fff' }}
               >
-                {busy ? copy('instance.saving') : dialog.type === 'mode' ? copy('instance.confirm') : copy(status?.password_set ? 'instance.changePassword' : 'instance.setPassword')}
+                {busy ? copy('instance.saving') : dialog.type === 'mode' ? copy('instance.confirm') : dialog.type === 'lan-warning' ? copy(lanCountdown > 0 ? 'instance.lanWait' : 'instance.lanConfirm', { seconds: lanCountdown }) : copy(status?.password_set ? 'instance.changePassword' : 'instance.setPassword')}
               </button>
             </div>
           </form>

@@ -6,6 +6,8 @@ import type { ProviderView } from '../generated/ProviderView';
 import type { ProviderInput } from '../generated/ProviderInput';
 import type { ProbeResult } from '../generated/ProbeResult';
 import type { ProviderModelsResult } from '../generated/ProviderModelsResult';
+import type { LanAccessResponse as GeneratedLanAccessResponse } from '../generated/LanAccessResponse';
+import type { GatewayControlResponse as GeneratedGatewayControlResponse } from '../generated/GatewayControlResponse';
 import type { TelemetrySnapshot } from '../generated/TelemetrySnapshot';
 import { parseProviderTomlValue, stripTomlComment } from './providerTomlValue';
 import { getCallerToken } from '../auth/callerSession';
@@ -54,6 +56,8 @@ export type ProbeResponse = ProbeResult;
 
 export type ProviderModelsResponse = ProviderModelsResult;
 export type RuntimeTelemetry = TelemetrySnapshot;
+export type LanAccessResponse = GeneratedLanAccessResponse;
+export type GatewayControlResponse = GeneratedGatewayControlResponse;
 
 /* ---------- 通用请求（#43 cloud：admin 会话附带 + 401/403 全局上报） ---------- */
 
@@ -303,6 +307,22 @@ export async function discoverProviderModelsDraft(input: {
     body: JSON.stringify(input),
   });
 }
+
+export const getLanAccess = () => request<LanAccessResponse>('/v1/admin/lan-access');
+
+export const putLanAccess = (enabled: boolean) => request<LanAccessResponse>('/v1/admin/lan-access', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ enabled }),
+});
+
+export const getGatewayControl = () => request<GatewayControlResponse>('/v1/admin/gateway');
+
+export const putGatewayControl = (running: boolean) => request<GatewayControlResponse>('/v1/admin/gateway', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ running }),
+});
 
 /* ---------- routes（contracts/03 §2 / contracts/05 GET·PUT /v1/admin/routes） ---------- */
 

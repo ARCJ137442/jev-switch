@@ -84,6 +84,7 @@ fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
         service_endpoints: Arc::new(RwLock::new(endpoints)),
         db_conn: Arc::new(Mutex::new(db_conn)),
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
+        gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
     }
 }
 
@@ -489,5 +490,58 @@ enabled = true
     assert!(body.contains("sk-****abcd"), "{body}");
     assert!(!body.contains(r#""api_key":"#), "{body}");
     assert!(body.contains(r#""api_key_masked""#), "{body}");
+    let _ = std::fs::remove_dir_all(path.parent().unwrap());
+}
+
+#[tokio::test]
+async fn gateway_control_suspends_model_calls_but_keeps_the_console_control_plane() {
+    let path = temp_config("gateway-toggle", "mode = \"local\"\n");
+    let state = state_with(Registry::new(vec![]), path.clone());
+    let app = build_app(state.clone());
+    let (status, body) = send(app.clone(), "GET", "/v1/admin/gateway", None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap()["running"],
+        true
+    );
+
+    let (status, body) = send(
+        app.clone(),
+        "PUT",
+        "/v1/admin/gateway",
+        Some("{\"running\":false}".into()),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap()["running"],
+        false
+    );
+    let (status, body) = send(app.clone(), "POST", "/v1/systemone", Some("{}".into())).await;
+    assert_eq!(
+        status, 503,
+        "disabled gateway must reject new model calls: {body}"
+    );
+    let (status, body) = send(app.clone(), "GET", "/v1/models", None).await;
+    assert_eq!(status, 503, "disabled gateway must reject model discovery: {body}");
+    let (status, body) = send(app.clone(), "GET", "/v1/admin/status", None).await;
+    assert_eq!(
+        status, 200,
+        "control plane must remain available while stopped: {body}"
+    );
+    let (status, body) = send(
+        app.clone(),
+        "PUT",
+        "/v1/admin/gateway",
+        Some("{\"running\":true}".into()),
+    )
+    .await;
+    assert_eq!(
+        status, 200,
+        "gateway should restart from the console: {body}"
+    );
+    assert!(std::fs::read_to_string(&path)
+        .unwrap()
+        .contains("gateway_enabled = true"));
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }

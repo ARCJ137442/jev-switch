@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-09-30，GitHub 正式 Release 为 [`v0.4.1`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.4.1)，包含 Windows 桌面包、Linux/Windows CLI 和 Docker 镜像。v0.4.1 在 v0.4.0 基础上加入路由/演练场/设置/统计/Provider 可视化迭代、Android daemon library 与 arm64 APK 构建路径；便携/Standalone 桌面核心路径和官方 TypeSafe 调用仍以 v0.4.0 人工证据为基础，Android APK 尚未安装或真机验收，原生 service/tile/通知和全链路性能仍未覆盖。当前四个应用版本字段与锁文件均为 `0.4.1`。仓库另有历史 tag `v0.5.0-stable`、`v0.1.0`、`v0.2.0`、`v0.3.0` 与 `v0.4.0`，用于历史追溯；它们不能当作当前应用版本或发布包。`v0.1.0-mvp` 是更早的 MVP tag/Release。
+截至 2026-10-01，本次候选 Release 为 [`v0.5.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.5.0)，包含 Windows 桌面包、Linux/Windows CLI、Docker 镜像和实验性 Android APK。v0.5.0 加入演练场选择/重复、稳定 DAG、统计分页/矩阵、局域网访问、网关启停、状态栏/命令历史与官网自动同步；桌面原生 WebView、Android service/tile/通知和全链路性能仍按[v0.5.0 核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)标注。当前四个应用版本字段与锁文件均为 `0.5.0`。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
@@ -20,7 +20,7 @@
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.4.1；统一修改上述四处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.5.0；统一修改上述四处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui
