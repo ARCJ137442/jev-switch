@@ -30,7 +30,7 @@ Android 方向已从“可行性调研”进入“完整网关应用实现”：
 | [GitHub Pages 首页](ROADMAP-PLAN-GITHUB-PAGES.md) | v0.2.0 页面已部署；v0.4.1 网站文案已同步到当前源码 | 推送/部署更新及移动端正式截图 |
 | [OpenRouter adapter](ROADMAP-PLAN-OPENROUTER.md) | adapter 已随 v0.2.0 发布并通过离线/WireMock 门禁 | 未使用 live key 验证账户能力/费用 |
 | 图标/性能首轮 | v0.4.1 已实现，并通过 UI tests/build、Windows 原生隔离和桌面自动门禁；桌面人工证据沿用 v0.4.0 | 安装器、跨硬件和全链路 daemon/SQLite/UI 性能基线仍在本轮之后 |
-| [Android APP 实验性计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用实现阶段；Android daemon library 与 arm64 APK 本机构建已通过，首版默认关闭，APP/通知/Quick Settings tile 共用启停状态机，远程/局域网连接为可选模式 | 尚无 CI artifact、APK 安装、模拟器、真机、原生 service/tile 或后台生命周期证据；不得列入稳定平台矩阵 |
+| [Android APP 实验性计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用实现阶段；Android daemon library 与 debug-signed arm64 APK 已由本机/CI 构建并附入 v0.4.1，首版默认关闭，APP/通知/Quick Settings tile 共用启停状态机 | APK 安装、模拟器、真机、原生 service/tile 或后台生命周期仍无人工证据；不得列入稳定平台矩阵 |
 
 ## 共用交付门槛
 

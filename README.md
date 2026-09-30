@@ -20,7 +20,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **模型目录发现**：Providers 可让 daemon 通过上游 `/v1/models` 获取账户模型并回填列表，同时显示 HTTP 状态和延迟；浏览器不直连上游，也不会把 key 写入配置或响应。
 - **首页运行遥测**：Dashboard 展示当前 daemon 会话的入口/出口速率、累计字节、活跃请求、成功/失败/failover、网关平均延迟和 daemon 进程 CPU/内存；采样数据只在内存中保留，无法精确获得的 Tauri WebView/上游指标明确显示不可用。
 - **Headless CLI Phase 1**：`jev-switch-cli` 通过 daemon HTTP API 提供 `status`、`models`、`invoke`、`routes`、`events`，支持 JSON/表格输出，适合 Termux、SSH 与脚本；TUI 和完整 Android 原生交互仍后置。详见 [CLI 文档](docs/CLI.md)。
-- **Android APP（实验性计划）**：面向没有 Termux 的普通移动端用户，APK 必须包含可在 Android 上运行的 Jev-Switch daemon；首次安装默认关闭，用户可从 APP、常驻通知和 Quick Settings tile 启动/停止本机网关，后台与 Activity 重建不能导致意外重启。云端/局域网连接是可选模式；GitHub Actions 构建 APK 不等于真机支持。计划见 [Android 实验性计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
+- **Android APP（实验性 APK）**：提供 [arm64 实验性安装包](https://github.com/ARCJ137442/jev-switch/releases/download/v0.4.1/jev-switch-0.4.1-android-aarch64-experimental.apk) 与 [构建清单](https://github.com/ARCJ137442/jev-switch/releases/download/v0.4.1/jev-switch-0.4.1-android-aarch64-experimental.json)。该 APK 使用 Android debug keystore，侧载时系统会提示；尚未安装或真机人工验收。产品目标是首次网关默认关闭，并由 APP、通知和 Quick Settings tile 管理本机服务；原生 service/tile/后台稳定性仍在开发计划中。详见 [Android 构建核验](docs/verification/android-apk-build-2026-09-30.md)与[Android 实验性计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - **当前迭代入口**：路由画布/HUD、演练场批量矩阵、Provider/Entry 搜索、统计/设置、运行控制和探测偏好按[用户反馈迭代计划](docs/design/USER-FEEDBACK-ITERATION-PLAN.md)分阶段推进。
 - **图标与运行效率**：主导航、Dashboard 状态速览、调用活动和 Routing 高频工具已有 Lucide 语义图标；Dashboard 连通性探测限制并发并合并状态提交，health 状态共享，隐藏页暂停遥测。具体测量和范围见[图标/性能验证记录](docs/verification/ui-icon-performance-2026-09-30.md)。
 - **五页控制台**：Dashboard、Providers、Entries、Routing DAG、Playground；当前提供简体中文和英文，语言注册表可扩展。

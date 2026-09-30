@@ -1,6 +1,6 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前正式版为 `v0.4.1`；v0.4.0 的便携/Standalone 桌面核心路径已有维护者人工验收，v0.4.1 新增 UI/运行时和 Android arm64 构建已自动验证，安装器、Android 安装/真机生命周期和全链路性能仍有独立边界。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前正式版为 `v0.4.1`，Release 已附 [Android arm64 实验性 APK](https://github.com/ARCJ137442/jev-switch/releases/download/v0.4.1/jev-switch-0.4.1-android-aarch64-experimental.apk)；v0.4.0 的便携/Standalone 桌面核心路径已有维护者人工验收，Android 安装/真机生命周期和全链路性能仍未验证。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-30。
 
@@ -78,7 +78,7 @@
 | [verification/v0.4.0-release-candidate-2026-09-30.md](verification/v0.4.0-release-candidate-2026-09-30.md) | v0.4.0 自动化、Windows 原生隔离核验与维护者人工桌面验收 | 安装器/Android/全链路性能仍未覆盖 |
 | [verification/android-apk-build-2026-09-30.md](verification/android-apk-build-2026-09-30.md) | Android arm64 unsigned APK 本机构建到 Gradle/AAPT 产物的核验 | 构建成功；未安装、未启动模拟器、未做 service/tile/后台验收 |
 | [verification/v0.4.1-release-candidate-2026-09-30.md](verification/v0.4.1-release-candidate-2026-09-30.md) | v0.4.1 自动门禁、Android 构建证据与人工验收引导 | 自动验证完成；新桌面包/Android 安装和真机生命周期待人工验收 |
-| [design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md](design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | Android APP 实验性完整网关计划：daemon library、FlClash 风格 service/action/通知/tile、普通移动端与生命周期验收边界 | 启停原型在工作树；尚无 Android APK、原生 service/tile 或真机证据 |
+| [design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md](design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | Android APP 实验性完整网关计划：daemon library、FlClash 风格 service/action/通知/tile、普通移动端与生命周期验收边界 | arm64 debug-signed APK 已附 v0.4.1 Release；原生 service/tile 与安装/真机验收仍待完成 |
 
 ## 阅读顺序（开发 Agent）
 

@@ -91,9 +91,9 @@ Jev daemon library + ListenSupervisor
 
 | 项目 | 通过条件 | 当前状态 |
 |---|---|---|
-| GitHub CI 构建 | 指定 commit 可生成包含 Android daemon 的 APK，artifact 可下载并能复算 SHA-256 | 本机构建 arm64 成功；CI workflow 已按同一路径改造，待运行 |
-| ABI/版本元数据 | APK 名称、版本、ABI、commit、签名类型和实验性标签一致 | 待实施 |
-| 真机启动 | 至少一台普通 Android 设备安装 APK，默认网关关闭，控制台可打开 | 未开始 |
+| GitHub CI 构建 | 指定 commit 可生成包含 Android daemon 的 APK，artifact 可下载并能复算 SHA-256 | **通过**；Actions run #36721589274 产出 APK+JSON，并已附入 v0.4.1 Release |
+| ABI/版本元数据 | APK 名称、版本、ABI、commit、签名类型和实验性标签一致 | **通过自动核对**；arm64 / 0.4.1 / commit `3379586` / debug keystore |
+| 真机启动 | 至少一台普通 Android 设备安装 APK，默认网关关闭，控制台可打开 | 未开始；尚待维护者人工安装和验收 |
 | 本机网关 | APP 内启动/停止成功；`/health`、`/v1/models` 和本机调用可用 | 进程内启停原型已写入工作树；未有 Android APK/真机证据 |
 | 系统级启停 | 通知动作和 Quick Settings tile 的 START/STOP/TOGGLE 与 Dashboard 状态一致 | 未开始；需 Android 原生 service/tile |
 | 保活通知 | 默认开启；设置可关闭并提示后台回收风险；权限拒绝有降级说明 | 未开始；需 Android 13+ 通知权限验收 |
