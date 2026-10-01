@@ -810,6 +810,8 @@ impl Registry {
             }
             let mut upstream_req = req.clone();
             upstream_req.model = item.candidate.upstream_model.clone();
+            let activity_id = self.route_activity_sequence.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+            self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Started);
             let dispatched = started_calls.clone();
             let attempt_log = attempts.clone();
             tasks.spawn(async move {
@@ -842,7 +844,7 @@ impl Registry {
                         }
                     }
                 }
-                (item, result)
+                (item, activity_id, result)
             });
         }
         if tasks.is_empty() {
@@ -858,12 +860,16 @@ impl Registry {
         let raced = tokio::time::timeout(duration, async {
             let mut last_error = None;
             while let Some(joined) = tasks.join_next().await {
-                let Ok((item, result)) = joined else { continue };
+                let Ok((item, activity_id, result)) = joined else { continue };
                 match result {
                     Ok(response) => {
+                        self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Finished { success: true });
                         return Ok((response, item));
                     }
-                    Err(error) => last_error = Some(error),
+                    Err(error) => {
+                        self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Finished { success: false });
+                        last_error = Some(error)
+                    }
                 }
             }
             Err(last_error
