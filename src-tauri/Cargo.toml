@@ -6,7 +6,7 @@
 
 [package]
 name = "jev-switch-shell"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "Jev-Switch 桌面壳（Tauri 2 · Windows 优先）"
 license = "MIT OR Apache-2.0"
@@ -36,7 +36,9 @@ serde_json = "1"
 sha2 = { version = "0.10", optional = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-single-instance = "2"
+# Keep incompatible minor versions in separate singleton groups so an old tray process cannot
+# capture a launch of the new desktop UI and silently present its bundled version.
+tauri-plugin-single-instance = { version = "2", features = ["semver"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jev-switch-daemon = { path = "../rs/crates/jev-switch-daemon" }

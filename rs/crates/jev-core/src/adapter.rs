@@ -28,6 +28,7 @@ use crate::router::{OnError, RouteCtx, RouteEdge, Router, RouterError};
 use crate::upstream::{Capabilities, JevError, QuestionType};
 use jev_protocol::{JevRequest, JevResponse};
 use std::collections::{BTreeSet, HashMap};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 /* ══════════════════════════════════════════════════════════════════
@@ -141,20 +142,24 @@ pub struct Registry {
     router: Router,
     retry: RetryPolicy,
     route_activity_observer: std::sync::RwLock<Option<Arc<dyn Fn(RouteActivity) + Send + Sync>>>,
+    route_activity_sequence: AtomicU64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteActivityPhase {
     Started,
+    Retrying { attempt: u32 },
     Finished { success: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteActivity {
+    pub activity_id: u64,
     pub requested_model: String,
     pub provider_id: String,
     pub upstream_model: String,
     pub hops: Vec<String>,
+    pub route_edges: Vec<RouteEdge>,
     pub phase: RouteActivityPhase,
 }
 
@@ -241,6 +246,7 @@ impl Registry {
             router: Router::new(edges, HashMap::new()),
             retry,
             route_activity_observer: std::sync::RwLock::new(None),
+            route_activity_sequence: AtomicU64::new(0),
         }
     }
 
@@ -256,6 +262,7 @@ impl Registry {
 
     fn emit_route_activity(
         &self,
+        activity_id: u64,
         request_model: &str,
         item: &crate::router::PlanItem,
         phase: RouteActivityPhase,
@@ -267,10 +274,12 @@ impl Registry {
             .clone();
         if let Some(observer) = observer {
             observer(RouteActivity {
+                activity_id,
                 requested_model: request_model.to_string(),
                 provider_id: item.candidate.upstream_id.clone(),
                 upstream_model: item.candidate.upstream_model.clone(),
                 hops: item.candidate.hops.clone(),
+                route_edges: item.route_edges.clone(),
                 phase,
             });
         }
@@ -495,6 +504,8 @@ impl Registry {
             // upstream_model 改写后发上游
             let mut attempt_req = req.clone();
             attempt_req.model = item.candidate.upstream_model.clone();
+            let activity_id = self.route_activity_sequence.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+            self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Started);
 
             // ── 同候选内：退避重试（A6）──
             let mut attempt: u32 = 0;
@@ -514,6 +525,7 @@ impl Registry {
                         route_attempts.last_mut().expect("attempt was recorded")["outcome"] =
                             serde_json::json!("succeeded");
                         resp.upstream_calls = Some(upstream_calls); // 如实 = 实发次数
+                        self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: true });
                         resp.extra.insert(
                             "route_trace".into(),
                             serde_json::json!({
@@ -544,6 +556,7 @@ impl Registry {
                         );
                         // on_error=fail：第一次错误即返回（不同候选也不换、同候选也不重试）
                         if item.on_error == OnError::Fail {
+                            self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: false });
                             return Err(InvocationFailure::new(
                                 &req.model,
                                 route_attempts,
@@ -553,6 +566,7 @@ impl Registry {
                         }
                         // 可重试 && 同候选还有预算 → 退避后再试**同一**候选
                         if e.retryable() && attempt < self.retry.max_attempts {
+                            self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Retrying { attempt });
                             let delay = self.retry.backoff_after(attempt);
                             if !delay.is_zero() {
                                 tokio::time::sleep(delay).await;
@@ -561,9 +575,11 @@ impl Registry {
                         }
                         // 重试耗尽 / 不可重试：
                         if e.retryable() {
+                            self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: false });
                             last_err = Some(e);
                             break; // on_error=next → 下一候选（跨候选 failover）
                         }
+                        self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: false });
                         return Err(InvocationFailure::new(
                             &req.model,
                             route_attempts,
@@ -670,7 +686,8 @@ impl Registry {
             })?;
         let mut upstream_req = req.clone();
         upstream_req.model = item.candidate.upstream_model.clone();
-        self.emit_route_activity(&req.model, &item, RouteActivityPhase::Started);
+        let activity_id = self.route_activity_sequence.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+        self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Started);
         let mut attempts = Vec::new();
         let mut upstream_calls = 0;
         for attempt in 1..=self.retry.max_attempts.max(1) {
@@ -682,6 +699,7 @@ impl Registry {
                         serde_json::json!("succeeded");
                     response.upstream_calls = Some(upstream_calls);
                     self.emit_route_activity(
+                        activity_id,
                         &req.model,
                         &item,
                         RouteActivityPhase::Finished { success: true },
@@ -695,6 +713,12 @@ impl Registry {
                         &error,
                         "retry_same_candidate",
                     );
+                    self.emit_route_activity(
+                        activity_id,
+                        &req.model,
+                        &item,
+                        RouteActivityPhase::Retrying { attempt },
+                    );
                     let delay = self.retry.backoff_after(attempt);
                     if !delay.is_zero() {
                         tokio::time::sleep(delay).await;
@@ -707,6 +731,7 @@ impl Registry {
                         "stop",
                     );
                     self.emit_route_activity(
+                        activity_id,
                         &req.model,
                         &item,
                         RouteActivityPhase::Finished { success: false },
@@ -1185,6 +1210,42 @@ mod tests {
             state: serde_json::json!("hi"),
             questions: q,
         }
+    }
+
+    #[tokio::test]
+    async fn route_activity_emits_correlated_started_retry_and_finished_events_with_exact_edges() {
+        let mut registry = Registry::with_retry(
+            vec![edge("public", "fallback", 10), edge("fallback", "provider-a", 10)],
+            RetryPolicy::new(2, std::time::Duration::ZERO),
+        );
+        let (upstream, _) = fake("provider-a", &[QuestionType::Noul], Mode::Err429OnceThenOk);
+        registry.register(upstream);
+        let events = Arc::new(Mutex::new(Vec::<RouteActivity>::new()));
+        let captured = events.clone();
+        registry.set_route_activity_observer(Some(Arc::new(move |event| {
+            captured.lock().unwrap().push(event);
+        })));
+
+        registry
+            .invoke_with_strategy_traced(
+                noul_request("public"),
+                plain_ctx(),
+                RoutingStrategy::Failover,
+            )
+            .await
+            .unwrap();
+
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].phase, RouteActivityPhase::Started);
+        assert_eq!(events[1].phase, RouteActivityPhase::Retrying { attempt: 1 });
+        assert_eq!(events[2].phase, RouteActivityPhase::Finished { success: true });
+        assert!(events.iter().all(|event| event.activity_id == events[0].activity_id));
+        assert!(events.iter().all(|event| event.route_edges.len() == 2));
+        assert_eq!(events[0].route_edges[0].left, "public");
+        assert_eq!(events[0].route_edges[0].right, "fallback");
+        assert_eq!(events[0].route_edges[1].left, "fallback");
+        assert_eq!(events[0].route_edges[1].right, "provider-a");
     }
 
     /* ── 黄金路径：register → invoke 命中 ─────────────────────── */

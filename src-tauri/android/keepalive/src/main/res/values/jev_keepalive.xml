@@ -1,0 +1,10 @@
+<resources>
+    <string name="keepalive_channel">Jev-Switch gateway</string>
+    <string name="keepalive_channel_description">Shows when the local Jev-Switch gateway is running in the background.</string>
+    <string name="keepalive_title">Jev-Switch gateway is running</string>
+    <string name="keepalive_text">Tap to return to the local gateway console.</string>
+    <string name="keepalive_tile_name">Jev-Switch</string>
+    <string name="keepalive_tile_running">Gateway running</string>
+    <string name="keepalive_tile_stopped">Gateway stopped</string>
+    <string name="keepalive_stop">Stop gateway</string>
+</resources>

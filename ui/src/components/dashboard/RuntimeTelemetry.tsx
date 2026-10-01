@@ -32,6 +32,10 @@ function formatLatency(value: number | null | undefined): string {
   return value == null || !Number.isFinite(value) ? '—' : `${value.toFixed(value >= 100 ? 0 : 1)} ms`;
 }
 
+function formatResourceSource(source: string | undefined, backendLabel: string): string {
+  return source && source.includes('daemon') ? backendLabel : source ?? '—';
+}
+
 function successRate(data: RuntimeTelemetrySnapshot): number | null {
   if (data.total_requests === 0) return null;
   return (data.success_requests / data.total_requests) * 100;
@@ -204,7 +208,7 @@ export function RuntimeTelemetry({ onActiveRequestsChange }: { onActiveRequestsC
         <summary>{t('telemetry.diagnostics')}</summary>
         <div className="runtime-telemetry__detail-grid">
           <span>{t('telemetry.schema')}: {data?.schema_version ?? '—'}</span>
-          <span>{t('telemetry.sampleSource', { source: data?.daemon.source ?? '—', precision: data?.daemon.precision ?? '—' })}</span>
+          <span>{t('telemetry.sampleSource', { source: formatResourceSource(data?.daemon.source, t('settings.backend')), precision: data?.daemon.precision ?? '—' })}</span>
           <span>{t('telemetry.shell')}: {shellMemory == null ? t('telemetry.unavailable') : formatBytes(shellMemory)}</span>
           <span>{t('telemetry.notIncluded')}</span>
         </div>

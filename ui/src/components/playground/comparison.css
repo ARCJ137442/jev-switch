@@ -1,9 +1,6 @@
-.playground-example-select { display: none; }
 .playground-page { padding-block: 16px; }
 @media (max-width: 1100px), (max-height: 700px) {
-  .playground-examples { flex: 1; }
-  .playground-example-select { display: flex; max-width: 28rem; }
-  .playground-examples .playground-example-chips { display: none; }
+  .playground-examples { min-width: 0; flex: 1 1 100%; }
 }
 
 .comparison-inputs {
@@ -135,10 +132,13 @@
 
 @media (max-width: 799px), (max-height: 600px) {
   .playground-page { padding-block: 0; }
-  .playground-topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0; }
+  .playground-topbar { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 0; }
   .playground-page-title,
   .playground-examples-row { margin: 0; }
-  .playground-examples-row { flex: 1 1 0; min-width: 0; justify-content: flex-end; }
+  .playground-examples-row { width: 100%; min-width: 0; flex: none; justify-content: flex-start; }
+  .playground-examples { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
+  .playground-example-chips { width: max-content; min-width: 100%; flex-wrap: nowrap; padding-bottom: 2px; }
+  .playground-example-chips > button { flex: none; white-space: nowrap; }
 }
 
 @media (max-width: 799px) {

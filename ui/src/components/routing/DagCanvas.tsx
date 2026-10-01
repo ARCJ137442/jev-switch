@@ -1,15 +1,18 @@
-import { useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { CornerUpLeft, CornerUpRight, Minus, Plus, RotateCcw } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { ChevronDown, ChevronUp, CornerUpLeft, CornerUpRight, Minus, Plus, RotateCcw } from 'lucide-react';
 import { edgeKey, type Route } from '../../api/admin';
 import { useI18n } from '../../i18n';
 import { EdgeInspector } from './EdgeInspector';
 import { buildDag, nearestPort, nodePorts, routeIdentity, wirePath, type DagEntry, type DagPort, type DagProvider, type Point } from './dag';
 import './dag.css';
+import { readRoutingHudAutoHide, SETTINGS_CHANGE_EVENT } from '../../settings/preferences';
+import { edgeActivityVisual, type RouteActivityState } from '../../pages/routingActivity';
 
 interface Props {
   routes: Route[]; entries: DagEntry[]; providers: DagProvider[];
   positions: Record<string, Point>; selected: string | null; selectedNode?: string | null; errors: ReadonlySet<string>;
-  liveEdges?: ReadonlyMap<string, 'success' | 'failure' | 'retry'>;
+  routeActivities?: RouteActivityState;
+  activityNow: number;
   onSelect: (id: string | null) => void;
   onSelectNode?: (id: string | null) => void;
   onNodeDoubleClick?: (node: { id: string; kind: 'entry' | 'provider' | 'alias' }) => void;
@@ -27,6 +30,18 @@ type PanDrag = { type: 'pan'; start: Point; scroll: Point; button: number };
 type Drag = WireDrag | NodeDrag | PanDrag;
 const samePort = (a: DagPort | null, b: DagPort) => a?.id === b.id && a.direction === b.direction && a.model === b.model;
 
+function CanvasHud({ children, autoHide, label, placement }: { children: React.ReactNode; autoHide: boolean; label: string; placement: 'primary' | 'secondary' }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(() => !autoHide);
+  useEffect(() => setExpanded(!autoHide), [autoHide]);
+  return <div className={`dag-hud dag-hud--${placement}${expanded ? ' dag-hud--expanded' : ''}`}>
+    <button className="dag-icon-button dag-hud__toggle" type="button" aria-expanded={expanded} aria-label={t(expanded ? 'dag.collapseToolbar' : 'dag.expandToolbar')} title={`${label} · ${t(expanded ? 'dag.collapseToolbar' : 'dag.expandToolbar')}`} onClick={() => setExpanded(value => !value)}>
+      {expanded ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
+    </button>
+    <div className="dag-hud__content">{children}</div>
+  </div>;
+}
+
 /** Shared graph coordinates make snap/reconnect work even when released between DOM elements. */
 export function DagCanvas(props: Props) {
   const { t } = useI18n();
@@ -39,7 +54,13 @@ export function DagCanvas(props: Props) {
   const [zoom, setZoom] = useState(1);
   const [nodeId, setNodeId] = useState('');
   const [context, setContext] = useState<{ x: number; y: number; edge?: string; node?: string; background?: boolean } | null>(null);
+  const [autoHideHud, setAutoHideHud] = useState(readRoutingHudAutoHide);
   const marker = useId().replace(/:/g, '');
+  useEffect(() => {
+    const syncPreference = () => setAutoHideHud(readRoutingHudAutoHide());
+    window.addEventListener(SETTINGS_CHANGE_EVENT, syncPreference);
+    return () => window.removeEventListener(SETTINGS_CHANGE_EVENT, syncPreference);
+  }, []);
   const setDrag = (next: Drag | null) => { dragRef.current = next; setDragState(next); };
   const positions = drag?.type === 'node' ? { ...props.positions, [drag.id]: drag.point } : props.positions;
   const nodes = useMemo(() => buildDag(props.routes, props.entries, props.providers, positions), [props.routes, props.entries, props.providers, positions]);
@@ -73,19 +94,21 @@ export function DagCanvas(props: Props) {
   const outputPort = (route: Route) => ports.find(p => p.id === route.left && p.direction === 'output');
 
   return <section className="dag-workbench" aria-label={t('entry.graph')}>
-    <div className="dag-tools">
-      <span className="dag-help">{t('dag.hint')}</span>
-      <div className="dag-tool-group">
-        <button className="dag-icon-button" type="button" onClick={() => setZoom(z => Math.max(.4, Math.round((z - .1) * 10) / 10))} aria-label={t('dag.zoomOut')} title={t('dag.zoomOut')}><Minus size={15}/></button>
-        <output>{Math.round(zoom * 100)}%</output>
-        <button className="dag-icon-button" type="button" onClick={() => setZoom(z => Math.min(2.4, Math.round((z + .1) * 10) / 10))} aria-label={t('dag.zoomIn')} title={t('dag.zoomIn')}><Plus size={15}/></button>
-        <button className="dag-icon-button" type="button" onClick={() => { props.onResetLayout(); setZoom(1); viewport.current?.scrollTo(0, 0); }} aria-label={t('dag.layout')} title={t('dag.layout')}><RotateCcw size={15}/></button>
+    <CanvasHud autoHide={autoHideHud} label={t('dag.hint')} placement="primary">
+      <div className="dag-tools">
+        <span className="dag-help">{t('dag.hint')}</span>
+        <div className="dag-tool-group">
+          <button className="dag-icon-button" type="button" onClick={() => setZoom(z => Math.max(.4, Math.round((z - .1) * 10) / 10))} aria-label={t('dag.zoomOut')} title={t('dag.zoomOut')}><Minus size={15}/></button>
+          <output>{Math.round(zoom * 100)}%</output>
+          <button className="dag-icon-button" type="button" onClick={() => setZoom(z => Math.min(2.4, Math.round((z + .1) * 10) / 10))} aria-label={t('dag.zoomIn')} title={t('dag.zoomIn')}><Plus size={15}/></button>
+          <button className="dag-icon-button" type="button" onClick={() => { props.onResetLayout(); setZoom(1); viewport.current?.scrollTo(0, 0); }} aria-label={t('dag.layout')} title={t('dag.layout')}><RotateCcw size={15}/></button>
+        </div>
       </div>
-    </div>
-    {selectedRoute && <div className="dag-tools">
+    </CanvasHud>
+    {selectedRoute && <CanvasHud autoHide={autoHideHud} label={t('dag.insert')} placement="secondary"><div className="dag-tools">
       <label className="dag-insert"><span>{t('dag.nodeId')}</span><input value={nodeId} onChange={e => setNodeId(e.target.value)} spellCheck={false} placeholder="fallback-group" /></label>
       <button type="button" disabled={!nodeId.trim()} onClick={() => { props.onInsertNode(props.selected!, nodeId.trim()); setNodeId(''); }}>{t('dag.insert')}</button>
-    </div>}
+    </div></CanvasHud>}
     <div className="dag-viewport" ref={viewport} tabIndex={0}
       onKeyDown={event => { if (event.key === 'Escape') { setDrag(null); setContext(null); props.onSelect(null); } }}
       onPointerDown={event => {
@@ -169,10 +192,20 @@ export function DagCanvas(props: Props) {
             {props.routes.map((route, index) => {
               const from = outputPort(route); const to = inputPort(route); if (!from || !to) return null;
                const key = routeIdentity(route); const selected = key === props.selected;
-               const live = props.liveEdges?.get(key);
-              const invalid = props.errors.has(edgeKey(route.left, route.right));
-               return <g key={`${key}:${index}`} className={`dag-edge${selected ? ' selected' : ''}${invalid ? ' invalid' : ''}${live ? ` live-${live}` : ''}`}
-                role="button" tabIndex={0} aria-pressed={selected} aria-label={`${route.left} → ${route.right}${route.upstream_model ? ` / ${route.upstream_model}` : ''}`}
+               const activity = edgeActivityVisual(props.routeActivities?.[key], props.activityNow);
+               const invalid = props.errors.has(edgeKey(route.left, route.right));
+               const activityStyle: CSSProperties | undefined = activity.lineLevel > 0 || activity.outcomeCount > 0 ? {
+                 '--dag-edge-color': activity.outcomeCount ? `hsl(${activity.hue} ${activity.saturation}% 68%)` : 'var(--text-subtle)',
+                 '--dag-edge-opacity': String(Math.max(0.42, activity.lineLevel)),
+                 '--dag-glow-alpha': `${Math.round(activity.glowLevel * 88)}%`,
+                 '--dag-glow-radius': `${(activity.glowLevel * 16).toFixed(1)}px`,
+               } as CSSProperties : undefined;
+               const activitySummary = activity.activeCount > 0 || activity.outcomeCount > 0
+                 ? t('dag.activitySummary', { active: activity.activeCount, count: activity.outcomeCount, success: activity.successRate === null ? '—' : Math.round(activity.successRate * 100) })
+                 : null;
+               return <g key={`${key}:${index}`} className={`dag-edge${selected ? ' selected' : ''}${invalid ? ' invalid' : ''}`}
+                style={activityStyle}
+                role="button" tabIndex={0} aria-pressed={selected} aria-label={`${route.left} → ${route.right}${route.upstream_model ? ` / ${route.upstream_model}` : ''}${activitySummary ? ` · ${activitySummary}` : ''}`}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); props.onSelect(key); } }}>
                 <path className="dag-wire" d={wirePath(from, to)} markerEnd={`url(#${marker})`} />
                 <path className="dag-hit" d={wirePath(from, to)} onClick={e => { e.stopPropagation(); props.onSelect(key); }} onContextMenu={e => { e.preventDefault(); props.onSelect(key); setContext({ ...point(e), edge: key }); }} />

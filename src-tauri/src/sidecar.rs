@@ -18,6 +18,11 @@ use crate::ShellState;
 /// webview 目标 origin（local 态绑 127.0.0.1:11435 —— contracts/05 §1）。
 pub const UI_ORIGIN: &str = "http://127.0.0.1:11435";
 
+/// WebView2 keeps HTTP cache across shell restarts; bind the index URL to this package's UI bytes.
+pub fn ui_entry_url() -> String {
+    format!("{UI_ORIGIN}/?jev-ui={}", env!("JEV_UI_CACHE_KEY"))
+}
+
 /// 首启播种的默认配置（示例值 only：`api_key_env` 形式，无真实密钥）。
 const DEFAULT_CONFIG: &str = include_str!("default_providers.toml");
 
@@ -84,9 +89,9 @@ pub fn resolve_sidecar_exe(app: &AppHandle) -> Option<PathBuf> {
         if let Ok(exe) = std::env::current_exe() {
             if let Some(dir) = exe.parent() {
                 for name in names {
-                    candidates.push(dir.join("binaries").join(name));
-                    candidates.push(dir.join("bin").join(name));
-                    candidates.push(dir.join(name));
+                candidates.push(dir.join("binaries").join(name));
+                candidates.push(dir.join("bin").join(name));
+                candidates.push(dir.join(name));
                 }
                 // 仓库路径仅供 debug 开发；安装包不能回退到工作目录中的旧内核。
                 #[cfg(debug_assertions)]
@@ -155,6 +160,7 @@ pub fn resolve_ui_dist(app: &AppHandle) -> Option<PathBuf> {
         }
         if let Ok(exe) = std::env::current_exe() {
             if let Some(dir) = exe.parent() {
+                candidates.push(dir.join("resources/ui/dist"));
                 candidates.push(dir.join("ui/dist"));
                 // 发行包只使用随包资源，避免静默加载工作区旧页面。
                 #[cfg(debug_assertions)]
@@ -281,7 +287,7 @@ fn spawn_watch(app: AppHandle) {
             match probe_daemon() {
                 RuntimeProbe::Ready => {
                     if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.eval(&format!("location.replace('{}/')", UI_ORIGIN));
+                        let _ = w.eval(&format!("location.replace('{}')", ui_entry_url()));
                     }
                     return;
                 }
@@ -383,6 +389,15 @@ pub fn shutdown(child: &mut Child) {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn ui_entry_url_is_scoped_to_the_embedded_app_and_ui_build() {
+        let url = ui_entry_url();
+        assert!(url.starts_with(&format!("{UI_ORIGIN}/?jev-ui=")));
+        assert!(url.contains(env!("CARGO_PKG_VERSION")));
+        assert!(url.contains(env!("JEV_UI_CACHE_KEY")));
+        assert_ne!(url, format!("{UI_ORIGIN}/?jev-ui=0.4.1-legacy-cache"));
+    }
 
     #[test]
     #[cfg(not(feature = "standalone"))]

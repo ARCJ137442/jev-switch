@@ -1,0 +1,270 @@
+name: Android APK
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      abi:
+        type: string
+        required: false
+        default: aarch64
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: true
+      ANDROID_KEYSTORE_PASSWORD:
+        required: true
+      ANDROID_KEY_ALIAS:
+        required: true
+      ANDROID_KEY_PASSWORD:
+        required: true
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit, branch or tag to build'
+        required: false
+        default: 'main'
+      abi:
+        description: 'Android ABI for a manual build'
+        type: choice
+        options:
+          - aarch64
+          - x86_64
+        required: true
+        default: aarch64
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Android APK (${{ inputs.abi }})
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_ABI: ${{ inputs.abi || 'aarch64' }}
+    steps:
+      - name: Validate stable signing secrets
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          foreach ($name in @('ANDROID_KEYSTORE_BASE64', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Missing required GitHub Actions secret: $name"
+            }
+          }
+
+      - name: Checkout requested revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || 'main' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK components
+        shell: pwsh
+        run: |
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Cache Android Rust and Gradle builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-android-${{ hashFiles('rs/Cargo.lock', 'src-tauri/Cargo.lock', 'ui/package-lock.json', 'src-tauri/tauri.android.conf.json', 'src-tauri/app-icon.png', 'scripts/android/prepare-android-project.ps1') }}
+          restore-keys: ${{ runner.os }}-android-
+
+      - name: Install dependencies and Tauri CLI
+        shell: pwsh
+        run: |
+          npm ci --prefix ui
+          cargo install tauri-cli --locked --version 2.9.6
+
+      - name: Build web assets
+        shell: pwsh
+        env:
+          VITE_JEV_MOBILE: 'true'
+          JEV_BUILD_REVISION: ${{ github.sha }}
+        run: npm run build --prefix ui
+
+      - name: Initialize Android project
+        shell: pwsh
+        run: cargo tauri android init --ci --skip-targets-install --config src-tauri/tauri.android.conf.json
+
+      - name: Prepare Android version and launcher icons
+        shell: pwsh
+        run: ./scripts/android/prepare-android-project.ps1
+
+      - name: Compile Android daemon library
+        shell: pwsh
+        run: |
+          $abi = $env:ANDROID_ABI
+          $target = if ($abi -eq 'aarch64') { 'aarch64-linux-android' } else { 'x86_64-linux-android' }
+          $jniAbi = if ($abi -eq 'aarch64') { 'arm64-v8a' } else { 'x86_64' }
+          $env:ANDROID_NDK_HOME = Join-Path $env:ANDROID_HOME 'ndk\27.2.12479018'
+          $env:NDK_HOME = $env:ANDROID_NDK_HOME
+          $env:TAURI_ANDROID_PROJECT_PATH = (Resolve-Path 'src-tauri/gen/android').Path
+          $env:WRY_ANDROID_PACKAGE = 'io.github.arcj137442.jevswitch'
+          $env:WRY_ANDROID_PACKAGE_UNESCAPED = $env:WRY_ANDROID_PACKAGE
+          $env:WRY_ANDROID_LIBRARY = 'jev_switch_shell'
+          $kotlinOut = 'src-tauri/gen/android/app/src/main/java/io/github/arcj137442/jevswitch/generated'
+          New-Item -ItemType Directory -Force $kotlinOut | Out-Null
+          $env:WRY_ANDROID_KOTLIN_FILES_OUT_DIR = (Resolve-Path $kotlinOut).Path
+          $ndkBin = Join-Path $env:ANDROID_NDK_HOME 'toolchains\llvm\prebuilt\windows-x86_64\bin'
+          $clang = Join-Path $ndkBin ("{0}24-clang.cmd" -f $target)
+          if ($abi -eq 'aarch64') {
+            $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $clang
+            $env:CC_aarch64_linux_android = $clang
+            $env:AR_aarch64_linux_android = Join-Path $ndkBin 'llvm-ar.exe'
+            $env:RANLIB_aarch64_linux_android = Join-Path $ndkBin 'llvm-ranlib.exe'
+          } else {
+            $env:CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER = Join-Path $ndkBin 'x86_64-linux-android24-clang.cmd'
+            $env:CC_x86_64_linux_android = $env:CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER
+            $env:AR_x86_64_linux_android = Join-Path $ndkBin 'llvm-ar.exe'
+            $env:RANLIB_x86_64_linux_android = Join-Path $ndkBin 'llvm-ranlib.exe'
+          }
+          cargo build --locked --manifest-path src-tauri/Cargo.toml --package jev-switch-shell --target $target --features tauri/custom-protocol --lib --release
+          if ($LASTEXITCODE -ne 0) { throw 'Android Rust library build failed.' }
+          $jniDir = "src-tauri/gen/android/app/src/main/jniLibs/$jniAbi"
+          New-Item -ItemType Directory -Force $jniDir | Out-Null
+          Copy-Item "src-tauri/target/$target/release/libjev_switch_shell.so" "$jniDir/libjev_switch_shell.so" -Force
+
+      - name: Package Android release APK
+        shell: pwsh
+        run: |
+          $flavor = if ($env:ANDROID_ABI -eq 'aarch64') { 'Arm64' } else { 'X86_64' }
+          Push-Location src-tauri/gen/android
+          try {
+            .\gradlew.bat ":app:assemble${flavor}Release" "-x" "rustBuild${flavor}Release" '-Pkotlin.incremental=false' --no-daemon
+            if ($LASTEXITCODE -ne 0) { throw 'Android release APK packaging failed.' }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Prepare stable signing keystore
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          $keystorePath = Join-Path $env:RUNNER_TEMP 'jev-switch-release.jks'
+          try {
+            $bytes = [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64)
+          } catch {
+            throw 'ANDROID_KEYSTORE_BASE64 is not valid Base64.'
+          }
+          [IO.File]::WriteAllBytes($keystorePath, $bytes)
+          & keytool -list -keystore $keystorePath -storepass $env:ANDROID_KEYSTORE_PASSWORD -alias $env:ANDROID_KEY_ALIAS | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'The configured Android keystore or alias could not be opened.' }
+          "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Sign and verify Android APK
+        id: sign
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { $env:ANDROID_HOME }
+          if (-not $sdkRoot) { throw 'ANDROID_SDK_ROOT or ANDROID_HOME must be set.' }
+          $buildTools = Join-Path $sdkRoot 'build-tools\35.0.0'
+          $zipalign = Join-Path $buildTools 'zipalign.exe'
+          $apksigner = Join-Path $buildTools 'apksigner.bat'
+          if (-not (Test-Path $zipalign) -or -not (Test-Path $apksigner)) { throw 'Android zipalign or apksigner is missing.' }
+
+          $version = (Get-Content ui/package.json -Raw | ConvertFrom-Json).version
+          $apk = Get-ChildItem 'src-tauri/gen/android/app/build/outputs/apk' -Recurse -Filter '*release*.apk' |
+            Where-Object { $_.Name -notlike '*-signed.apk' } | Select-Object -First 1
+          if (-not $apk) { throw 'No Android release APK was produced.' }
+
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          $baseName = "jev-switch-$version-android-$env:ANDROID_ABI"
+          $alignedApk = Join-Path $env:RUNNER_TEMP "$baseName-aligned.apk"
+          $signedApk = Join-Path (Resolve-Path artifacts).Path "$baseName.apk"
+          & $zipalign -p -f 4 $apk.FullName $alignedApk
+          if ($LASTEXITCODE -ne 0) { throw 'zipalign failed.' }
+
+          & $apksigner sign `
+            --ks $env:ANDROID_KEYSTORE_PATH `
+            --ks-pass ("pass:{0}" -f $env:ANDROID_KEYSTORE_PASSWORD) `
+            --ks-key-alias $env:ANDROID_KEY_ALIAS `
+            --key-pass ("pass:{0}" -f $env:ANDROID_KEY_PASSWORD) `
+            --out $signedApk `
+            $alignedApk
+          if ($LASTEXITCODE -ne 0) { throw 'apksigner signing failed.' }
+
+          $verification = & $apksigner verify --verbose --print-certs $signedApk 2>&1
+          if ($LASTEXITCODE -ne 0) { throw 'apksigner verification failed.' }
+          $certificateLine = $verification | Where-Object { $_ -match 'Signer #1 certificate SHA-256 digest:' } | Select-Object -First 1
+          if (-not $certificateLine -or $certificateLine -notmatch '([0-9a-fA-F]{2}:){31}[0-9a-fA-F]{2}') {
+            throw 'Could not extract the Android signer SHA-256 certificate fingerprint.'
+          }
+          $certificateSha256 = ($Matches[0] -replace ':', '').ToUpperInvariant()
+          "signer_sha256=$certificateSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "APK signer SHA-256: $certificateSha256"
+
+      - name: Collect Android release metadata
+        shell: pwsh
+        env:
+          SIGNER_SHA256: ${{ steps.sign.outputs.signer_sha256 }}
+        run: |
+          $version = (Get-Content ui/package.json -Raw | ConvertFrom-Json).version
+          $properties = ConvertFrom-StringData (Get-Content src-tauri/gen/android/app/tauri.properties -Raw)
+          $apkName = "jev-switch-$version-android-$env:ANDROID_ABI.apk"
+          $manifestPath = "artifacts/jev-switch-$version-android-$env:ANDROID_ABI.json"
+          $manifest = [ordered]@{
+            product = 'jev-switch'
+            version = $version
+            version_code = [int]$properties['tauri.android.versionCode']
+            commit = (git rev-parse HEAD)
+            abi = $env:ANDROID_ABI
+            signing = 'stable Android release keystore'
+            signer_sha256 = $env:SIGNER_SHA256
+            icon_source_sha256 = (Get-FileHash src-tauri/app-icon.png -Algorithm SHA256).Hash
+            apk = $apkName
+            sha256 = (Get-FileHash "artifacts/$apkName" -Algorithm SHA256).Hash
+            built_at = (Get-Date).ToUniversalTime().ToString('o')
+          }
+          $manifest | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8
+          Get-Content -LiteralPath $manifestPath
+
+      - name: Upload signed Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-switch-android-${{ inputs.abi }}
+          path: artifacts/*
+          if-no-files-found: error

@@ -8,8 +8,15 @@
 .routing-page__table .route-table-wrap { overflow-x: auto; }
 .dag-workbench { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; margin-top: 0; border: 0; border-radius: 0; background: var(--surface); overflow: hidden; }
 .dag-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); }
-.dag-workbench > .dag-tools:first-child { position: absolute; z-index: 10; top: 10px; right: 12px; max-width: min(70%, 650px); border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow-sm); backdrop-filter: blur(10px); }
-.dag-workbench > .dag-tools:nth-child(2) { position: absolute; z-index: 10; top: 58px; right: 12px; max-width: min(70%, 520px); border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: var(--shadow-sm); }
+.dag-hud { position: absolute; z-index: 10; right: 12px; display: flex; max-width: min(70%, 650px); align-items: flex-start; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow-sm); backdrop-filter: blur(10px); }
+.dag-hud--primary { top: 10px; }
+.dag-hud--secondary { top: 58px; max-width: min(70%, 520px); background: color-mix(in srgb, var(--surface) 94%, transparent); }
+.dag-hud__toggle { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-hover); color: var(--text); }
+.dag-hud__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dag-hud__content { min-width: 0; }
+.dag-hud:not(.dag-hud--expanded):not(:hover):not(:focus-within) .dag-hud__content { display: none; }
+.dag-hud--expanded .dag-hud__toggle { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); }
+.dag-hud .dag-tools { padding: 0; border: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
 .dag-tools button,.dag-context button { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-hover); color: var(--text); }
 .dag-tools button:disabled { opacity: .45; cursor: default; }
 .dag-tools button.dag-icon-button { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; padding: 0; }
@@ -22,13 +29,7 @@
 .dag-viewport { position: relative; width: 100%; height: auto; min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; touch-action: none; background: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
 .dag-world { position: relative; transform-origin: 0 0; user-select: none; }
 .dag-wires { position: absolute; inset: 0; overflow: visible; }
-.dag-wire { fill: none; stroke: var(--text-subtle); stroke-width: 2; opacity: .7; }
-.dag-edge.live-success .dag-wire { stroke: var(--success); stroke-width: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--success) 90%, transparent)); animation: dag-glow-success 3.2s ease-out both; }
-.dag-edge.live-failure .dag-wire { stroke: var(--danger); stroke-width: 2; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--danger) 90%, transparent)); animation: dag-glow-failure 3.2s ease-out both; }
-.dag-edge.live-retry .dag-wire { stroke: var(--accent); stroke-width: 2; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 85%, transparent)); animation: dag-exposure 1.2s ease-out both; }
-@keyframes dag-glow-success { 0% { opacity: .95; filter: drop-shadow(0 0 12px color-mix(in srgb, var(--success) 100%, transparent)); } 100% { opacity: .2; filter: drop-shadow(0 0 0 transparent); } }
-@keyframes dag-glow-failure { 0% { opacity: .95; filter: drop-shadow(0 0 12px color-mix(in srgb, var(--danger) 100%, transparent)); } 100% { opacity: .2; filter: drop-shadow(0 0 0 transparent); } }
-@keyframes dag-exposure { 0% { opacity: .3; filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 50%, transparent)); } 35% { opacity: 1; filter: drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 90%, transparent)); } 100% { opacity: .65; filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 35%, transparent)); } }
+.dag-wire { fill: none; stroke: var(--dag-edge-color, var(--text-subtle)); stroke-width: 2; opacity: var(--dag-edge-opacity, .7); filter: drop-shadow(0 0 var(--dag-glow-radius, 0px) color-mix(in srgb, var(--dag-edge-color, var(--text-subtle)) var(--dag-glow-alpha, 0%), transparent)); transition: stroke .12s linear, opacity .12s linear, filter .12s linear; }
 .dag-hit { fill: none; stroke: transparent; stroke-width: 18; cursor: pointer; }
 .dag-priority { fill: var(--text-muted); font-size: 12px; font-family: var(--font-mono); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
 .dag-edge:hover .dag-wire,.dag-edge.selected .dag-wire { stroke: var(--accent); stroke-width: 3; opacity: 1; }
@@ -60,5 +61,5 @@
 .dag-empty { position: absolute; top: 45%; left: 10%; right: 10%; text-align: center; color: var(--text-muted); pointer-events: none; }
 @media (max-width: 700px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 420px) { .dag-inspector > div > .space-y-2\.5 { grid-template-columns: minmax(0,1fr); } .dag-tool-group { flex-wrap: wrap; } }
-@media (max-width: 560px) { .dag-workbench > .dag-tools:first-child { max-width: calc(100% - 24px); top: 58px; left: 12px; right: 12px; justify-content: flex-end; } .dag-workbench > .dag-tools:first-child .dag-help { display: none; } .dag-workbench > .dag-tools:nth-child(2) { top: 104px; left: 12px; right: 12px; max-width: none; } .routing-page__status { top: 10px; } .routing-page__table { left: 6px; right: 6px; bottom: 6px; max-height: 48%; } }
-@media (prefers-reduced-motion: reduce) { .dag-edge.live-success .dag-wire, .dag-edge.live-failure .dag-wire, .dag-edge.live-retry .dag-wire { animation: none; filter: none; } }
+@media (max-width: 560px) { .dag-hud { max-width: calc(100% - 24px); right: 12px; } .dag-hud--primary { top: 58px; left: 12px; justify-content: flex-end; } .dag-hud--primary .dag-help { display: none; } .dag-hud--secondary { top: 104px; left: 12px; max-width: none; } .routing-page__status { top: 10px; } .routing-page__table { left: 6px; right: 6px; bottom: 6px; max-height: 48%; } }
+@media (prefers-reduced-motion: reduce) { .dag-wire { transition: none; } }

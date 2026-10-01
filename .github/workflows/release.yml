@@ -65,20 +65,22 @@ jobs:
 
           UI_VER=$(node -p "require('./ui/package.json').version")
           TAURI_VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          ANDROID_VER=$(node -p "require('./src-tauri/tauri.android.conf.json').version")
           RS_VER=$(grep -m1 '^version' rs/Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
           SHELL_VER=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
 
-          # 干跑未给版本 → 取 ui/package.json，做四处一致性检查
+          # 干跑未给版本 → 取 ui/package.json，并校验所有桌面/Android 版本字段
           if [ -z "$VERSION" ]; then VERSION="$UI_VER"; fi
 
           echo "tag/input : $VERSION"
           echo "ui        : $UI_VER"
           echo "tauri.conf: $TAURI_VER"
+          echo "tauri.android.conf: $ANDROID_VER"
           echo "rs/Cargo  : $RS_VER"
           echo "shell/Cargo: $SHELL_VER"
 
           fail=0
-          for pair in "ui:$UI_VER" "tauri.conf:$TAURI_VER" "rs/Cargo:$RS_VER" "shell/Cargo:$SHELL_VER"; do
+          for pair in "ui:$UI_VER" "tauri.conf:$TAURI_VER" "tauri.android.conf:$ANDROID_VER" "rs/Cargo:$RS_VER" "shell/Cargo:$SHELL_VER"; do
             name="${pair%%:*}"; got="${pair#*:}"
             if [ "$got" != "$VERSION" ]; then
               echo "::error::$name 版本 $got ≠ 期望 $VERSION — 四处版本号必须同步（见 docs/RELEASE.md）"
@@ -220,6 +222,18 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  android:
+    name: Android APK
+    needs: [meta, gate]
+    if: needs.meta.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/android.yml
+    with:
+      ref: ${{ github.ref_name }}
+      abi: aarch64
+    secrets: inherit
+
   # ── 5. Docker 镜像（ghcr.io） ─────────────────────────────────────
   docker:
     name: Docker 镜像
@@ -264,8 +278,8 @@ jobs:
   # ── 6. GitHub Release（仅 tag 触发） ──────────────────────────────
   release:
     name: GitHub Release
-    needs: [meta, windows, docker, cli]
-    if: needs.meta.outputs.publish == 'true'
+    needs: [meta, windows, docker, cli, android]
+    if: always() && needs.meta.outputs.publish == 'true' && needs.windows.result == 'success' && needs.docker.result == 'success' && needs.cli.result == 'success' && needs.android.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -282,6 +296,11 @@ jobs:
           merge-multiple: true
           path: dist
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: jev-switch-android-aarch64
+          path: dist
+
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
@@ -296,6 +315,7 @@ jobs:
             **Windows 便携版**：下载 `.zip` 并解压，双击其中的 `jev-switch.exe`；它与同次构建的安装包共享壳、daemon 与 UI 资源，不运行安装器。
             **Windows 独立版**：下载 `jev-switch-standalone-*-windows-x64.exe` 并双击；首次启动会把内嵌 daemon/UI 校验后释放到当前用户的版本化运行缓存，应用数据仍保存在 `%APPDATA%\\jev-switch`。
             **Headless CLI**：下载对应平台的 `jev-switch-cli-*`；Termux/Android arm64 请在设备上执行 `cargo install --path rs/crates/jev-switch-cli --locked`，避免把主机二进制误当成 Android 包。
+            **Android**：下载 `jev-switch-<version>-android-aarch64.apk` 并侧载安装；同一 Release 的 manifest 给出 APK SHA-256、签名证书指纹和版本码。首次从旧 debug-signed APK 升级时，需先卸载旧版本一次。
 
             **Docker（Bash）**：先将 `JEV_ADMIN_PASSWORD` 设置为自己的管理员密码。
             下例挂载持久数据卷，并只在宿主机回环地址提供控制台。

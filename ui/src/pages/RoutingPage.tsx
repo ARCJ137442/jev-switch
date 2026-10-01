@@ -10,7 +10,8 @@ import { RouteTableForm } from '../components/routing/RouteTableForm';
 import { useToast } from '../app/feedback';
 import { useI18n } from '../i18n';
 import { useStatusBarItems } from '../app/statusBar';
-import { getAdminActivity, streamActivity, type ActivityEvent } from '../api/access';
+import { getAdminActivity, streamActivity } from '../api/access';
+import { advanceRouteActivities, applyRouteActivityEvent, nextRouteActivityUpdateDelay, retainRouteActivities, type RouteActivityState } from './routingActivity';
 
 interface GraphDocument { routes: Route[]; positions: Record<string, Point> }
 const serialize = routeDocumentSignature;
@@ -28,43 +29,6 @@ function preserveDraft(routes: Route[], baseline: Route[]) {
     if (serialize(routes) === serialize(baseline)) sessionStorage.removeItem(draftKey());
     else sessionStorage.setItem(draftKey(), JSON.stringify(routes));
   } catch { /* Unavailable storage does not block editing; beforeunload still warns. */ }
-}
-function liveEdgesForEvent(routes: Route[], event: ActivityEvent): Map<string, 'success' | 'failure' | 'retry'> {
-  const result = new Map<string, 'success' | 'failure' | 'retry'>();
-  if (event.kind === 'route_activity') {
-    let detail: any;
-    try { detail = JSON.parse(event.detail); } catch { return result; }
-    const provider = typeof detail?.provider_id === 'string' ? detail.provider_id : null;
-    const model = typeof detail?.upstream_model === 'string' ? detail.upstream_model : null;
-    const endpoint = typeof detail?.requested_model === 'string' ? detail.requested_model : null;
-    const state = detail?.phase === 'finished_success' ? 'success' : detail?.phase === 'finished_failure' ? 'failure' : 'retry';
-    for (const route of routes) {
-      if ((endpoint && route.left === endpoint && route.right === provider) || (model && route.upstream_model === model)) result.set(routeIdentity(route), state);
-    }
-    return result;
-  }
-  if (event.kind !== 'request') return result;
-  let detail: any;
-  try { detail = JSON.parse(event.detail); } catch { return result; }
-  const trace = detail?.route_trace;
-  if (!trace || typeof trace !== 'object') return result;
-  const status: 'success' | 'failure' = detail.success === true ? 'success' : 'failure';
-  const provider = typeof trace.selected_provider === 'string' ? trace.selected_provider : null;
-  const selectedModel = typeof trace.selected_model === 'string' ? trace.selected_model : null;
-  const endpoint = typeof detail.endpoint_id === 'string' ? detail.endpoint_id : typeof trace.requested_model === 'string' ? trace.requested_model : null;
-  for (const route of routes) {
-    if (endpoint && route.left === endpoint && (route.right === provider || route.upstream_model === selectedModel)) result.set(routeIdentity(route), status);
-  }
-  const attempts = Array.isArray(trace.attempts) ? trace.attempts : [];
-  for (const attempt of attempts) {
-    const attemptProvider = typeof attempt.provider_id === 'string' ? attempt.provider_id : null;
-    const outcome = attempt.outcome === 'failed' ? 'failure' : attempt.outcome === 'succeeded' ? 'success' : attempt.retry_decision === 'retry_same_candidate' ? 'retry' : null;
-    if (!attemptProvider || !outcome) continue;
-    for (const route of routes) {
-      if ((endpoint && route.left === endpoint && route.right === attemptProvider) || route.right === attemptProvider || route.upstream_model === attempt.upstream_model) result.set(routeIdentity(route), outcome);
-    }
-  }
-  return result;
 }
 function readPositions(): Record<string, Point> {
   try {
@@ -90,7 +54,8 @@ export function RoutingPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
-  const [liveEdges, setLiveEdges] = useState<Map<string, 'success' | 'failure' | 'retry'>>(new Map());
+  const [routeActivities, setRouteActivities] = useState<RouteActivityState>({});
+  const [activityNow, setActivityNow] = useState(() => Date.now());
   const alive = useRef(true);
   const loadGeneration = useRef(0);
   const inFlight = useRef(false);
@@ -102,6 +67,21 @@ export function RoutingPage() {
     { id: 'routing-save-state', label: t(dirty ? 'routing.unsaved' : 'routing.synced'), tone: saveError || loadError ? 'danger' as const : dirty ? 'warning' as const : 'good' as const },
   ], [dirty, doc.routes.length, loadError, saveError, t]);
   useStatusBarItems(statusItems);
+
+  useEffect(() => {
+    setRouteActivities((current) => retainRouteActivities(current, doc.routes));
+  }, [doc.routes]);
+
+  useEffect(() => {
+    const delay = nextRouteActivityUpdateDelay(routeActivities, activityNow);
+    if (delay === null) return;
+    const timer = window.setTimeout(() => {
+      const now = Date.now();
+      setActivityNow(now);
+      setRouteActivities((current) => advanceRouteActivities(current, now));
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [routeActivities, activityNow]);
 
   const load = async () => {
     const generation = ++loadGeneration.current;
@@ -165,10 +145,10 @@ export function RoutingPage() {
     let active = true;
     void getAdminActivity(0, 1).then((page) => streamActivity({ type: 'admin' }, page.next_since, controller.signal, (event) => {
       if (!active) return;
-      const next = liveEdgesForEvent(doc.routes, event);
-      if (!next.size) return;
-      setLiveEdges(next);
-      window.setTimeout(() => { if (active) setLiveEdges(new Map()); }, 3200);
+      if (event.kind !== 'route_activity') return;
+      const now = Date.now();
+      setActivityNow(now);
+      setRouteActivities((current) => applyRouteActivityEvent(current, doc.routes, event, now));
     })).catch(() => undefined);
     return () => { active = false; controller.abort(); };
   }, [doc.routes, loading, loadError]);
@@ -237,7 +217,7 @@ export function RoutingPage() {
       {dirty && !saving && <button className="dag-icon-button" type="button" onClick={() => { changeRoutes(baseline); setSelected(null); }} title={t('dag.discard')} aria-label={t('dag.discard')}><RotateCcw size={16} aria-hidden="true" /></button>}
     </div>
     {(saveError || loadError) && <div className="routing-page__error" role="alert"><span>{saveError ?? loadError}</span>{saveFailed && <button type="button" onClick={() => setSaveFailed(false)}>{t('common.retry')}</button>}</div>}
-    {loading ? <p className="routing-page__loading" role="status">{t('entry.loading')}</p> : loadError ? <button className="routing-page__loading" type="button" onClick={() => void load()}>{t('common.retry')}</button> : <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} selectedNode={selectedNode} errors={errors} liveEdges={liveEdges}
+    {loading ? <p className="routing-page__loading" role="status">{t('entry.loading')}</p> : loadError ? <button className="routing-page__loading" type="button" onClick={() => void load()}>{t('common.retry')}</button> : <DagCanvas routes={doc.routes} entries={entries} providers={providers} positions={doc.positions} selected={selected} selectedNode={selectedNode} errors={errors} routeActivities={routeActivities} activityNow={activityNow}
       onSelectNode={setSelectedNode} onNodeDoubleClick={openNode}
       onSelect={setSelected} onCreate={createEdge}
       onPatch={(key, patch) => patchAt(history.current.current.routes.findIndex(r => routeIdentity(r) === key), patch)}

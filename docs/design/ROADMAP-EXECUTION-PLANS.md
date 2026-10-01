@@ -1,13 +1,13 @@
 # Roadmap Execution Plans
 
-> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。v0.5.0 已发布 CLI Phase 1、UI 图标/健康探测/遥测调度、Routing/Playground/Settings/Statistics 整理、LAN opt-in 与网关启停；维护者已人工确认便携/Standalone 桌面核心路径和官方 TypeSafe 调用。OpenRouter、系统主题、命令面板、路由反馈、Standalone 和 GitHub Pages 已进入发行版；Android arm64 APK 已自动构建并附入 Release，但安装、原生 service/tile/通知和全链路 gateway/SQLite 冷暖基线仍待完成。
+> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。v0.6.0 候选已完成 CLI Phase 1、JSON 设置备份、真实路由 activity 辉光、HUD 自动隐藏、官网图标化、LAN opt-in 与网关启停；维护者已人工确认便携/Standalone 桌面核心路径和官方 TypeSafe 调用。稳定签名 Android APK、安装、原生 service/tile/通知和全链路 gateway/SQLite 冷暖基线仍待完成。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 > **AI 披露**：本文由 AI 协助整理，执行顺序和最终范围由项目维护者确认。
 
 ## 现状判断
 
-当前代码和 v0.5.0 Release 已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测和 headless CLI Phase 1，并包含高频 UI 图标、并发 provider probe、共享 health、隐藏页遥测暂停、Routing/Playground/Settings/Statistics 改进、LAN opt-in 与网关启停。维护者已确认桌面核心路径、官方 TypeSafe 调用和 Android 初步安装/调用；MSI/NSIS 原生交互、Android APK 安装/原生 service/tile/通知、全链路性能和真实用户配置恢复仍须单独验收。
+当前代码和 v0.6.0 候选已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测、headless CLI、JSON 设置备份、真实 route activity 辉光、HUD 自动隐藏和 Android keepalive/tile 源码。维护者已确认桌面核心路径、官方 TypeSafe 调用和 Android 初步安装/调用；MSI/NSIS 原生交互、稳定签名 Android APK、Android 真机 service/tile/通知、全链路性能和真实用户配置恢复仍须单独验收。
 
 `abc793f` 已把 upstream attempt timing 合入主线：`TimedUpstream` 在 daemon 组合边界记录每次真实 adapter attempt（包括失败与重试），并提供会话级 `avg_upstream_latency_ms` 与 `upstream_attempts`。它是 transport + parsing 的 adapter processing time，不是纯网络耗时；不写 SQLite，也不与 gateway latency 相加。性能计划应直接复用这组数据，再补固定场景的 p50/p95/p99。
 

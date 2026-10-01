@@ -253,7 +253,7 @@ export function HomePage() {
           )}
           <div className="divide-y divide-border">
             <div className="grid grid-cols-[110px_1fr] items-center gap-3 px-4 py-2.5">
-              <span className="text-xs text-inkMuted">daemon</span>
+              <span className="text-xs text-inkMuted">{t('settings.backend' as MessageKey)}</span>
               <StatusBadge tone={daemonTone} aria-live="polite">
                 {daemonLabel}
               </StatusBadge>

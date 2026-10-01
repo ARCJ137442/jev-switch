@@ -12,6 +12,8 @@
 
 #[cfg(target_os = "android")]
 mod android_gateway;
+#[cfg(target_os = "android")]
+mod android_keepalive;
 #[cfg(not(target_os = "android"))]
 mod runtime_probe;
 #[cfg(not(target_os = "android"))]
@@ -47,6 +49,7 @@ pub fn main() {
     let mut builder = tauri::Builder::default();
     #[cfg(target_os = "android")]
     {
+        builder = builder.plugin(android_keepalive::init());
         builder = builder.invoke_handler(tauri::generate_handler![
             android_gateway::gateway_status,
             android_gateway::start_gateway,
@@ -54,6 +57,9 @@ pub fn main() {
             android_gateway::toggle_gateway,
             android_gateway::android_debug_log_status,
             android_gateway::android_set_debug_log,
+            android_gateway::android_keepalive_notification_status,
+            android_gateway::android_set_keepalive_notification,
+            android_gateway::android_notification_permission_state,
         ]);
     }
     #[cfg(not(target_os = "android"))]
@@ -67,17 +73,32 @@ pub fn main() {
         .setup(|app| {
             #[cfg(target_os = "android")]
             {
-                let (config_path, desired_state_path) =
+                let (config_path, desired_state_path, keepalive_state_path) =
                     android_gateway::prepare_paths(app.handle())?;
-                let android_state =
-                    android_gateway::AndroidGatewayState::new(config_path, desired_state_path);
+                let android_state = android_gateway::AndroidGatewayState::new(
+                    config_path,
+                    desired_state_path,
+                    keepalive_state_path,
+                );
                 // A user who explicitly left the gateway running gets a best-effort
                 // process restoration. First install remains stopped because the
                 // desired-state marker is created only after an explicit start.
-                if android_state.wants_running() {
-                    if let Err(error) = android_state.start() {
-                        eprintln!("Android gateway restore failed: {error}");
+                let running = if android_state.wants_running() {
+                    match android_state.start() {
+                        Ok(status) => status.running,
+                        Err(error) => {
+                            eprintln!("Android gateway restore failed: {error}");
+                            false
+                        }
                     }
+                } else { false };
+                if let Err(error) = android_keepalive::set_state(
+                    app.handle(),
+                    android_state.keepalive_notification_status().enabled,
+                    running,
+                ) {
+                    eprintln!("Android keepalive service restore failed: {error}");
+                    if running { let _ = android_state.stop(); }
                 }
                 app.manage(android_state);
                 return Ok(());
@@ -645,7 +666,7 @@ mod tests {
                         window
                             .eval(&format!(
                                 "location.replace('{}#/dashboard')",
-                                sidecar::UI_ORIGIN
+                                sidecar::ui_entry_url()
                             ))
                             .map_err(|error| error.to_string())?;
 

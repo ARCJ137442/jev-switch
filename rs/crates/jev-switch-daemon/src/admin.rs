@@ -56,8 +56,9 @@ use axum::{
 };
 use jev_core::{
     redact::{mask_key, redact},
-    router::{check_acyclic, MatchMode, RouterError},
+    router::{check_acyclic, MatchMode, RouteEdge, RouterError},
 };
+use serde::Serialize;
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -752,6 +753,149 @@ pub async fn import_runtime_config(State(state): State<AppState>, body: Bytes) -
     state.registry.replace_upstreams(adapters);
     state.registry.replace_edges(runtime_edges);
     Json(serde_json::json!({"imported":true,"fingerprint":crate::db::config_fingerprint(&state.config_path)})).into_response()
+}
+
+const RUNTIME_BACKUP_SCHEMA_VERSION: u32 = 1;
+const RUNTIME_BACKUP_MAX_BYTES: usize = 2 * 1024 * 1024;
+
+#[derive(Debug, Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeConfigBackup {
+    schema_version: u32,
+    providers: HashMap<String, ProviderConfig>,
+    routes: Vec<RouteEdge>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeConfigBackupImport {
+    confirm: bool,
+    backup: RuntimeConfigBackup,
+}
+
+fn no_store_json(value: impl Serialize) -> Response {
+    let mut response = Json(value).into_response();
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, private"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::PRAGMA,
+        HeaderValue::from_static("no-cache"),
+    );
+    response
+}
+
+/// Export the active provider and route snapshot only after explicit confirmation.
+/// This is intentionally separate from the ordinary masked provider read API.
+pub async fn export_runtime_config_json(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Response {
+    if body.len() > 1024 {
+        return err(&state, StatusCode::PAYLOAD_TOO_LARGE, "confirmation body too large");
+    }
+    let request: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(error) => {
+            return err(&state, StatusCode::BAD_REQUEST, format!("invalid confirmation: {error}"));
+        }
+    };
+    if request.get("confirm").and_then(serde_json::Value::as_bool) != Some(true) {
+        return err(&state, StatusCode::BAD_REQUEST, "explicit export requires {\"confirm\":true}");
+    }
+    let mut config = match load_config(&state) {
+        Ok(config) => config,
+        Err(response) => return response,
+    };
+    let effective_keys: HashMap<String, String> = config.providers.keys()
+        .filter_map(|id| config.effective_api_key(id).map(|key| (id.clone(), key)))
+        .collect();
+    for (id, provider) in &mut config.providers {
+        if let Some(key) = effective_keys.get(id) {
+            provider.api_key = Some(key.clone());
+            provider.api_key_env = None;
+        }
+    }
+    let routes = config.route_edges();
+    no_store_json(RuntimeConfigBackup {
+        schema_version: RUNTIME_BACKUP_SCHEMA_VERSION,
+        providers: config.providers,
+        routes,
+    })
+}
+
+/// Restore a versioned provider/route backup after explicit user confirmation.
+pub async fn import_runtime_config_json(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Response {
+    if body.len() > RUNTIME_BACKUP_MAX_BYTES {
+        return err(&state, StatusCode::PAYLOAD_TOO_LARGE, "configuration backup exceeds 2 MiB");
+    }
+    let request: RuntimeConfigBackupImport = match serde_json::from_slice(&body) {
+        Ok(request) => request,
+        Err(error) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid configuration backup: {error}")),
+    };
+    if !request.confirm {
+        return err(&state, StatusCode::BAD_REQUEST, "explicit import requires confirm=true");
+    }
+    if request.backup.schema_version != RUNTIME_BACKUP_SCHEMA_VERSION {
+        return err(&state, StatusCode::BAD_REQUEST, "unsupported configuration backup schema_version");
+    }
+
+    let mut config = match load_config(&state) {
+        Ok(config) => config,
+        Err(response) => return response,
+    };
+    config.providers = request.backup.providers;
+    config.routes = request.backup.routes;
+    config.router.clear();
+    if let Err(error) = config.validate_routes() {
+        return err(&state, StatusCode::BAD_REQUEST, format!("configuration backup rejected: {error}"));
+    }
+    if let Err(message) = validate_route_graph(&config.route_edges(), &config.providers) {
+        return err(&state, StatusCode::BAD_REQUEST, format!("configuration backup rejected: {message}"));
+    }
+    for (id, provider) in &config.providers {
+        if id.trim().is_empty() || provider.kind.trim().is_empty() || provider.base.trim().is_empty() {
+            return err(&state, StatusCode::BAD_REQUEST, "configuration backup contains an incomplete provider");
+        }
+    }
+
+    let adapters = crate::build_runtime_upstreams(&config, &state.telemetry);
+    let adapter_ids: BTreeSet<&str> = adapters.iter().map(|adapter| adapter.id()).collect();
+    for (id, provider) in &config.providers {
+        if provider.enabled && !adapter_ids.contains(id.as_str()) {
+            return err(&state, StatusCode::BAD_REQUEST, format!("configuration backup rejected: enabled provider '{id}' could not initialize an adapter"));
+        }
+    }
+
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("database lock failed: {error}")),
+    };
+    let endpoints = match crate::db::endpoints::load_all(&conn) {
+        Ok(endpoints) => endpoints,
+        Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("load endpoints before import failed: {error}")),
+    };
+    let endpoint_ids: std::collections::HashSet<String> = endpoints.iter().map(|endpoint| endpoint.id.clone()).collect();
+    let enabled: std::collections::HashSet<String> = endpoints.into_iter().filter(|endpoint| endpoint.enabled).map(|endpoint| endpoint.id).collect();
+    let routes = config.route_edges();
+    let runtime_edges = routes.iter().filter(|edge| !endpoint_ids.contains(&edge.left) || enabled.contains(&edge.left)).cloned().collect();
+    let snapshot = crate::db::RuntimeConfigSnapshot {
+        providers: config.providers.clone(),
+        routes,
+        source_toml_fingerprint: crate::db::config_fingerprint(&state.config_path),
+    };
+    if let Err(error) = crate::db::save_runtime_snapshot(&conn, &snapshot) {
+        return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("configuration backup import failed: {error}"));
+    }
+    drop(conn);
+    refresh_known_keys(&state, &config);
+    state.registry.replace_upstreams(adapters);
+    state.registry.replace_edges(runtime_edges);
+    no_store_json(serde_json::json!({"imported": true, "schema_version": RUNTIME_BACKUP_SCHEMA_VERSION}))
 }
 
 /// Export the current SQLite provider/route runtime snapshot to the legacy TOML file.
@@ -2241,6 +2385,81 @@ priority = 10
             .unwrap();
         assert_eq!(laya["api_key_set"], false);
         assert_eq!(laya["api_key_masked"], "");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn json_backup_exports_plaintext_keys_only_after_explicit_confirmation() {
+        let path = temp_config("json-backup-export", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let request = |body: String| {
+            Request::builder()
+                .method("POST")
+                .uri("/v1/admin/config/export-json")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap()
+        };
+
+        let (unconfirmed_status, unconfirmed_body) = send(
+            app.clone(),
+            "POST",
+            "/v1/admin/config/export-json",
+            Some(r#"{"confirm":false}"#.into()),
+        )
+        .await;
+        assert_eq!(unconfirmed_status, 400, "{unconfirmed_body}");
+        assert!(!unconfirmed_body.contains(FAKE_KEY));
+
+        let response = app.oneshot(request(r#"{"confirm":true}"#.into())).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[axum::http::header::CACHE_CONTROL], "no-store, private");
+        assert_eq!(response.headers()[axum::http::header::PRAGMA], "no-cache");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(text.contains(FAKE_KEY), "explicit backup must preserve a usable key");
+        assert!(!text.contains("admin_password"));
+        assert!(!text.contains("auth_tokens"));
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(json["schema_version"], RUNTIME_BACKUP_SCHEMA_VERSION);
+        assert_eq!(json["providers"]["vercel"]["api_key"], FAKE_KEY);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn json_backup_import_validates_before_replacing_runtime_snapshot() {
+        let path = temp_config("json-backup-import", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let invalid = serde_json::json!({
+            "confirm": true,
+            "backup": {
+                "schema_version": 1,
+                "providers": {"vercel": {"kind":"vercel", "base":"https://example.invalid", "models":[], "api_key":"replacement-secret", "enabled":true}},
+                "routes": [{"left":"jev", "right":"missing", "match":"exact", "priority":10, "sticky":"session", "on_error":"next"}]
+            }
+        });
+        let (invalid_status, invalid_body) = send(app.clone(), "POST", "/v1/admin/config/import-json", Some(invalid.to_string())).await;
+        assert_eq!(invalid_status, 400, "{invalid_body}");
+        assert!(!invalid_body.contains("replacement-secret"));
+        let (before_status, before) = send(app.clone(), "GET", "/v1/admin/providers", None).await;
+        assert_eq!(before_status, 200);
+        assert!(before.contains("laya"), "rejected import must leave active providers unchanged");
+
+        let valid = serde_json::json!({
+            "confirm": true,
+            "backup": {
+                "schema_version": 1,
+                "providers": {"vercel": {"kind":"vercel", "base":"https://example.invalid/v4/eval", "models":[], "api_key":"replacement-secret", "enabled":true}},
+                "routes": [{"left":"jev", "right":"vercel", "match":"exact", "priority":10, "sticky":"session", "on_error":"next"}]
+            }
+        });
+        let (status, body) = send(app.clone(), "POST", "/v1/admin/config/import-json", Some(valid.to_string())).await;
+        assert_eq!(status, 200, "{body}");
+        assert!(body.contains("no-store") == false, "the JSON response itself should not echo backup content");
+        let (provider_status, provider_body) = send(app.clone(), "GET", "/v1/admin/providers", None).await;
+        assert_eq!(provider_status, 200);
+        assert!(!provider_body.contains("replacement-secret"));
+        assert!(!provider_body.contains("sk-test1234abcd"));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

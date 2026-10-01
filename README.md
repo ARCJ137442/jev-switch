@@ -20,7 +20,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **模型目录发现**：Providers 可让 daemon 通过上游 `/v1/models` 获取账户模型并回填列表，同时显示 HTTP 状态和延迟；浏览器不直连上游，也不会把 key 写入配置或响应。
 - **首页运行遥测**：Dashboard 展示当前 daemon 会话的入口/出口速率、累计字节、活跃请求、成功/失败/failover、网关平均延迟和 daemon 进程 CPU/内存；采样数据只在内存中保留，无法精确获得的 Tauri WebView/上游指标明确显示不可用。
 - **Headless CLI Phase 1**：`jev-switch-cli` 通过 daemon HTTP API 提供 `status`、`models`、`invoke`、`routes`、`events`，支持 JSON/表格输出，适合 Termux、SSH 与脚本；TUI 和完整 Android 原生交互仍后置。详见 [CLI 文档](docs/CLI.md)。
-- **Android APP（实验性 APK）**：v0.5.0 Release 提供 arm64 实验性安装包与构建清单。该 APK 使用 Android debug keystore，侧载时系统会提示；维护者已报告初步安装和官方 Jev 演练场/路由调用通过。首次打开直接进入完整 UI，“默认关闭”仅表示不自动启动网关服务；首页可以启动/停止本机网关。后台 service、通知、Quick Settings tile、局域网、旋转/键盘稳定性仍按实验性边界验收。详见 [Android 实验性计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
+- **Android APP**：作为正式下载渠道维护，优先级次于 Windows 桌面。v0.5.0 Release 中的 debug-signed APK 是历史构建；新版使用应用专属稳定 keystore，与旧包签名不同，首次迁移需卸载旧版一次。首次打开直接进入完整 UI，“默认关闭”仅表示不自动启动网关服务；首页可以启动/停止本机网关。后台 service、通知、Quick Settings tile、局域网、旋转/键盘稳定性仍按各功能的实际设备证据验收。详见 [Android 构建与验收计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - **当前迭代入口**：路由画布/HUD、演练场批量矩阵、Provider/Entry 搜索、统计/设置、运行控制和探测偏好按[用户反馈迭代计划](docs/design/USER-FEEDBACK-ITERATION-PLAN.md)分阶段推进。
 - **图标与运行效率**：主导航、Dashboard 状态速览、调用活动和 Routing 高频工具已有 Lucide 语义图标；Dashboard 连通性探测限制并发并合并状态提交，health 状态共享，隐藏页暂停遥测。具体测量和范围见[图标/性能验证记录](docs/verification/ui-icon-performance-2026-09-30.md)。
 - **五页控制台**：Dashboard、Providers、Entries、Routing DAG、Playground；当前提供简体中文和英文，语言注册表可扩展。
@@ -130,10 +130,10 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**正式发行版本截至 2026-10-01：**GitHub 最新正式 Release 为 [v0.5.0](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.5.0)。v0.5.0 的 Rust、UI、Tauri 壳、LAN/网关控制和 Android 构建门禁已自动验证；维护者已人工确认的便携/Standalone 桌面核心路径、官方 TypeSafe 调用及 Android 初步安装/调用分别按记录标注。原生桌面 WebView、托盘、Android service/tile/通知和跨硬件性能仍需人工验收。
+**正式发行版本截至 2026-10-01：**源码候选版本为 `0.6.0`，GitHub Release 将由 `v0.6.0` tag 的 CI 生成。v0.6.0 的 Rust、UI、Tauri 壳、JSON 备份、真实路由 activity、Android keepalive 构建门禁和官网图标化已自动验证；桌面核心路径、官方 TypeSafe 调用及 Android 初步安装/调用的历史人工证据分别按记录标注。原生桌面 WebView、托盘、稳定签名 APK、Android service/tile/通知和跨硬件性能仍需人工验收。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 
 同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID 与 SQLite route trace 对齐。该实例的 Vercel 公开入口也实测 HTTP 200；远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对，Docker cloud 持久化和 CI 测试也有通过记录。
 
-验收边界：维护者已人工确认 v0.4.0 便携/Standalone 桌面核心路径、官方 TypeSafe 调用及 v0.5.0 Android 初步安装/官方调用；MSI/NSIS 安装器、Android 原生 service/tile/通知、OpenRouter live call、真实用户配置恢复和全链路性能仍按各自核验记录处理。正式 v0.5.0 Release 包含 Windows MSI、NSIS、便携 ZIP、Standalone、Linux/Windows CLI、实验性 Android APK 和配套 Docker 镜像。详细边界见[下一轮用户反馈计划](docs/design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md)和[v0.5.0 发布核验记录](docs/verification/v0.5.0-release-candidate-2026-10-01.md)。
+验收边界：维护者已人工确认 v0.4.0 便携/Standalone 桌面核心路径、官方 TypeSafe 调用及 v0.5.0 Android 初步安装/官方调用；MSI/NSIS 安装器、Android 原生 service/tile/通知、OpenRouter live call、真实用户配置恢复和全链路性能仍按各自核验记录处理。v0.5.0 Release 的 Android APK 使用临时 debug 签名，仅作历史证据；后续 Android Release 将以固定签名、签名指纹和 APK 哈希清单正式分发。详细边界见[下一轮用户反馈计划](docs/design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md)和[v0.5.0 发布核验记录](docs/verification/v0.5.0-release-candidate-2026-10-01.md)。

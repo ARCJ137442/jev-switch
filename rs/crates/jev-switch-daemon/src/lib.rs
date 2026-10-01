@@ -248,6 +248,7 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         .set_route_activity_observer(Some(Arc::new(move |activity| {
             let phase = match activity.phase {
                 jev_core::adapter::RouteActivityPhase::Started => "started".to_string(),
+                jev_core::adapter::RouteActivityPhase::Retrying { .. } => "retrying".to_string(),
                 jev_core::adapter::RouteActivityPhase::Finished { success } => if success {
                     "finished_success"
                 } else {
@@ -259,10 +260,16 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
                 "route_activity",
                 serde_json::json!({
                     "phase": phase,
+                    "activity_id": activity.activity_id,
                     "requested_model": activity.requested_model,
                     "provider_id": activity.provider_id,
                     "upstream_model": activity.upstream_model,
                     "hops": activity.hops,
+                    "route_edges": activity.route_edges,
+                    "attempt": match activity.phase {
+                        jev_core::adapter::RouteActivityPhase::Retrying { attempt } => Some(attempt),
+                        _ => None::<u32>,
+                    },
                 })
                 .to_string(),
             );
@@ -472,6 +479,14 @@ pub fn build_app(state: AppState) -> Router {
         .route(
             "/v1/admin/config/export-toml",
             post(admin::export_runtime_config),
+        )
+        .route(
+            "/v1/admin/config/export-json",
+            post(admin::export_runtime_config_json),
+        )
+        .route(
+            "/v1/admin/config/import-json",
+            post(admin::import_runtime_config_json),
         )
         .route(
             "/v1/admin/tokens",

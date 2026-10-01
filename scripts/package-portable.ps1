@@ -49,20 +49,21 @@ if (Test-Path -LiteralPath $destinationPath) {
 
 New-Item -ItemType Directory -Path $destinationPath | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $destinationPath 'resources/ui') -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $destinationPath 'ui') -Force | Out-Null
 
 Copy-Item -LiteralPath $shellPath -Destination (Join-Path $destinationPath 'jev-switch.exe')
 Copy-Item -LiteralPath $daemonPath -Destination (Join-Path $destinationPath 'jev-switch-daemon.exe')
 Copy-Item -LiteralPath $daemonPath -Destination (Join-Path $destinationPath 'resources/jev-switch-daemon.exe')
-Copy-Item -LiteralPath $uiDistPath -Destination (Join-Path $destinationPath 'ui') -Recurse
 Copy-Item -LiteralPath $uiDistPath -Destination (Join-Path $destinationPath 'resources/ui') -Recurse
+if (Test-Path -LiteralPath (Join-Path $destinationPath 'ui/dist')) {
+    throw 'Portable packaging must include exactly one UI tree under resources/ui/dist.'
+}
 
 $fileHashes = [ordered]@{}
 foreach ($relative in @(
     'jev-switch.exe',
     'jev-switch-daemon.exe',
     'resources/jev-switch-daemon.exe',
-    'ui/dist/index.html'
+    'resources/ui/dist/index.html'
 )) {
     $outputPath = Join-Path $destinationPath $relative
     $sourcePath = switch ($relative) {
@@ -80,10 +81,9 @@ foreach ($relative in @(
 $assetHashes = [ordered]@{}
 foreach ($relativeAssetPath in $assetRelativePaths) {
     $sourceAsset = Join-Path $uiDistPath $relativeAssetPath
-    $portableAsset = Join-Path (Join-Path $destinationPath 'ui/dist') $relativeAssetPath
     $resourceAsset = Join-Path (Join-Path $destinationPath 'resources/ui/dist') $relativeAssetPath
     $sourceHash = Get-Sha256 $sourceAsset
-    if ((Get-Sha256 $portableAsset) -ne $sourceHash -or (Get-Sha256 $resourceAsset) -ne $sourceHash) {
+    if ((Get-Sha256 $resourceAsset) -ne $sourceHash) {
         throw "Portable UI asset hash mismatch after copy: $relativeAssetPath"
     }
     $assetHashes[$relativeAssetPath.Replace('\', '/')] = $sourceHash
@@ -92,10 +92,9 @@ foreach ($relativeAssetPath in $assetRelativePaths) {
 $uiFileHashes = [ordered]@{}
 foreach ($sourceFile in (Get-ChildItem -LiteralPath $uiDistPath -Recurse -File | Sort-Object FullName)) {
     $relativePath = $sourceFile.FullName.Substring($uiDistPath.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar).Replace('\', '/')
-    $portableFile = Join-Path (Join-Path $destinationPath 'ui/dist') $relativePath
     $resourceFile = Join-Path (Join-Path $destinationPath 'resources/ui/dist') $relativePath
     $sourceHash = Get-Sha256 $sourceFile.FullName
-    if ((Get-Sha256 $portableFile) -ne $sourceHash -or (Get-Sha256 $resourceFile) -ne $sourceHash) {
+    if ((Get-Sha256 $resourceFile) -ne $sourceHash) {
         throw "Portable UI file hash mismatch: $relativePath"
     }
     $uiFileHashes[$relativePath] = $sourceHash
@@ -121,7 +120,7 @@ if ($MsiPath) {
     $portableExpectedHashes = @{
         shell = Get-Sha256 (Join-Path $destinationPath 'jev-switch.exe')
         daemon = Get-Sha256 (Join-Path $destinationPath 'jev-switch-daemon.exe')
-        ui_index = Get-Sha256 (Join-Path $destinationPath 'ui/dist/index.html')
+        ui_index = Get-Sha256 (Join-Path $destinationPath 'resources/ui/dist/index.html')
         ui_js = $null
         ui_css = $null
     }

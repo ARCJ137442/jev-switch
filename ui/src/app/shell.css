@@ -3,6 +3,10 @@
   overflow: hidden;
 }
 
+.app-shell__header {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 .app-shell__header-inner {
   display: grid;
   width: 100%;

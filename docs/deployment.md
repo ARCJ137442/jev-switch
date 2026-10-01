@@ -224,7 +224,7 @@ dist 路径由 `JEV_UI_DIST` 指定（镜像内 `/app/ui/dist`；本地默认 `u
 
 ### 9.3.1 单文件 Standalone EXE
 
-Standalone 是单独编译的 Tauri 应用：daemon 与 `ui/dist` 的每个文件在编译时嵌入 EXE，不依赖同目录资源，也不需要用户解压。启动时在 `%LOCALAPPDATA%\Jev-Switch\runtime\<version>\<sha256>` 校验已有缓存；缺失或字节不符时先释放到 staging，再切换到目标内容指纹目录。应用通过单实例插件聚焦已运行窗口，daemon 仍由当前壳启动并在壳完全退出时回收。
+Standalone 是单独编译的 Tauri 应用：daemon 与 `ui/dist` 的每个文件在编译时嵌入 EXE，不依赖同目录资源，也不需要用户解压。启动时在 `%LOCALAPPDATA%\Jev-Switch\runtime\<version>\<sha256>` 校验已有缓存；缺失或字节不符时先释放到 staging，再切换到目标内容指纹目录。WebView UI URL 带包版本与内嵌 index 指纹，阻止 WebView2 跨版本复用旧索引页；单实例锁按 SemVer 兼容范围分组，0.5.0 不会被 0.4.x 托盘进程接管。daemon 仍由当前壳启动并在壳完全退出时回收。
 
 配置、SQLite 与调用历史继续保存在 `%APPDATA%\jev-switch`，与可执行文件位置和资源缓存分开。独立版不从网络下载或执行 daemon；校验和释放失败时保留等待页错误，不回退要求用户手动启动 daemon。资源缓存不包含配置、密钥或数据库；清理运行缓存不会删除 AppData 用户数据。
 

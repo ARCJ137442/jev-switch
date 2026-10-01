@@ -1,17 +1,17 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前发布版为 `v0.5.0`；Release 已附 Windows、CLI、Docker 与 Android arm64 实验性资产。v0.5.0 的跨平台通用代码和自动门禁已验证，桌面原生 WebView、Android service/tile/通知和全链路性能仍按[发布候选核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)等待人工确认。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前源码候选版为 `v0.6.0`；Release 将附 Windows、CLI、Docker 与 Android arm64 资产。Android 稳定签名和 service/tile/通知仍按[新候选核验记录](verification/v0.6.0-release-candidate-2026-10-01.md)保留设备验收边界。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-30。
 
-> **2026-10-01 adapter 状态：**当前源码和 `v0.5.0` Release 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
+> **2026-10-01 adapter 状态：**当前源码候选 `v0.6.0` 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **历史发布快照（截至 2026-09-27）**：当时最新正式版为 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，包含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。对应 Release gate 的 Rust、UI、Tauri 与版本检查通过；验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。用户提供的 Tauri 截图整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；这些材料不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。当前版本与能力以本文后续的 2026-09-30 产品基线、[发布手册](RELEASE.md)及对应核验记录为准。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段（2026-10-01）**：正式版为 v0.5.0；v0.5.0 的便携/Standalone、通用 UI/daemon、LAN opt-in、网关启停、统计分页/矩阵、Android arm64 APK 构建和 CI 已完成。MSI/NSIS 原生交互、Android 安装/真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、[v0.5.0 发布候选核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)。
+> **当前产品基线与维护阶段（2026-10-01）**：源码候选版为 v0.6.0；v0.6.0 的便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、统计分页/矩阵、JSON 设置备份、真实路由 activity、Android arm64 构建和 CI 已完成。MSI/NSIS 原生交互、稳定签名 Android 安装/真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、[v0.6.0 发布候选核验记录](verification/v0.6.0-release-candidate-2026-10-01.md)。
 
 ## 核心定位（一句话）
 
@@ -39,6 +39,7 @@
 | [design/USER-FEEDBACK-ITERATION-PLAN.md](design/USER-FEEDBACK-ITERATION-PLAN.md) | 本轮用户反馈的实施顺序、UI 原则、数据/安全边界和验收门槛 | 当前迭代入口；各 Phase 不代表 Release 承诺 |
 | [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.5.0 已实现通用部分；品牌/霓虹/Android 原生项仍待推进 |
 | [verification/v0.5.0-release-candidate-2026-10-01.md](verification/v0.5.0-release-candidate-2026-10-01.md) | v0.5.0 功能变更、自动门禁、人工基线与验收顺序 | Release/Android 构建完成；桌面/Android 原生人工项待确认 |
+| [verification/android-build-stability-2026-10-01.md](verification/android-build-stability-2026-10-01.md) | Jev 图标源、Android Release 签名、版本码、CI 集成与旧 debug APK 升级边界 | 本地图标与 properties 生成通过；稳定密钥 Secrets 和 Release APK 待配置/验证 |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
 | [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
 | [design/PLAYGROUND-COMPARISON-PLAN.md](design/PLAYGROUND-COMPARISON-PLAN.md) | 两类入口横比、目标身份、执行边界、布局与验收 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
@@ -80,7 +81,7 @@
 | [verification/v0.4.0-release-candidate-2026-09-30.md](verification/v0.4.0-release-candidate-2026-09-30.md) | v0.4.0 自动化、Windows 原生隔离核验与维护者人工桌面验收 | 安装器/Android/全链路性能仍未覆盖 |
 | [verification/android-apk-build-2026-09-30.md](verification/android-apk-build-2026-09-30.md) | Android arm64 unsigned APK 本机构建到 Gradle/AAPT 产物的核验 | 构建成功；未安装、未启动模拟器、未做 service/tile/后台验收 |
 | [verification/v0.4.1-release-candidate-2026-09-30.md](verification/v0.4.1-release-candidate-2026-09-30.md) | v0.4.1 自动门禁、Android 构建证据与人工验收引导 | 自动验证完成；新桌面包/Android 安装和真机生命周期待人工验收 |
-| [design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md](design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | Android APP 实验性完整网关计划：daemon library、FlClash 风格 service/action/通知/tile、普通移动端与生命周期验收边界 | arm64 debug-signed APK 已附 v0.5.0 Release；原生 service/tile 与安装/真机验收仍待完成 |
+| [design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md](design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | Android APP 完整网关构建与验收计划：daemon library、FlClash 风格 service/action/通知/tile、普通移动端与生命周期边界 | v0.5.0 debug-signed APK 为历史资产；新正式签名流水线已实现，稳定 keystore 与 Release CI 待配置/验证 |
 
 ## 阅读顺序（开发 Agent）
 

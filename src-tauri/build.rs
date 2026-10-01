@@ -6,10 +6,38 @@ use std::path::{Path, PathBuf};
 fn main() {
     tauri_build::build();
     println!("cargo:rerun-if-env-changed=JEV_STANDALONE_ASSET_DIR");
+    emit_ui_cache_key();
 
     if env::var_os("CARGO_FEATURE_STANDALONE").is_some() {
         generate_standalone_assets();
     }
+}
+
+fn emit_ui_cache_key() {
+    let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("Cargo sets CARGO_MANIFEST_DIR"));
+    let ui_index = if env::var_os("CARGO_FEATURE_STANDALONE").is_some() {
+        env::var_os("JEV_STANDALONE_ASSET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_default()
+            .join("ui/dist/index.html")
+    } else {
+        manifest_dir.join("../ui/dist/index.html")
+    };
+    println!("cargo:rerun-if-changed={}", ui_index.display());
+
+    let content_hash = fs::read(&ui_index)
+        .map(|bytes| {
+            let hash = bytes.iter().fold(0xcbf29ce484222325u64, |hash, byte| {
+                (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+            });
+            format!("{hash:016x}")
+        })
+        .unwrap_or_else(|_| "missing".to_string());
+    println!(
+        "cargo:rustc-env=JEV_UI_CACHE_KEY={}-{}",
+        env!("CARGO_PKG_VERSION"),
+        content_hash
+    );
 }
 
 fn generate_standalone_assets() {

@@ -32,6 +32,7 @@ __pycache__/
 src-tauri/target/
 src-tauri/binaries/*.exe
 src-tauri/gen/
+.codegraph/
 
 # 本机 Tauri 验收截图可能包含脱敏密钥片段或演示数据，不进入公开仓库
 docs/verification/tauri-user-evidence-2026-09-26/

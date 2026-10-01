@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle, Power } from 'lucide-react';
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getGatewayServiceStatus, setGatewayServiceRunning } from '../../api/gatewayControl';
+import { getAndroidNotificationPermissionState, isAndroidTauri, requestAndroidNotificationPermission } from '../../api/androidGateway';
 import { useI18n, type MessageKey } from '../../i18n';
 
 interface Props {
@@ -15,6 +17,7 @@ export function GatewayServiceControl({ onStateChange }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const onStateChangeRef = useRef(onStateChange);
+  const quickToggleRef = useRef<() => Promise<void>>(async () => undefined);
   useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
 
   useEffect(() => {
@@ -36,14 +39,22 @@ export function GatewayServiceControl({ onStateChange }: Props) {
     const timer = window.setInterval(() => void refresh(), 2000);
     return () => { live = false; window.clearInterval(timer); };
   }, [tauri]);
-
-  if (!tauri) return null;
-  const toggle = async () => {
-    if (busy || running === null) return;
-    const next = !running;
+  const toggle = async (fromQuickSettings = false) => {
+    if (busy || (!fromQuickSettings && running === null)) return;
     setBusy(true);
     setError(null);
     try {
+      let currentRunning = running;
+      if (fromQuickSettings) {
+        const status = await getGatewayServiceStatus();
+        currentRunning = status?.running ?? null;
+      }
+      if (currentRunning === null) throw new Error('Gateway state is unavailable.');
+      if (isAndroidTauri() && !currentRunning) {
+        const permission = await getAndroidNotificationPermissionState();
+        if (permission !== 'granted') await requestAndroidNotificationPermission();
+      }
+      const next = !currentRunning;
       const status = await setGatewayServiceRunning(next);
       setRunning(status.running);
       onStateChangeRef.current(status.running);
@@ -53,6 +64,28 @@ export function GatewayServiceControl({ onStateChange }: Props) {
       setBusy(false);
     }
   };
+  quickToggleRef.current = async () => toggle(true);
+  useEffect(() => {
+    if (!isAndroidTauri()) return;
+    let active = true;
+    let unlisten: (() => void) | null = null;
+    const consume = async () => {
+      try {
+        const result = await invoke<{ pending: boolean }>('plugin:jev-android-keepalive|takePendingGatewayToggle');
+        if (active && result.pending) await quickToggleRef.current();
+      } catch {
+        // The notification and Dashboard controls remain available if tile startup fails.
+      }
+    };
+    void consume();
+    void listen('jev-switch-gateway-toggle', () => void consume()).then((stop) => {
+      if (active) unlisten = stop;
+      else stop();
+    });
+    return () => { active = false; unlisten?.(); };
+  }, []);
+
+  if (!tauri) return null;
   const label = running === null ? t('gateway.unavailable' as MessageKey) : t(running ? 'gateway.running' as MessageKey : 'gateway.stopped' as MessageKey);
 
   return <div className="gateway-service-control">

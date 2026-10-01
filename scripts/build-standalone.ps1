@@ -26,8 +26,12 @@ function Get-ManifestValue($Map, [string]$Name) {
 }
 
 $daemonPath = Join-Path $portableRoot 'jev-switch-daemon.exe'
-$uiRoot = Join-Path $portableRoot 'ui/dist'
+$uiRoot = Join-Path $portableRoot 'resources/ui/dist'
+$duplicateUiRoot = Join-Path $portableRoot 'ui/dist'
 $uiIndexPath = Join-Path $uiRoot 'index.html'
+if (Test-Path -LiteralPath $duplicateUiRoot) {
+    throw 'Portable input contains a duplicate ui/dist tree; rebuild it with the single resources/ui/dist layout.'
+}
 foreach ($required in @($daemonPath, $uiIndexPath)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Standalone input is missing a required runtime file: $required"

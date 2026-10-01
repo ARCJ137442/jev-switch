@@ -1,13 +1,15 @@
+import { lazy, Suspense } from 'react';
 import { Shell, useHashRoute, type Route } from './app/Shell';
 import { I18nProvider } from './i18n';
-import { DashboardPage } from './pages/DashboardPage';
-import { ProvidersPage } from './pages/ProvidersPage';
-import { EndpointsPage } from './pages/EndpointsPage';
-import { RoutingPage } from './pages/RoutingPage';
-import { PlaygroundPage } from './pages/PlaygroundPage';
-import { StatisticsPage } from './pages/StatisticsPage';
-import { SettingsPage } from './pages/SettingsPage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })));
+const ProvidersPage = lazy(() => import('./pages/ProvidersPage').then(module => ({ default: module.ProvidersPage })));
+const EndpointsPage = lazy(() => import('./pages/EndpointsPage').then(module => ({ default: module.EndpointsPage })));
+const RoutingPage = lazy(() => import('./pages/RoutingPage').then(module => ({ default: module.RoutingPage })));
+const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage').then(module => ({ default: module.PlaygroundPage })));
+const StatisticsPage = lazy(() => import('./pages/StatisticsPage').then(module => ({ default: module.StatisticsPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
 
 /**
  * 路由分发：Dashboard / Providers / Entries / Routing DAG / Playground。
@@ -30,7 +32,8 @@ function AppContent({ route }: { route: Route }) {
     ? 'dashboard'
     : route;
   return (
-    <Shell route={visibleRoute}>
+      <Shell route={visibleRoute}>
+        <Suspense fallback={<div className="grid h-full place-items-center text-sm text-[var(--text-muted)]" role="status">{visibleRoute === 'settings' ? 'Loading settings…' : 'Loading…'}</div>}>
         {visibleRoute === 'home' || visibleRoute === 'dashboard' ? (
           <DashboardPage />
         ) : visibleRoute === 'providers' ? (
@@ -46,6 +49,7 @@ function AppContent({ route }: { route: Route }) {
         ) : (
           <PlaygroundPage />
         )}
+        </Suspense>
     </Shell>
   );
 }

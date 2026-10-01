@@ -187,7 +187,7 @@ function ShellFrame({ route, children }: ShellProps) {
           旧版第二行的 masked-key / endpoint / file=truth 等技术债文案已删
           （审查报告 §1 冗余说明文字）。 */}
       <header
-        className="shrink-0 border-b"
+        className="app-shell__header shrink-0 border-b"
         style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
       >
         <div className="app-shell__header-inner">
@@ -281,7 +281,7 @@ function ShellFrame({ route, children }: ShellProps) {
 
       {showStatusBar && <footer className="app-shell__footer shrink-0 border-t" style={{ borderColor: 'var(--border)' }}>
         <div className="app-shell__footer-inner" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontFamily: 'var(--font-mono)' }}>
-          <span className="app-shell__footer-endpoint" title="Daemon endpoint · POST /v1/systemone">{endpointLabel}</span>
+          <span className="app-shell__footer-endpoint" title="Backend endpoint · POST /v1/systemone">{endpointLabel}</span>
           <span className="app-shell__footer-page"><currentNav.icon size={13} aria-hidden="true" />{t(currentNav.labelKey)}</span>
           <span className="app-shell__footer-contributions">
             {pageStatusItems.map((item) => {

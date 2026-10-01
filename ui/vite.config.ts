@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __JEV_UI_BUILD_REVISION__: JSON.stringify(process.env.JEV_BUILD_REVISION ?? 'dev'),
+  },
   server: {
     port: 5173,
     // daemon 的 CORS 白名单冻结为 127.0.0.1:5173 / localhost:5173

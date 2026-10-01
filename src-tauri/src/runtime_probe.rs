@@ -106,6 +106,11 @@ mod tests {
             validate_response(&response(health), env!("CARGO_PKG_VERSION")),
             RuntimeProbe::Occupied(_)
         ));
+        let health = serde_json::json!({"status":"ok", "product":"jev-switch", "version":"0.4.1", "api_revision":1});
+        assert!(matches!(
+            validate_response(&response(health), "0.5.0"),
+            RuntimeProbe::Occupied(_)
+        ));
         assert!(matches!(
             validate_response(
                 b"HTTP/1.1 200 OK\r\n\r\n<html>Old demo</html>",

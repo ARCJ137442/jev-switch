@@ -5,9 +5,11 @@ import { initLang } from './i18n';
 import './styles/tokens.css';
 import './index.css';
 import { applyThemePreference, followSystemTheme, readThemePreference } from './theme';
+import { applyUiScale, readUiScale } from './settings/preferences';
 
 /* Resolve the theme before the first render and follow OS changes in system mode. */
 applyThemePreference(readThemePreference(), false);
+applyUiScale(readUiScale());
 followSystemTheme();
 /* 语言初始值（块 3）：jev_lang → 默认 en（CDP 断言依赖英文字面）+ <html lang> 同步 */
 initLang();

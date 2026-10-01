@@ -6,21 +6,22 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-01，本次候选 Release 为 [`v0.5.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.5.0)，包含 Windows 桌面包、Linux/Windows CLI、Docker 镜像和实验性 Android APK。v0.5.0 加入演练场选择/重复、稳定 DAG、统计分页/矩阵、局域网访问、网关启停、状态栏/命令历史与官网自动同步；桌面原生 WebView、Android service/tile/通知和全链路性能仍按[v0.5.0 核验记录](verification/v0.5.0-release-candidate-2026-10-01.md)标注。当前四个应用版本字段与锁文件均为 `0.5.0`。
+截至 2026-10-01，源码候选版本为 `0.6.0`，待 `v0.6.0` tag CI 完成后成为当前 Release，包含 Windows 桌面包、Linux/Windows CLI、Docker 镜像和 Android APK。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版通过 Android workflow 使用专属稳定签名密钥，并记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按[新候选核验记录](verification/v0.6.0-release-candidate-2026-10-01.md)区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
 - `ui/package.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
+- `src-tauri/tauri.android.conf.json` 的 `version`
 - `rs/Cargo.toml` 的 `[workspace.package].version`
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
-每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。v0.5.0 在前一版本基础上整理高频 UI 图标、provider probe 并发、共享 health 状态、遥测后台调度、Routing/Playground/Settings/Statistics 体验、Android daemon library 与实验性 APK 构建路径，并加入 LAN opt-in、网关启停、统计分页/矩阵与 CLI 发布；便携/Standalone 桌面核心路径和官方 TypeSafe 调用仍有维护者人工证据，Android APK、原生 service/tile/通知、TUI、OpenRouter live 与全链路性能仍按对应核验边界确认。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。v0.5.0 在前一版本基础上整理高频 UI 图标、provider probe 并发、共享 health 状态、遥测后台调度、Routing/Playground/Settings/Statistics 体验、Android daemon library 与历史 debug APK，并加入 LAN opt-in、网关启停、统计分页/矩阵与 CLI 发布；后续正式 Android APK 使用固定签名密钥，由同一主 Release 流水线构建和校验证书。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
 
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.5.0；统一修改上述四处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.6.0；统一修改上述五处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui
@@ -80,14 +81,14 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 
 ## Windows 最终连续验收：先便携运行，必要时再升级安装版
 
-先完成源码门禁、容器验证、MSI/NSIS 构建与便携目录组装；便携目录和 MSI 必须来自同一次 Tauri build，并核对壳、daemon、HTML/JS/CSS 的 SHA-256。Tauri daemon 是 `externalBin`，所以便携运行时是一个带 `jev-switch.exe` 的文件夹（含 daemon 与 `ui/dist`），不是可以脱离资源目录的单文件 exe。日常 UI、路由、真实调用、历史与恢复验证优先运行便携壳，避免每轮改动都触发安装/UAC。
+先完成源码门禁、容器验证、MSI/NSIS 构建与便携目录组装；便携目录和 MSI 必须来自同一次 Tauri build，并核对壳、daemon、HTML/JS/CSS 的 SHA-256。Tauri daemon 是 `externalBin`，所以便携运行时是一个带 `jev-switch.exe` 的文件夹（含 daemon 与唯一的 `resources/ui/dist`），不是可以脱离资源目录的单文件 exe。日常 UI、路由、真实调用、历史与恢复验证优先运行便携壳，避免每轮改动都触发安装/UAC。
 
 只有需要专门验证 MSI 安装器、安装路径升级行为或安装器迁移时，才在便携验收完成后做一次 MSI 升级；将该步骤与最终运行验收安排在同一轮。候选 MSI、便携目录、正式配置保护措施、预期请求与截图视口都应提前备齐。
 
 ### 触发安装前
 
 - 确认当前提交的 Rust workspace 默认/`ts-rs` 测试、Tauri shell 测试、UI 测试、lint 与生产构建均通过。
-- 运行 `scripts/build-windows-release.ps1` 一次生成 MSI、NSIS、文件夹 Portable 与单文件 Standalone；CLI 由 Release workflow 为 Linux/Windows 单独构建，Termux 使用设备本机 `cargo install`。便携目录内含 `jev-switch.exe`、daemon、`ui/dist` 和 SHA-256 manifest，仍需解压；Standalone 则把 daemon/UI 直接嵌入单个 Tauri EXE。不要将 AppData 密钥或配置复制进运行资源。CLI 的 WireMock、local daemon smoke 和 workspace 门禁已通过；原生五页交互、OpenRouter live 与多硬件关闭延迟仍按人类验收矩阵记录。
+- 运行 `scripts/build-windows-release.ps1` 一次生成 MSI、NSIS、文件夹 Portable 与单文件 Standalone；CLI 由 Release workflow 为 Linux/Windows 单独构建，Termux 使用设备本机 `cargo install`。便携目录内含 `jev-switch.exe`、daemon、唯一的 `resources/ui/dist` 和 SHA-256 manifest，仍需解压；Standalone 则把 daemon/UI 直接嵌入单个 Tauri EXE。不要将 AppData 密钥或配置复制进运行资源。CLI 的 WireMock、local daemon smoke 和 workspace 门禁已通过；原生五页交互、OpenRouter live 与多硬件关闭延迟仍按人类验收矩阵记录。
 - 从 MSI 只读提取 Tauri shell、daemon 与 HTML/JS/CSS，逐项与当前构建输入哈希核对。之后常规 UI、路由、真实调用、历史与恢复验收直接双击便携目录中的 exe；仅安装器升级专属验证才需要 MSI/UAC。
 - 核对现有 Jev、daemon、Laya 与监听端口归属，避免覆盖或停止其他项目服务；确认现有 Vercel 凭据只通过掩码状态检查，不读取或记录明文。
 - 准备演练场相同输入、公开入口与直连 provider/model 两类目标；准备 Dashboard request ID、SQLite event/trace 字段核对项。

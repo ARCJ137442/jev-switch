@@ -102,7 +102,7 @@ pub enum OnError {
 ///
 /// A7 ts-rs：admin `GET/PUT /v1/admin/routes` 与 UI 共用本类型一份真值
 /// （core 加 feature `ts-rs` 导出 —— 不在 daemon 镜像第二份 `RouteView`）。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(::ts_rs::TS),
@@ -195,6 +195,8 @@ pub struct Candidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlanItem {
     pub candidate: Candidate,
+    /// Exact configured edge chain that produced this candidate, in traversal order.
+    pub route_edges: Vec<RouteEdge>,
     pub on_error: OnError,
     pub sticky: Sticky,
 }
@@ -291,6 +293,7 @@ impl Router {
                     None,
                     &edges,
                     &mut path,
+                    Vec::new(),
                     &mut out,
                     &mut dangling,
                 );
@@ -363,6 +366,7 @@ impl Router {
         overlay: Option<String>,
         edges: &[RouteEdge],
         path: &mut Vec<NodeId>,
+        route_edges_so_far: Vec<RouteEdge>,
         out: &mut Vec<PlanItem>,
         dangling: &mut Vec<NodeId>,
     ) {
@@ -374,6 +378,8 @@ impl Router {
 
         let mut hops = hops_so_far;
         hops.push(right.clone());
+        let mut route_edges = route_edges_so_far;
+        route_edges.push(edge.clone());
         // upstream_model 沿路径叠加：靠后的 Some 覆盖靠前的
         let overlay = edge.upstream_model.clone().or(overlay);
 
@@ -390,6 +396,7 @@ impl Router {
                     priority: root_priority,
                     hops,
                 },
+                route_edges,
                 on_error: edge.on_error,
                 sticky: edge.sticky,
             });
@@ -418,6 +425,7 @@ impl Router {
                 overlay.clone(),
                 edges,
                 path,
+                route_edges.clone(),
                 out,
                 dangling,
             );
