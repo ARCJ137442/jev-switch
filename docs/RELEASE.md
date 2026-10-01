@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-01，源码候选版本为 `0.6.1`，待 `v0.6.1` tag CI 完成后成为当前 Release，至少包含 Windows Standalone、Portable、MSI、NSIS、Linux/Windows CLI 和 Docker 镜像；配置稳定签名 Secrets 时再附 Android APK。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版通过 Android workflow 使用专属稳定签名密钥，并记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按[新候选核验记录](verification/v0.6.1-release-candidate-2026-10-01.md)区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-01，源码候选版本为 `0.6.2`，待 `v0.6.2` tag CI 完成后成为当前 Release，至少包含 Windows Standalone、Portable、MSI、NSIS、Linux/Windows CLI 和 Docker 镜像；配置稳定签名 Secrets 时再附 Android APK。Android workflow 会自动识别 PKCS12/JKS：PKCS12 使用 keystore password 读取私钥，JKS 使用独立 key password。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按对应候选核验记录区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
@@ -21,7 +21,7 @@
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.6.1；统一修改上述五处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.6.2；统一修改上述五处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui

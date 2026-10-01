@@ -199,6 +199,7 @@ jobs:
 
       - name: Prepare stable signing keystore
         if: steps.signing.outputs.available == 'true'
+        id: keystore
         shell: pwsh
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -212,9 +213,14 @@ jobs:
             throw 'ANDROID_KEYSTORE_BASE64 is not valid Base64.'
           }
           [IO.File]::WriteAllBytes($keystorePath, $bytes)
-          & keytool -list -keystore $keystorePath -storepass $env:ANDROID_KEYSTORE_PASSWORD -alias $env:ANDROID_KEY_ALIAS | Out-Null
+          $details = & keytool -list -v -keystore $keystorePath -storepass $env:ANDROID_KEYSTORE_PASSWORD -alias $env:ANDROID_KEY_ALIAS 2>&1
           if ($LASTEXITCODE -ne 0) { throw 'The configured Android keystore or alias could not be opened.' }
+          $typeLine = $details | Where-Object { $_ -match '^Keystore type:' } | Select-Object -First 1
+          $keystoreType = if ($typeLine -match 'PKCS12') { 'PKCS12' } else { 'JKS' }
+          "type=$keystoreType" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $effectiveKeyPassword = if ($keystoreType -eq 'PKCS12') { $env:ANDROID_KEYSTORE_PASSWORD } else { $env:ANDROID_KEY_PASSWORD }
+          "ANDROID_KEY_PASSWORD_EFFECTIVE=$effectiveKeyPassword" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Sign and verify Android APK
         if: steps.signing.outputs.available == 'true'
@@ -248,7 +254,7 @@ jobs:
             --ks $env:ANDROID_KEYSTORE_PATH `
             --ks-pass ("pass:{0}" -f $env:ANDROID_KEYSTORE_PASSWORD) `
             --ks-key-alias $env:ANDROID_KEY_ALIAS `
-            --key-pass ("pass:{0}" -f $env:ANDROID_KEY_PASSWORD) `
+            --key-pass ("pass:{0}" -f $env:ANDROID_KEY_PASSWORD_EFFECTIVE) `
             --out $signedApk `
             $alignedApk
           if ($LASTEXITCODE -ne 0) { throw 'apksigner signing failed.' }
