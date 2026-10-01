@@ -30,7 +30,7 @@ Android 方向已从“可行性调研”进入“完整网关应用实现”：
 | [GitHub Pages 首页](ROADMAP-PLAN-GITHUB-PAGES.md) | v0.2.0 页面已部署；v0.5.0 网站文案、Release metadata 和主题/语言切换已同步 | 推送/部署更新及移动端正式截图 |
 | [OpenRouter adapter](ROADMAP-PLAN-OPENROUTER.md) | adapter 已随 v0.2.0 发布并通过离线/WireMock 门禁 | 未使用 live key 验证账户能力/费用 |
 | 图标/性能首轮 | v0.5.0 已实现高频 UI 图标、健康探测并发/共享状态和隐藏页遥测暂停，并通过 UI tests/build、Windows 原生隔离和桌面自动门禁；品牌图标和跨硬件基线仍未完成 | 安装器、跨硬件和全链路 daemon/SQLite/UI 性能基线仍在本轮之后 |
-| [Android APP 正式发布与验收计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用实现阶段；Android daemon library、前台 service、通知、Quick Settings tile 和可选稳定签名 workflow 已进入主线，首版默认关闭，APP/通知/tile 共用启停状态机 | APK 安装、模拟器、真机、原生 service/tile 或后台生命周期仍需人工证据；不因有签名 workflow 就宣称设备验收完成 |
+| [Android APP 正式发布与验收计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用实现阶段；Android daemon library、前台 service、通知、Quick Settings tile 和稳定签名 workflow 已进入主线，v0.6.2 默认启动内嵌后端，APP/通知/tile 共用启停状态机 | APK 安装、模拟器、真机、原生 service/tile 或后台生命周期仍需人工证据；不因有签名 workflow 就宣称设备验收完成 |
 
 ## 共用交付门槛
 
