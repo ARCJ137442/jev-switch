@@ -39,7 +39,7 @@
 | [design/USER-FEEDBACK-ITERATION-PLAN.md](design/USER-FEEDBACK-ITERATION-PLAN.md) | 本轮用户反馈的实施顺序、UI 原则、数据/安全边界和验收门槛 | 当前迭代入口；各 Phase 不代表 Release 承诺 |
 | [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.6.1 候选已实现 JSON 备份、真实辉光、HUD、Android keepalive 源码和官网图标；平台人工项仍待推进 |
 | [verification/v0.6.0-release-candidate-2026-10-01.md](verification/v0.6.0-release-candidate-2026-10-01.md) | v0.6.0 功能变更、自动门禁、Android 构建和人工基线 | 历史版本记录；当前补丁版本见 v0.6.1 核验记录 |
-| [verification/v0.6.1-release-candidate-2026-10-01.md](verification/v0.6.1-release-candidate-2026-10-01.md) | v0.6.1 发布、可选 Android 签名和 Windows Standalone 保证 | 待本次 tag CI 完成后填入运行号、资产哈希和人工边界 |
+| [verification/v0.6.1-release-candidate-2026-10-01.md](verification/v0.6.1-release-candidate-2026-10-01.md) | v0.6.1 发布、可选 Android 签名和 Windows Standalone 保证 | run 36825244441 已通过；Windows Standalone/Portable/安装器已发布；Android 因 Secrets 缺失跳过，原生设备人工项仍待验收 |
 | [verification/site-v0.6.0-2026-10-01.md](verification/site-v0.6.0-2026-10-01.md) | v0.6.0 GitHub Pages 图标、主题、语言和响应式 DOM 核验 | DOM/无溢出通过；正式控制台截图仍待维护者翻新 |
 | [verification/android-build-stability-2026-10-01.md](verification/android-build-stability-2026-10-01.md) | Jev 图标源、Android Release 签名、版本码、CI 集成与旧 debug APK 升级边界 | 本地图标与 properties 生成通过；稳定密钥 Secrets 和 Release APK 待配置/验证 |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
