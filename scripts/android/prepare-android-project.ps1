@@ -51,6 +51,13 @@ New-Item -ItemType Directory -Path $generatedSources -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $keepaliveSource 'java') -Filter '*.kt' -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $generatedSources $_.Name) -Force
 }
+
+$mainActivitySource = Join-Path $tauriRoot 'android/main/MainActivity.kt'
+$generatedActivity = Join-Path $mainSourceRoot 'java/io/github/arcj137442/jevswitch/MainActivity.kt'
+if (-not (Test-Path -LiteralPath $mainActivitySource -PathType Leaf)) {
+    throw "Maintained Android MainActivity source is missing: $mainActivitySource"
+}
+Copy-Item -LiteralPath $mainActivitySource -Destination $generatedActivity -Force
 Get-ChildItem -LiteralPath (Join-Path $keepaliveSource 'res') -File -Recurse | ForEach-Object {
     $relative = [IO.Path]::GetRelativePath((Join-Path $keepaliveSource 'res'), $_.FullName)
     $destination = Join-Path $resRoot $relative
@@ -77,6 +84,12 @@ foreach ($permission in @(
     }
 }
 $application = $root.SelectSingleNode('application')
+$activity = $application.SelectSingleNode("activity[@android:name='.MainActivity']", $namespaces)
+if ($null -eq $activity) {
+    throw 'Generated Android MainActivity is missing from the manifest.'
+}
+$activity.SetAttribute('icon', $androidNamespace, '@mipmap/ic_launcher')
+$activity.SetAttribute('roundIcon', $androidNamespace, '@mipmap/ic_launcher_round')
 $service = $application.SelectSingleNode("service[@android:name='.keepalive.JevKeepaliveService']", $namespaces)
 if ($null -eq $service) {
     $service = $manifest.CreateElement('service')

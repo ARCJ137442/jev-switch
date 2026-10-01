@@ -14,6 +14,7 @@
 ## 本轮修复
 
 - 将 v0.5.0 已确认的黑底白色 `J` 提升为 `src-tauri/app-icon.png` 唯一图标源，并由 `cargo tauri icon` 生成桌面与各平台图标资源；发布门禁拒绝黄色/彩色像素和非标准 ICO 尺寸。
+- Android `MainActivity` 由仓库源码覆盖生成并在 `onCreate/onNewIntent` 设置 `TaskDescription`，最近任务卡片不再继承 Tauri 模板图标。
 - Android 初始化后重新从图标源生成并同步所有 launcher mipmap 到 `gen/android`，不依赖被 Git 忽略的本机旧目录。
 - 将 Android workflow 改为可复用的 Release 构建，主 Release 在 Android 构建与签名成功后才发布；手动构建也使用相同的正式签名链。
 - APK 经 `zipalign`、固定 keystore 的 `apksigner sign` 和 `apksigner verify`。manifest 记录签名证书 SHA-256、APK SHA-256、图标源 SHA-256、commit、ABI、版本名和版本码。
