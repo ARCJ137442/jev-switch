@@ -297,6 +297,7 @@ jobs:
           path: dist
 
       - uses: actions/download-artifact@v4
+        if: needs.android.outputs.apk_available == 'true'
         with:
           name: jev-switch-android-aarch64
           path: dist
@@ -315,7 +316,7 @@ jobs:
             **Windows 便携版**：下载 `.zip` 并解压，双击其中的 `jev-switch.exe`；它与同次构建的安装包共享壳、daemon 与 UI 资源，不运行安装器。
             **Windows 独立版**：下载 `jev-switch-standalone-*-windows-x64.exe` 并双击；首次启动会把内嵌 daemon/UI 校验后释放到当前用户的版本化运行缓存，应用数据仍保存在 `%APPDATA%\\jev-switch`。
             **Headless CLI**：下载对应平台的 `jev-switch-cli-*`；Termux/Android arm64 请在设备上执行 `cargo install --path rs/crates/jev-switch-cli --locked`，避免把主机二进制误当成 Android 包。
-            **Android**：下载 `jev-switch-<version>-android-aarch64.apk` 并侧载安装；同一 Release 的 manifest 给出 APK SHA-256、签名证书指纹和版本码。首次从旧 debug-signed APK 升级时，需先卸载旧版本一次。
+            **Android**：仓库配置四个稳定签名 Secrets 后，Release 会附带 `jev-switch-<version>-android-aarch64.apk` 与 manifest；未配置时 Android job 会明确跳过，但 Windows/CLI/Docker 仍会正常发布。首次从历史 debug-signed APK 升级到稳定签名包时，需先卸载旧版本一次。
 
             **Docker（Bash）**：先将 `JEV_ADMIN_PASSWORD` 设置为自己的管理员密码。
             下例挂载持久数据卷，并只在宿主机回环地址提供控制台。

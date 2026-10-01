@@ -2,6 +2,10 @@ name: Android APK
 
 on:
   workflow_call:
+    outputs:
+      apk_available:
+        description: Whether a signed Android APK artifact was produced.
+        value: ${{ jobs.build.outputs.apk_available }}
     inputs:
       ref:
         type: string
@@ -12,13 +16,13 @@ on:
         default: aarch64
     secrets:
       ANDROID_KEYSTORE_BASE64:
-        required: true
+        required: false
       ANDROID_KEYSTORE_PASSWORD:
-        required: true
+        required: false
       ANDROID_KEY_ALIAS:
-        required: true
+        required: false
       ANDROID_KEY_PASSWORD:
-        required: true
+        required: false
   workflow_dispatch:
     inputs:
       ref:
@@ -46,10 +50,13 @@ jobs:
     name: Android APK (${{ inputs.abi }})
     runs-on: windows-latest
     timeout-minutes: 60
+    outputs:
+      apk_available: ${{ steps.signing.outputs.available }}
     env:
       ANDROID_ABI: ${{ inputs.abi || 'aarch64' }}
     steps:
-      - name: Validate stable signing secrets
+      - name: Detect stable signing secrets
+        id: signing
         shell: pwsh
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -57,44 +64,55 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          foreach ($name in @('ANDROID_KEYSTORE_BASE64', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD')) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
-              throw "Missing required GitHub Actions secret: $name"
-            }
+          $missing = @(@('ANDROID_KEYSTORE_BASE64', 'ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD') |
+            Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          )
+          if ($missing.Count -gt 0) {
+            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Warning ("Android APK release signing skipped; configure repository Actions secrets before publishing an APK: " + ($missing -join ', '))
+          } else {
+            "available=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
 
       - name: Checkout requested revision
+        if: steps.signing.outputs.available == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || 'main' }}
 
       - name: Setup Node.js
+        if: steps.signing.outputs.available == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Setup Java 17
+        if: steps.signing.outputs.available == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Setup Android SDK
+        if: steps.signing.outputs.available == 'true'
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
 
       - name: Install Android SDK components
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         run: |
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018"
 
       - name: Setup Rust
+        if: steps.signing.outputs.available == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Cache Android Rust and Gradle builds
+        if: steps.signing.outputs.available == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -107,12 +125,14 @@ jobs:
           restore-keys: ${{ runner.os }}-android-
 
       - name: Install dependencies and Tauri CLI
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         run: |
           npm ci --prefix ui
           cargo install tauri-cli --locked --version 2.9.6
 
       - name: Build web assets
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         env:
           VITE_JEV_MOBILE: 'true'
@@ -120,14 +140,17 @@ jobs:
         run: npm run build --prefix ui
 
       - name: Initialize Android project
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         run: cargo tauri android init --ci --skip-targets-install --config src-tauri/tauri.android.conf.json
 
       - name: Prepare Android version and launcher icons
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         run: ./scripts/android/prepare-android-project.ps1
 
       - name: Compile Android daemon library
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         run: |
           $abi = $env:ANDROID_ABI
@@ -162,6 +185,7 @@ jobs:
           Copy-Item "src-tauri/target/$target/release/libjev_switch_shell.so" "$jniDir/libjev_switch_shell.so" -Force
 
       - name: Package Android release APK
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         run: |
           $flavor = if ($env:ANDROID_ABI -eq 'aarch64') { 'Arm64' } else { 'X86_64' }
@@ -174,6 +198,7 @@ jobs:
           }
 
       - name: Prepare stable signing keystore
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -192,6 +217,7 @@ jobs:
           "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Sign and verify Android APK
+        if: steps.signing.outputs.available == 'true'
         id: sign
         shell: pwsh
         env:
@@ -238,6 +264,7 @@ jobs:
           Write-Host "APK signer SHA-256: $certificateSha256"
 
       - name: Collect Android release metadata
+        if: steps.signing.outputs.available == 'true'
         shell: pwsh
         env:
           SIGNER_SHA256: ${{ steps.sign.outputs.signer_sha256 }}
@@ -263,8 +290,14 @@ jobs:
           Get-Content -LiteralPath $manifestPath
 
       - name: Upload signed Android APK artifact
+        if: steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: jev-switch-android-${{ inputs.abi }}
           path: artifacts/*
           if-no-files-found: error
+
+      - name: Report missing signing configuration
+        if: steps.signing.outputs.available != 'true'
+        shell: pwsh
+        run: Write-Host 'Android job completed without an APK; Windows/CLI/Docker release assets remain publishable.'

@@ -861,7 +861,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jev-adapters"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "jev-core",
@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "jev-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "jev-protocol",
@@ -888,7 +888,7 @@ dependencies = [
 
 [[package]]
 name = "jev-protocol"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -897,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "jev-switch-cli"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -909,7 +909,7 @@ dependencies = [
 
 [[package]]
 name = "jev-switch-daemon"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "async-trait",

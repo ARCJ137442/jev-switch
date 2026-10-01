@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-01，源码候选版本为 `0.6.0`，待 `v0.6.0` tag CI 完成后成为当前 Release，包含 Windows 桌面包、Linux/Windows CLI、Docker 镜像和 Android APK。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版通过 Android workflow 使用专属稳定签名密钥，并记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按[新候选核验记录](verification/v0.6.0-release-candidate-2026-10-01.md)区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-01，源码候选版本为 `0.6.1`，待 `v0.6.1` tag CI 完成后成为当前 Release，至少包含 Windows Standalone、Portable、MSI、NSIS、Linux/Windows CLI 和 Docker 镜像；配置稳定签名 Secrets 时再附 Android APK。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版通过 Android workflow 使用专属稳定签名密钥，并记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按[新候选核验记录](verification/v0.6.1-release-candidate-2026-10-01.md)区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
@@ -21,7 +21,7 @@
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.6.0；统一修改上述五处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.6.1；统一修改上述五处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui
@@ -63,8 +63,9 @@ meta（版本门禁）
   └─ gate（复用 ci.yml：cargo test --workspace ×2 + ts-rs 门禁 + tsc + UI 回归 + vite build）
        ├─ windows（daemon release → sidecar → 壳身份回归 → tauri build → msi/nsis/Portable/Standalone）
        ├─ cli（Linux + Windows headless 客户端）
-       └─ docker（buildx → ghcr.io，tag 版本号 + latest）
-            └─ release（下载 Windows/CLI artifacts → 建 GitHub Release，自动 changelog）
+       ├─ docker（buildx → ghcr.io，tag 版本号 + latest）
+       ├─ android（有四个签名 Secret 时生成 APK；没有时清晰跳过）
+       └─ release（下载 Windows/CLI，按需下载 Android → 建 GitHub Release，自动 changelog）
 ```
 
 后端 workspace 测试在 Ubuntu 跑。Windows 作业放置 sidecar 后，串行执行独立
@@ -150,6 +151,26 @@ docker run -d --name jev-switch \
 
 Settings → Actions → General → Workflow permissions → **Read and write**。
 `GITHUB_TOKEN` 自带 `packages: write`，推 ghcr 无需额外 secret。
+
+### Android 稳定签名 Secrets
+
+Android Release 是可选资产；Windows Standalone/Portable、MSI、NSIS、CLI 和 Docker 不依赖 Android Secrets。要让同一次 Release 另外生成并上传稳定签名 APK，在本机安全目录执行：
+
+```powershell
+pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
+  -OutputDirectory 'D:\jev-switch-release-signing'
+```
+
+脚本会交互读取 keystore 和 key 密码，默认 alias 为 `jev-switch-release`，生成 `jev-switch-release.jks` 与单行 Base64 文件 `jev-switch-release.jks.base64`。将原始 `.jks` 和密码保留在离线/受保护位置；不要提交 Git、上传 issue、写入日志或粘贴到聊天。然后在 GitHub 仓库 `Settings → Secrets and variables → Actions → New repository secret` 创建以下四项：
+
+| Secret 名称 | 填写内容 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `jev-switch-release.jks.base64` 的完整单行内容，不要加引号或换行 |
+| `ANDROID_KEYSTORE_PASSWORD` | 生成 keystore 时输入的 keystore 密码 |
+| `ANDROID_KEY_ALIAS` | 生成时的 alias，默认 `jev-switch-release` |
+| `ANDROID_KEY_PASSWORD` | 生成时输入的 key 密码 |
+
+四项必须属于同一个 keystore。Android job 会先验证 Base64、keystore、alias 和签名，再把 APK 与 manifest 上传；任一项缺失时只跳过 Android 步骤，并不会阻断 Windows Standalone Release。正式签名后建议保存 workflow 输出的 signer SHA-256 指纹，后续版本必须保持一致，才能覆盖安装升级。历史 debug-signed APK 与稳定签名不是同一身份，首次迁移需卸载旧 APK。
 
 ---
 
