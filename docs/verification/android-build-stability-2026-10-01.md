@@ -32,6 +32,7 @@
 
 - Android release APK 尚未在本机或 GitHub Actions 以稳定 keystore 签名；新 Release CI 需要仓库配置 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 四项 Actions Secrets。当前本机 APK 是 debug 签名，仅证明构建链和资源可打包。
 - Secrets 内容不会写入仓库或打印。必须为 Jev-Switch 单独创建 keystore，不复用 ExoMind 或其他应用密钥，并在离线位置备份；丢失私钥将阻止对已安装版本做覆盖更新。
+- 可使用 `scripts/android/generate-release-keystore.ps1 -OutputDirectory <受保护目录>` 生成专属 PKCS12 keystore 和 base64 文件；脚本拒绝覆盖既有 keystore。随后在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置四项 Secrets：`ANDROID_KEYSTORE_BASE64`（base64 文件内容）、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。密码只通过 GitHub Secret 输入，不写入仓库或命令历史。
 - 当前发布的 v0.5.0 APK 是 debug-signed 历史构建。迁移到第一个稳定签名版本时，Android 会拒绝覆盖安装；需先卸载旧版，再安装新版本。后续同一签名身份的版本才可正常覆盖升级。
 - Android service、通知、Quick Settings、LAN、safe-area、旋转/键盘和后台生命周期仍按[Android 构建与验收计划](../design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)逐项做设备验收；移除发行标签不等于这些能力已经全部验证。
 

@@ -18,6 +18,8 @@ Thumbs.db
 .env.*
 !.env.example
 *.key
+*.jks
+*.jks.base64
 *secret*
 
 # 临时 / 本地产物
