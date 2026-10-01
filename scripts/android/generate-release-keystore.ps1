@@ -23,7 +23,9 @@ function Convert-SecureToPlain([Security.SecureString]$Value) {
 $storePassword = Convert-SecureToPlain $storeSecure
 $keyPassword = Convert-SecureToPlain $keySecure
 
-& keytool -genkeypair -v -keystore $keystore -storetype PKCS12 -storepass $storePassword -keypass $keyPassword -alias $Alias -keyalg RSA -keysize 4096 -validity 10000 -dname 'CN=Jev-Switch, OU=Release, O=Jev-Switch, L=Unknown, ST=Unknown, C=US'
+# Use JKS so the keystore and private-key passwords remain independent. Android's
+# apksigner accepts this format directly; PKCS12 silently discards -keypass.
+& keytool -genkeypair -v -keystore $keystore -storetype JKS -storepass $storePassword -keypass $keyPassword -alias $Alias -keyalg RSA -keysize 4096 -validity 10000 -dname 'CN=Jev-Switch, OU=Release, O=Jev-Switch, L=Unknown, ST=Unknown, C=US'
 if ($LASTEXITCODE -ne 0) { throw 'keytool failed to create the Jev-Switch keystore.' }
 
 $bytes = [IO.File]::ReadAllBytes($keystore)

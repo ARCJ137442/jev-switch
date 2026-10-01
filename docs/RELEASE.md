@@ -161,14 +161,14 @@ pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
   -OutputDirectory 'D:\jev-switch-release-signing'
 ```
 
-脚本会交互读取 keystore 和 key 密码，默认 alias 为 `jev-switch-release`，生成 `jev-switch-release.jks` 与单行 Base64 文件 `jev-switch-release.jks.base64`。将原始 `.jks` 和密码保留在离线/受保护位置；不要提交 Git、上传 issue、写入日志或粘贴到聊天。然后在 GitHub 仓库 `Settings → Secrets and variables → Actions → New repository secret` 创建以下四项：
+脚本会交互读取 keystore 和 key 密码，默认 alias 为 `jev-switch-release`，生成 JKS 格式的 `jev-switch-release.jks` 与单行 Base64 文件 `jev-switch-release.jks.base64`。将原始 `.jks` 和密码保留在离线/受保护位置；不要提交 Git、上传 issue、写入日志或粘贴到聊天。然后在 GitHub 仓库 `Settings → Secrets and variables → Actions → New repository secret` 创建以下四项：
 
 | Secret 名称 | 填写内容 |
 |---|---|
 | `ANDROID_KEYSTORE_BASE64` | `jev-switch-release.jks.base64` 的完整单行内容，不要加引号或换行 |
 | `ANDROID_KEYSTORE_PASSWORD` | 生成 keystore 时输入的 keystore 密码 |
 | `ANDROID_KEY_ALIAS` | 生成时的 alias，默认 `jev-switch-release` |
-| `ANDROID_KEY_PASSWORD` | 生成时输入的 key 密码 |
+| `ANDROID_KEY_PASSWORD` | 生成时输入的 key 密码；如果使用 2026-10-01 旧脚本生成的 PKCS12 文件，必须填与 keystore password 相同的值 |
 
 四项必须属于同一个 keystore。Android job 会先验证 Base64、keystore、alias 和签名，再把 APK 与 manifest 上传；任一项缺失时只跳过 Android 步骤，并不会阻断 Windows Standalone Release。正式签名后建议保存 workflow 输出的 signer SHA-256 指纹，后续版本必须保持一致，才能覆盖安装升级。历史 debug-signed APK 与稳定签名不是同一身份，首次迁移需卸载旧 APK。
 
