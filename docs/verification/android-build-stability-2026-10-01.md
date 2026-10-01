@@ -7,13 +7,13 @@
 
 ## 问题与原因
 
-- 安装截图中的彩色双轨标志与本机旧 `src-tauri/gen/android` launcher 资源一致；该生成目录被 Git 忽略。仓库原跟踪的 `src-tauri/icons/icon.png` 却是黑底白色 `J`，干净 CI checkout 无法复用本机的图标状态，桌面和 Android 也没有同一受控来源。
+- 历史安装截图中的彩色双轨标志是错误的 Tauri 默认图形，不是 Jev-Switch 品牌资产。维护者确认的权威资产是黑底白色 `J`；`src-tauri/app-icon.png`、`src-tauri/icons/icon.png`、ICO 全部尺寸和 Android launcher 必须从该母版生成。
 - Android workflow 原先构建 `assembleArm64Debug`。Windows runner 每次都是新机器，Gradle 生成的 debug keystore 不同，因此新 APK 可能无法覆盖安装到旧 APK 上。截图中的 `INSTALL_FAILED_UPDATE_INCOMPATIBLE (-7)` 与签名证书不匹配一致。
 - Tauri Android config 版本字段落后于 UI 主版本，Android Gradle properties 缺省时使用 `1.0`，无法表达真实版本和升级顺序。
 
 ## 本轮修复
 
-- 把用户可见的 Jev 彩色轨道标志提升为 `src-tauri/app-icon.png` 唯一图标源，并由 `cargo tauri icon` 生成桌面与各平台图标资源。
+- 将 v0.5.0 已确认的黑底白色 `J` 提升为 `src-tauri/app-icon.png` 唯一图标源，并由 `cargo tauri icon` 生成桌面与各平台图标资源；发布门禁拒绝黄色/彩色像素和非标准 ICO 尺寸。
 - Android 初始化后重新从图标源生成并同步所有 launcher mipmap 到 `gen/android`，不依赖被 Git 忽略的本机旧目录。
 - 将 Android workflow 改为可复用的 Release 构建，主 Release 在 Android 构建与签名成功后才发布；手动构建也使用相同的正式签名链。
 - APK 经 `zipalign`、固定 keystore 的 `apksigner sign` 和 `apksigner verify`。manifest 记录签名证书 SHA-256、APK SHA-256、图标源 SHA-256、commit、ABI、版本名和版本码。

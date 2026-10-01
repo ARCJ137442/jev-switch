@@ -38,6 +38,7 @@ $propertiesFile = Join-Path $androidRoot 'app/tauri.properties'
 if (-not (Test-Path -LiteralPath $appIcon -PathType Leaf)) {
     throw "Canonical Jev-Switch icon is missing: $appIcon"
 }
+& (Join-Path $PSScriptRoot '../verify-app-icon-source.ps1')
 if (-not (Test-Path -LiteralPath $keepaliveSource -PathType Container)) {
     throw "Android keepalive sources are missing: $keepaliveSource"
 }

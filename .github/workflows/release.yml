@@ -308,6 +308,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: v${{ needs.meta.outputs.version }}
           generate_release_notes: true
+          overwrite_files: true
           files: dist/**/*
           body: |
             ## 版本说明
@@ -316,7 +317,7 @@ jobs:
 
             ## 本版修复
 
-            - Windows 窗口、任务栏和托盘统一使用 Jev-Switch 品牌图标；便携版与 Standalone 的 EXE 图标由 CI 对照品牌 ICO 校验。
+            - Windows 窗口、任务栏、托盘及 Android launcher 使用同一黑底白色 J 图标；CI 检查母版哈希、无黄色/彩色像素和全部 ICO 尺寸。
             - 不同补丁版本使用独立的单实例身份，旧版驻留托盘时不会拦截新版本启动。
             - Android 稳定签名按 keystore 实际格式处理 PKCS12/JKS，并校验 APK 签名与 SHA-256 证书指纹。
 
