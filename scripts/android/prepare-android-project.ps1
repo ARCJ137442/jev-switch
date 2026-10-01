@@ -4,6 +4,45 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$androidDisplayName = 'Jev Switch'
+
+function Assert-MonochromePng {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    Add-Type -AssemblyName System.Drawing
+    $bitmap = [System.Drawing.Bitmap]::FromFile((Resolve-Path -LiteralPath $Path).Path)
+    try {
+        for ($y = 0; $y -lt $bitmap.Height; $y++) {
+            for ($x = 0; $x -lt $bitmap.Width; $x++) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                if ($pixel.A -gt 8 -and ($pixel.R -ne $pixel.G -or $pixel.G -ne $pixel.B)) {
+                    throw "$Description contains a colored pixel at ($x, $y)."
+                }
+            }
+        }
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+}
+
+function Get-PortableRelativePath {
+    param(
+        [string]$BasePath,
+        [string]$Path
+    )
+
+    # Windows PowerShell 5.1 lacks System.IO.Path.GetRelativePath; use URI
+    # semantics so local CI and the maintained PowerShell 7 path agree.
+    $baseFullPath = [System.IO.Path]::GetFullPath($BasePath).TrimEnd('\') + '\'
+    $pathFullPath = [System.IO.Path]::GetFullPath($Path)
+    $baseUri = [Uri]::new($baseFullPath)
+    $pathUri = [Uri]::new($pathFullPath)
+    return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($pathUri).ToString()).Replace('/', '\')
+}
 
 function Get-AndroidVersionCode {
     param([string]$Version)
@@ -34,6 +73,7 @@ $resRoot = Join-Path $androidRoot 'app/src/main/res'
 $mainSourceRoot = Join-Path $androidRoot 'app/src/main'
 $buildFile = Join-Path $androidRoot 'app/build.gradle.kts'
 $propertiesFile = Join-Path $androidRoot 'app/tauri.properties'
+$taskIconPath = Join-Path $resRoot 'drawable-nodpi/ic_task.png'
 
 if (-not (Test-Path -LiteralPath $appIcon -PathType Leaf)) {
     throw "Canonical Jev-Switch icon is missing: $appIcon"
@@ -59,10 +99,18 @@ if (-not (Test-Path -LiteralPath $mainActivitySource -PathType Leaf)) {
 }
 Copy-Item -LiteralPath $mainActivitySource -Destination $generatedActivity -Force
 Get-ChildItem -LiteralPath (Join-Path $keepaliveSource 'res') -File -Recurse | ForEach-Object {
-    $relative = [IO.Path]::GetRelativePath((Join-Path $keepaliveSource 'res'), $_.FullName)
+    $relative = Get-PortableRelativePath -BasePath (Join-Path $keepaliveSource 'res') -Path $_.FullName
     $destination = Join-Path $resRoot $relative
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+}
+
+# MainActivity uses this opaque raster for recent tasks. Keeping it separate
+# from adaptive-icon layers avoids Android inheriting a generated template icon.
+New-Item -ItemType Directory -Path (Split-Path -Parent $taskIconPath) -Force | Out-Null
+Copy-Item -LiteralPath $appIcon -Destination $taskIconPath -Force
+if ((Get-FileHash -LiteralPath $taskIconPath -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $appIcon -Algorithm SHA256).Hash) {
+    throw 'Android recent-task icon does not match the canonical Jev Switch icon.'
 }
 
 $manifestPath = Join-Path $mainSourceRoot 'AndroidManifest.xml'
@@ -84,28 +132,30 @@ foreach ($permission in @(
     }
 }
 $application = $root.SelectSingleNode('application')
+[void]$application.SetAttribute('label', $androidNamespace, '@string/app_name')
 $activity = $application.SelectSingleNode("activity[@android:name='.MainActivity']", $namespaces)
 if ($null -eq $activity) {
     throw 'Generated Android MainActivity is missing from the manifest.'
 }
-$activity.SetAttribute('icon', $androidNamespace, '@mipmap/ic_launcher')
-$activity.SetAttribute('roundIcon', $androidNamespace, '@mipmap/ic_launcher_round')
+[void]$activity.SetAttribute('icon', $androidNamespace, '@mipmap/ic_launcher')
+[void]$activity.SetAttribute('roundIcon', $androidNamespace, '@mipmap/ic_launcher_round')
+[void]$activity.SetAttribute('label', $androidNamespace, '@string/main_activity_title')
 $service = $application.SelectSingleNode("service[@android:name='.keepalive.JevKeepaliveService']", $namespaces)
 if ($null -eq $service) {
     $service = $manifest.CreateElement('service')
     $service.SetAttribute('name', $androidNamespace, '.keepalive.JevKeepaliveService')
     [void]$application.AppendChild($service)
 }
-$service.SetAttribute('exported', $androidNamespace, 'false')
-$service.SetAttribute('stopWithTask', $androidNamespace, 'false')
-$service.SetAttribute('foregroundServiceType', $androidNamespace, 'specialUse')
+[void]$service.SetAttribute('exported', $androidNamespace, 'false')
+[void]$service.SetAttribute('stopWithTask', $androidNamespace, 'false')
+[void]$service.SetAttribute('foregroundServiceType', $androidNamespace, 'specialUse')
 $subtype = $service.SelectSingleNode("property[@android:name='android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE']", $namespaces)
 if ($null -eq $subtype) {
     $subtype = $manifest.CreateElement('property')
     $subtype.SetAttribute('name', $androidNamespace, 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE')
     [void]$service.AppendChild($subtype)
 }
-$subtype.SetAttribute('value', $androidNamespace, 'Keep the explicitly enabled local Jev-Switch gateway available while the app is in the background.')
+[void]$subtype.SetAttribute('value', $androidNamespace, 'Keep the explicitly enabled local Jev Switch gateway available while the app is in the background.')
 
 $tileService = $application.SelectSingleNode("service[@android:name='.keepalive.JevGatewayTileService']", $namespaces)
 if ($null -eq $tileService) {
@@ -113,10 +163,10 @@ if ($null -eq $tileService) {
     $tileService.SetAttribute('name', $androidNamespace, '.keepalive.JevGatewayTileService')
     [void]$application.AppendChild($tileService)
 }
-$tileService.SetAttribute('label', $androidNamespace, '@string/keepalive_tile_name')
-$tileService.SetAttribute('icon', $androidNamespace, '@mipmap/ic_launcher')
-$tileService.SetAttribute('permission', $androidNamespace, 'android.permission.BIND_QUICK_SETTINGS_TILE')
-$tileService.SetAttribute('exported', $androidNamespace, 'true')
+[void]$tileService.SetAttribute('label', $androidNamespace, '@string/keepalive_tile_name')
+[void]$tileService.SetAttribute('icon', $androidNamespace, '@mipmap/ic_launcher')
+[void]$tileService.SetAttribute('permission', $androidNamespace, 'android.permission.BIND_QUICK_SETTINGS_TILE')
+[void]$tileService.SetAttribute('exported', $androidNamespace, 'true')
 $tileFilter = $tileService.SelectSingleNode('intent-filter')
 if ($null -eq $tileFilter) {
     $tileFilter = $manifest.CreateElement('intent-filter')
@@ -131,8 +181,31 @@ if ($null -eq $activeTile) {
     $activeTile.SetAttribute('name', $androidNamespace, 'android.service.quicksettings.ACTIVE_TILE')
     [void]$tileService.AppendChild($activeTile)
 }
-$activeTile.SetAttribute('value', $androidNamespace, 'true')
+[void]$activeTile.SetAttribute('value', $androidNamespace, 'true')
 $manifest.Save($manifestPath)
+
+$stringsPath = Join-Path $resRoot 'values/strings.xml'
+if (-not (Test-Path -LiteralPath $stringsPath -PathType Leaf)) {
+    throw "Generated Android strings resource is missing: $stringsPath"
+}
+[xml]$strings = Get-Content -LiteralPath $stringsPath -Raw
+$resources = $strings.SelectSingleNode('/resources')
+if ($null -eq $resources) {
+    throw "Generated Android strings resource has no <resources> root: $stringsPath"
+}
+foreach ($stringSpec in @(
+    @{ Name = 'app_name'; Value = $androidDisplayName },
+    @{ Name = 'main_activity_title'; Value = $androidDisplayName }
+)) {
+    $stringNode = $resources.SelectSingleNode("string[@name='$($stringSpec.Name)']")
+    if ($null -eq $stringNode) {
+        $stringNode = $strings.CreateElement('string')
+        $stringNode.SetAttribute('name', $stringSpec.Name)
+        [void]$resources.AppendChild($stringNode)
+    }
+    $stringNode.InnerText = $stringSpec.Value
+}
+$strings.Save($stringsPath)
 
 $package = Get-Content -LiteralPath (Join-Path $ProjectRoot 'ui/package.json') -Raw | ConvertFrom-Json
 $tauriConfig = Get-Content -LiteralPath (Join-Path $tauriRoot 'tauri.conf.json') -Raw | ConvertFrom-Json
@@ -140,6 +213,9 @@ $androidConfig = Get-Content -LiteralPath (Join-Path $tauriRoot 'tauri.android.c
 $version = [string]$package.version
 if ($tauriConfig.version -ne $version -or $androidConfig.version -ne $version) {
     throw "Android, Tauri, and UI versions must agree. UI=$version, Tauri=$($tauriConfig.version), Android=$($androidConfig.version)."
+}
+if ([string]$androidConfig.productName -ne $androidDisplayName) {
+    throw "Android productName must be '$androidDisplayName'; internal ids remain 'jev-switch'."
 }
 $versionCode = Get-AndroidVersionCode -Version $version
 
@@ -164,7 +240,7 @@ try {
 
     $copied = 0
     Get-ChildItem -LiteralPath $generatedAndroid -File -Recurse | ForEach-Object {
-        $relativePath = [IO.Path]::GetRelativePath($generatedAndroid, $_.FullName)
+        $relativePath = Get-PortableRelativePath -BasePath $generatedAndroid -Path $_.FullName
         $destination = Join-Path $resRoot $relativePath
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
         Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
@@ -173,6 +249,28 @@ try {
 
     if ($copied -lt 15) {
         throw "Tauri generated only $copied Android icon files; expected all launcher densities."
+    }
+
+    # Tauri Android init leaves template resources in the generated tree. They
+    # are not part of the canonical output and can otherwise be selected by a
+    # density/API fallback, so remove them before compiling the APK.
+    foreach ($stalePath in @(
+        (Join-Path $resRoot 'drawable/ic_launcher_background.xml'),
+        (Join-Path $resRoot 'drawable-v24/ic_launcher_foreground.xml')
+    )) {
+        if (Test-Path -LiteralPath $stalePath) {
+            Remove-Item -LiteralPath $stalePath -Force
+        }
+    }
+
+    $launcherPngs = @(Get-ChildItem -LiteralPath $resRoot -File -Recurse | Where-Object {
+        $_.Name -in @('ic_launcher.png', 'ic_launcher_round.png', 'ic_launcher_foreground.png')
+    })
+    if ($launcherPngs.Count -lt 15) {
+        throw "Android launcher output contains only $($launcherPngs.Count) raster resources."
+    }
+    foreach ($launcherPng in $launcherPngs) {
+        Assert-MonochromePng -Path $launcherPng.FullName -Description "Android launcher icon $($launcherPng.FullName)"
     }
 }
 finally {
@@ -193,4 +291,6 @@ $properties += "tauri.android.versionName=$version"
 
 Write-Host "Android version: $version (versionCode $versionCode)"
 Write-Host "Android launcher resources synced from app-icon.png ($copied files)."
+Write-Host "Android user-facing name: $androidDisplayName; internal package/binary id remains jev-switch."
+Write-Host 'Android recent-task icon and stale template icon cleanup verified.'
 Write-Host 'Android foreground keepalive service and Quick Settings tile synced.'

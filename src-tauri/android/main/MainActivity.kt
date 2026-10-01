@@ -20,7 +20,9 @@ class MainActivity : TauriActivity() {
     }
 
     private fun updateTaskDescription() {
-        val icon = BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_foreground)
+        // Use a dedicated opaque raster so Android does not fall back to the
+        // adaptive-icon template when rendering the recent-tasks card.
+        val icon = BitmapFactory.decodeResource(resources, R.drawable.ic_task)
         if (icon != null) {
             setTaskDescription(ActivityManager.TaskDescription(getString(R.string.app_name), icon))
         }

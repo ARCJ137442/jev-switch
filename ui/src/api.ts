@@ -118,7 +118,7 @@ export async function fetchHealth(): Promise<HealthBody> {
   const { status, version, product, api_revision, build_revision } = body as Partial<HealthBody>;
   if (status !== 'ok') throw new Error(`health: status=${String(status)}`);
   if (product !== 'jev-switch' || api_revision !== 1 || typeof version !== 'string') {
-    throw new Error('health: incompatible or unrecognized Jev-Switch backend');
+    throw new Error('health: incompatible or unrecognized Jev Switch backend');
   }
   return { status, version, product, api_revision, build_revision: typeof build_revision === 'string' ? build_revision : null };
 }

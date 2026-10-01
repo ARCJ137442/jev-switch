@@ -196,7 +196,7 @@ function ShellFrame({ route, children }: ShellProps) {
               className="app-shell__brand flex items-center gap-2 font-semibold"
               style={{ fontSize: 'var(--text-base)', color: 'var(--text)' }}
             >
-              <span>Jev-Switch</span>
+              <span>Jev Switch</span>
             </a>
             <nav aria-label="primary" className="app-shell__nav flex min-w-0 items-center gap-1">
               {NAV.filter((item) => !auth.isReadOnly || item.route === 'dashboard' || item.route === 'playground' || item.route === 'stats' || item.route === 'settings').map((item) => {

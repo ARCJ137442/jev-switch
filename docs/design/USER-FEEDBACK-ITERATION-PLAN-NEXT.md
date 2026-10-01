@@ -16,7 +16,7 @@
 - Routing 已加入稳定 Sugiyama/barycenter 布局、节点选中/度数、双击聚焦、触控 pinch 和真实调用活动的基础曝光/辉光事件；完整色温和并发冷却模型仍待实现。
 - Statistics 已加入入口/提供商矩阵、统一筛选、用户可调分页和旧记录游标读取；原始 JSON 仍按渐进披露保留。
 - Dashboard 已加入运行/地址摘要、活跃请求入口、十分钟滚动流量和网关启停；Tauri WebView 精确资源与完整性能基线仍待人工核验。
-- 当前 Tauri 图标资源统一为黑底白色 `J`；唯一母版派生桌面、托盘与 Android 图标，禁止彩色 Tauri 默认图形回归。
+- 当前 Tauri 图标资源统一为黑底白色 `J`；唯一母版派生桌面、托盘与 Android 图标，禁止彩色 Tauri 默认图形回归。Android launcher、最近任务卡片、通知和 Quick Settings 的用户可见名称统一为 `Jev Switch`，内部包名与协议标识继续使用 `jev-switch`。
 - daemon 已实现默认 loopback、明确确认后开放 `0.0.0.0`、私有/LAN peer 限制和失败回滚；仍需维护者用真实手机/平板网络做人工验收。
 - Android 路由画布双指缩放已进入通用前端；顶部 safe-area、launcher 图标和原生生命周期仍归入 Android 专项收尾。Android APP 启动时默认恢复内嵌后端，空 API 地址自动指向实际监听地址。
 
@@ -139,7 +139,7 @@
 
 - [x] 按 Tauri Android 的 edge-to-edge / safe-area 机制修复顶部状态栏重叠。页面顶栏和滚动内容避开系统时间、流量、电量区域；横竖屏、刘海/打孔和手势导航下都不依赖固定像素补偿。参考成熟 Android WebView/Tauri 应用的系统 inset 处理，但不复制机器本地目录或引入无关实现。
 - [x] 路由 DAG 增加双指 pinch-to-zoom；围绕两指中心缩放，缩放中心下的画布位置保持稳定。单指拖节点、平移画布、端口接线与页面滚动不能被 pinch 逻辑吞掉。
-- [x] 黑底白色 `J` 母版同时生成并接入 Android launcher 自适应/圆形图标资源，发布门禁清除 Tauri 默认图标残留。
+- [x] 黑底白色 `J` 母版同时生成并接入 Android launcher 自适应/圆形图标资源，发布门禁清除 Tauri 默认图标残留；最近任务卡片使用母版不透明位图，避免 Activity 继承模板图标。
 
 **验收：**Android 真机检查顶部状态栏、横竖屏、刘海/打孔、导航手势；在路由图连续放大缩小并平移，节点和连线位置稳定；单指接线不回归；launcher、任务切换器和桌面均显示 Jev-Switch 品牌图标。APK 构建成功与维护者已报告的初步调用通过分别记录，不把二者合并成完整 Android 生命周期验收。
 

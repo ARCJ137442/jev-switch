@@ -1,9 +1,9 @@
 <resources>
-    <string name="keepalive_channel">Jev-Switch 网关</string>
-    <string name="keepalive_channel_description">本机 Jev-Switch 网关在后台运行时显示。</string>
-    <string name="keepalive_title">Jev-Switch 网关正在运行</string>
-    <string name="keepalive_text">点击返回本机网关控制台。</string>
-    <string name="keepalive_tile_name">Jev-Switch</string>
+    <string name="keepalive_channel">Jev Switch 网关</string>
+    <string name="keepalive_channel_description">本机 Jev Switch 网关在后台运行时显示。</string>
+    <string name="keepalive_title">Jev Switch 网关正在运行</string>
+    <string name="keepalive_text">点击返回本机 Jev Switch 网关控制台。</string>
+    <string name="keepalive_tile_name">Jev Switch</string>
     <string name="keepalive_tile_running">网关运行中</string>
     <string name="keepalive_tile_stopped">网关已停止</string>
     <string name="keepalive_stop">停止网关</string>

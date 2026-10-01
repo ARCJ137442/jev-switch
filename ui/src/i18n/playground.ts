@@ -88,7 +88,7 @@ export const playgroundEn = {
   'pg.batchCountHint': '{models} models × {examples} samples; repeat count is configured with run controls.',
   'pg.localSaveFailed': 'Could not save the Playground workspace in this browser.',
   'pg.importTooLarge': 'Example file exceeds the 1 MB limit.',
-  'pg.importInvalid': 'This file is not a valid Jev-Switch example bundle.',
+  'pg.importInvalid': 'This file is not a valid Jev Switch example bundle.',
   'pg.importDuplicate': 'An example with the same ID already exists. Rename it before importing.',
 } as const;
 
@@ -182,7 +182,7 @@ export const playgroundZh = {
   'pg.batchCountHint': '{models} 个模型 × {examples} 个样例；重复次数在运行控件中设置。',
   'pg.localSaveFailed': '无法在此浏览器中保存演练场工作区。',
   'pg.importTooLarge': '样例文件超过 1 MB 限制。',
-  'pg.importInvalid': '这不是有效的 Jev-Switch 样例包。',
+  'pg.importInvalid': '这不是有效的 Jev Switch 样例包。',
   'pg.importDuplicate': '已存在相同 ID 的样例，请先重命名再导入。',
 } as const;
 

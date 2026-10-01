@@ -58,7 +58,7 @@ class RootErrorBoundary extends Component<BoundaryProps, BoundaryState> {
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 8 }}>
-            Jev-Switch UI crashed
+            Jev Switch UI crashed
           </div>
           <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{msg}</pre>
         </div>

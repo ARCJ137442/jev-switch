@@ -79,20 +79,36 @@ for ($index = 0; $index -lt $frameCount; $index++) {
         throw "ICO frame $index has an invalid image range."
     }
 
-    $frameStream = [IO.MemoryStream]::new()
-    $writer = [IO.BinaryWriter]::new($frameStream)
-    $writer.Write([UInt16]0)
-    $writer.Write([UInt16]1)
-    $writer.Write([UInt16]1)
-    $writer.Write($icoBytes, $entryOffset, 8)
-    $writer.Write([UInt32]$imageLength)
-    $writer.Write([UInt32]22)
-    $writer.Write($icoBytes, [int]$imageOffset, [int]$imageLength)
-    $writer.Flush()
-    $frameStream.Position = 0
+    $imageBytes = [byte[]]::new([int]$imageLength)
+    [Array]::Copy($icoBytes, [int]$imageOffset, $imageBytes, 0, [int]$imageLength)
+    $payloadStream = [IO.MemoryStream]::new($imageBytes, $false)
+    $frameStream = $null
+    $writer = $null
+    $frameIcon = $null
+    $frameBitmap = $null
     try {
-        $frameIcon = [System.Drawing.Icon]::new($frameStream)
-        $frameBitmap = $frameIcon.ToBitmap()
+        # Modern icon generators embed PNG frames. Decode those payloads
+        # directly; System.Drawing.Icon cannot reliably decode PNG-backed ICO
+        # entries on every Windows runner. Keep the ICO wrapper fallback for
+        # legacy DIB frames.
+        if ($imageBytes.Length -ge 8 -and $imageBytes[0] -eq 0x89 -and $imageBytes[1] -eq 0x50 -and $imageBytes[2] -eq 0x4E -and $imageBytes[3] -eq 0x47) {
+            $frameBitmap = [System.Drawing.Bitmap]::new($payloadStream)
+        }
+        else {
+            $frameStream = [IO.MemoryStream]::new()
+            $writer = [IO.BinaryWriter]::new($frameStream)
+            $writer.Write([UInt16]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]1)
+            $writer.Write($icoBytes, $entryOffset, 8)
+            $writer.Write([UInt32]$imageLength)
+            $writer.Write([UInt32]22)
+            $writer.Write($imageBytes)
+            $writer.Flush()
+            $frameStream.Position = 0
+            $frameIcon = [System.Drawing.Icon]::new($frameStream)
+            $frameBitmap = $frameIcon.ToBitmap()
+        }
         try {
             if ($frameBitmap.Width -ne $width -or $frameBitmap.Height -ne $height) {
                 throw "ICO frame $index declared as $width x $height but decodes as $($frameBitmap.Width) x $($frameBitmap.Height)."
@@ -100,13 +116,14 @@ for ($index = 0; $index -lt $frameCount; $index++) {
             Assert-MonochromeBitmap $frameBitmap "ICO frame $width x $height"
         }
         finally {
-            $frameBitmap.Dispose()
-            $frameIcon.Dispose()
+            if ($null -ne $frameBitmap) { $frameBitmap.Dispose() }
+            if ($null -ne $frameIcon) { $frameIcon.Dispose() }
         }
     }
     finally {
-        $writer.Dispose()
-        $frameStream.Dispose()
+        if ($null -ne $writer) { $writer.Dispose() }
+        if ($null -ne $frameStream) { $frameStream.Dispose() }
+        $payloadStream.Dispose()
     }
 }
 foreach ($size in $requiredSizes) {

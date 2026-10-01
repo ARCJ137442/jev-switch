@@ -61,7 +61,7 @@ export function parseSettingsBackup(text: string): SettingsBackup {
     throw new Error('invalid JSON');
   }
   if (!isObject(parsed) || parsed.format !== SETTINGS_BACKUP_FORMAT || parsed.schema_version !== SETTINGS_BACKUP_SCHEMA_VERSION || typeof parsed.exported_at !== 'string') {
-    throw new Error('unsupported Jev-Switch settings backup');
+    throw new Error('unsupported Jev Switch settings backup');
   }
   return {
     format: SETTINGS_BACKUP_FORMAT,
