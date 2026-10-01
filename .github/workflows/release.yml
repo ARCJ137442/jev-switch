@@ -310,6 +310,16 @@ jobs:
           generate_release_notes: true
           files: dist/**/*
           body: |
+            ## 版本说明
+
+            公共版本号按已发布的 GitHub Release 顺序递增；失败的 CI 候选不会作为公开版本，相关修复会合并到下一次实际发行。
+
+            ## 本版修复
+
+            - Windows 窗口、任务栏和托盘统一使用 Jev-Switch 品牌图标；便携版与 Standalone 的 EXE 图标由 CI 对照品牌 ICO 校验。
+            - 不同补丁版本使用独立的单实例身份，旧版驻留托盘时不会拦截新版本启动。
+            - Android 稳定签名按 keystore 实际格式处理 PKCS12/JKS，并校验 APK 签名与 SHA-256 证书指纹。
+
             ## 安装
 
             **Windows 桌面**：下载下方 `.msi`（或 NSIS `.exe`）双击安装。

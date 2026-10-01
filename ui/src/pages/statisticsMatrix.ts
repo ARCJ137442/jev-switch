@@ -4,7 +4,10 @@ export interface MatrixEvent {
   detail: string;
 }
 
+export type HeatmapGranularity = 'day' | 'hour' | 'minute' | 'second';
+
 export interface HealthCell {
+  /** Kept as `day` for the existing UI contract; it is a bucket label at finer scales. */
   day: string;
   count: number;
   success: number;
@@ -18,6 +21,19 @@ export interface HealthRow {
   cells: HealthCell[];
 }
 
+export interface AdaptiveHealthMatrix {
+  rows: HealthRow[];
+  granularity: HeatmapGranularity;
+  buckets: string[];
+}
+
+const GRANULARITY_MS: Record<HeatmapGranularity, number> = {
+  second: 1_000,
+  minute: 60_000,
+  hour: 3_600_000,
+  day: 86_400_000,
+};
+
 function parseDetail(event: MatrixEvent): Record<string, unknown> | null {
   if (event.kind !== 'request') return null;
   try {
@@ -30,51 +46,111 @@ function parseDetail(event: MatrixEvent): Record<string, unknown> | null {
   }
 }
 
-function utcDay(timestamp: number): string {
-  return new Date(timestamp).toISOString().slice(0, 10);
+function bucketStart(timestamp: number, granularity: HeatmapGranularity): number {
+  return Math.floor(timestamp / GRANULARITY_MS[granularity]) * GRANULARITY_MS[granularity];
+}
+
+export function formatHeatmapBucket(timestamp: number, granularity: HeatmapGranularity): string {
+  const date = new Date(bucketStart(timestamp, granularity));
+  if (granularity === 'day') return date.toISOString().slice(0, 10);
+  if (granularity === 'hour') return `${date.toISOString().slice(0, 13)}:00Z`;
+  if (granularity === 'minute') return `${date.toISOString().slice(0, 16)}Z`;
+  return `${date.toISOString().slice(0, 19)}Z`;
+}
+
+function bucketKeys(startMs: number, endMs: number, granularity: HeatmapGranularity): string[] {
+  const size = GRANULARITY_MS[granularity];
+  const start = bucketStart(Math.min(startMs, endMs), granularity);
+  const end = bucketStart(Math.max(startMs, endMs), granularity);
+  const count = Math.max(1, Math.floor((end - start) / size) + 1);
+  return Array.from({ length: count }, (_, index) => formatHeatmapBucket(start + index * size, granularity));
+}
+
+/** Pick the finest time unit that fits square cells in the available width. */
+export function selectHeatmapGranularity(
+  startMs: number,
+  endMs: number,
+  availableWidth: number,
+  labelWidth = 112,
+  minCellSize = 7,
+): HeatmapGranularity {
+  const range = Math.max(0, Math.abs(endMs - startMs));
+  const capacity = Math.max(1, Math.floor(Math.max(0, availableWidth - labelWidth) / minCellSize));
+  for (const granularity of ['second', 'minute', 'hour', 'day'] as const) {
+    if (Math.floor(range / GRANULARITY_MS[granularity]) + 1 <= capacity) return granularity;
+  }
+  return 'day';
+}
+
+function buildRowsForBuckets(
+  events: readonly MatrixEvent[],
+  dimension: 'entry' | 'provider',
+  buckets: readonly string[],
+  granularity: HeatmapGranularity,
+  startMs: number,
+  endMs: number,
+): HealthRow[] {
+  const allowed = new Set(buckets);
+  const groups = new Map<string, Map<string, { success: number; failure: number }>>();
+  for (const event of events) {
+    if (event.timestamp < startMs || event.timestamp > endMs) continue;
+    const detail = parseDetail(event);
+    if (!detail) continue;
+    const id = dimension === 'entry' ? detail.endpoint_id : detail.provider;
+    const bucket = formatHeatmapBucket(event.timestamp, granularity);
+    if (typeof id !== 'string' || !id || !allowed.has(bucket)) continue;
+    let byBucket = groups.get(id);
+    if (!byBucket) groups.set(id, byBucket = new Map());
+    let cell = byBucket.get(bucket);
+    if (!cell) byBucket.set(bucket, cell = { success: 0, failure: 0 });
+    if (detail.success === true) cell.success += 1;
+    else if (detail.success === false) cell.failure += 1;
+  }
+
+  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([id, byBucket]) => ({
+    id,
+    label: id,
+    cells: buckets.map((bucket) => {
+      const result = byBucket.get(bucket);
+      const success = result?.success ?? 0;
+      const failure = result?.failure ?? 0;
+      const count = success + failure;
+      return { day: bucket, count, success, failure, rate: count ? success / count : null };
+    }),
+  }));
 }
 
 function dateKeys(endMs: number, dayCount: number): string[] {
-  const end = new Date(endMs);
-  end.setUTCHours(0, 0, 0, 0);
-  return Array.from({ length: dayCount }, (_, index) => {
-    const date = new Date(end.getTime() - (dayCount - index - 1) * 86_400_000);
-    return utcDay(date.getTime());
-  });
+  const end = bucketStart(endMs, 'day');
+  return Array.from({ length: dayCount }, (_, index) => formatHeatmapBucket(end - (dayCount - index - 1) * GRANULARITY_MS.day, 'day'));
 }
 
+/** Existing fixed-day API retained for callers and historical tests. */
 export function buildHealthRows(
   events: readonly MatrixEvent[],
   dimension: 'entry' | 'provider',
   endMs: number,
   dayCount = 30,
 ): HealthRow[] {
-  const days = dateKeys(endMs, dayCount);
-  const allowedDays = new Set(days);
-  const groups = new Map<string, Map<string, { success: number; failure: number }>>();
-  for (const event of events) {
-    const detail = parseDetail(event);
-    if (!detail) continue;
-    const id = dimension === 'entry' ? detail.endpoint_id : detail.provider;
-    const day = utcDay(event.timestamp);
-    if (typeof id !== 'string' || !id || !allowedDays.has(day)) continue;
-    let byDay = groups.get(id);
-    if (!byDay) groups.set(id, byDay = new Map());
-    let cell = byDay.get(day);
-    if (!cell) byDay.set(day, cell = { success: 0, failure: 0 });
-    if (detail.success === true) cell.success += 1;
-    else if (detail.success === false) cell.failure += 1;
-  }
+  const buckets = dateKeys(endMs, dayCount);
+  const startMs = bucketStart(endMs, 'day') - (dayCount - 1) * GRANULARITY_MS.day;
+  return buildRowsForBuckets(events, dimension, buckets, 'day', startMs, endMs + GRANULARITY_MS.day - 1);
+}
 
-  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([id, byDay]) => ({
-    id,
-    label: id,
-    cells: days.map((day) => {
-      const result = byDay.get(day);
-      const success = result?.success ?? 0;
-      const failure = result?.failure ?? 0;
-      const count = success + failure;
-      return { day, count, success, failure, rate: count ? success / count : null };
-    }),
-  }));
+export function buildAdaptiveHealthRows(
+  events: readonly MatrixEvent[],
+  dimension: 'entry' | 'provider',
+  startMs: number,
+  endMs: number,
+  availableWidth: number,
+): AdaptiveHealthMatrix {
+  const safeStart = Math.min(startMs, endMs);
+  const safeEnd = Math.max(startMs, endMs);
+  const granularity = selectHeatmapGranularity(safeStart, safeEnd, availableWidth);
+  const buckets = bucketKeys(safeStart, safeEnd, granularity);
+  return {
+    rows: buildRowsForBuckets(events, dimension, buckets, granularity, safeStart, safeEnd),
+    granularity,
+    buckets,
+  };
 }

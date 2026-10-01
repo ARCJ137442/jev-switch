@@ -97,7 +97,9 @@ try {
     if (-not (Test-Path -LiteralPath $builtExe -PathType Leaf)) {
         throw "Standalone build did not produce the expected executable: $builtExe"
     }
+    & (Join-Path $PSScriptRoot 'verify-windows-app-icon.ps1') -ExecutablePath $builtExe
     Copy-Item -LiteralPath $builtExe -Destination $outputFullPath -Force
+    & (Join-Path $PSScriptRoot 'verify-windows-app-icon.ps1') -ExecutablePath $outputFullPath
 
     Write-Output "Standalone executable: $outputFullPath"
     Write-Output "Standalone SHA-256: $(Get-Sha256 $outputFullPath)"

@@ -35,7 +35,7 @@ function parseAppSettings(value: unknown): AppSettingsBackup {
   if (typeof autoProviderProbe !== 'boolean' || typeof showStatusBar !== 'boolean' || typeof autoHideRoutingHud !== 'boolean') {
     throw new Error('invalid boolean application setting');
   }
-  if (typeof uiScale !== 'number' || !Number.isFinite(uiScale) || uiScale < 0.8 || uiScale > 1.25) throw new Error('invalid UI scale');
+  if (typeof uiScale !== 'number' || !Number.isFinite(uiScale) || uiScale < 0.1 || uiScale > 2) throw new Error('invalid UI scale');
   if (apiBase !== null && typeof apiBase !== 'string') throw new Error('invalid API base');
   return { theme, language, autoProviderProbe, showStatusBar, uiScale, autoHideRoutingHud, apiBase };
 }

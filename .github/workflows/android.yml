@@ -213,14 +213,11 @@ jobs:
             throw 'ANDROID_KEYSTORE_BASE64 is not valid Base64.'
           }
           [IO.File]::WriteAllBytes($keystorePath, $bytes)
-          & keytool -list -storetype PKCS12 -keystore $keystorePath -storepass $env:ANDROID_KEYSTORE_PASSWORD -alias $env:ANDROID_KEY_ALIAS 2>&1 | Out-Null
-          $isPkcs12 = $LASTEXITCODE -eq 0
-          if (-not $isPkcs12) {
-            & keytool -list -storetype JKS -keystore $keystorePath -storepass $env:ANDROID_KEYSTORE_PASSWORD -alias $env:ANDROID_KEY_ALIAS 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw 'The configured Android keystore is neither a readable PKCS12 nor JKS keystore.' }
-          }
-          $keystoreType = if ($isPkcs12) { 'PKCS12' } else { 'JKS' }
+          $keystoreType = & ./scripts/android/detect-release-keystore-type.ps1 `
+            -KeystorePath $keystorePath `
+            -Alias $env:ANDROID_KEY_ALIAS
           Write-Host "Detected Android keystore type: $keystoreType"
+          if ($keystoreType -notin @('PKCS12', 'JKS')) { throw 'Keystore type detector returned an unsupported format.' }
           "type=$keystoreType" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "ANDROID_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $effectiveKeyPassword = if ($keystoreType -eq 'PKCS12') { $env:ANDROID_KEYSTORE_PASSWORD } else { $env:ANDROID_KEY_PASSWORD }
@@ -265,11 +262,7 @@ jobs:
 
           $verification = & $apksigner verify --verbose --print-certs $signedApk 2>&1
           if ($LASTEXITCODE -ne 0) { throw 'apksigner verification failed.' }
-          $certificateLine = $verification | Where-Object { $_ -match 'Signer #1 certificate SHA-256 digest:' } | Select-Object -First 1
-          if (-not $certificateLine -or $certificateLine -notmatch '([0-9a-fA-F]{2}:){31}[0-9a-fA-F]{2}') {
-            throw 'Could not extract the Android signer SHA-256 certificate fingerprint.'
-          }
-          $certificateSha256 = ($Matches[0] -replace ':', '').ToUpperInvariant()
+          $certificateSha256 = & ./scripts/android/parse-apksigner-certificate-fingerprint.ps1 -VerificationOutput $verification
           "signer_sha256=$certificateSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "APK signer SHA-256: $certificateSha256"
 

@@ -4,8 +4,8 @@ export const UI_SCALE_KEY = 'jev_ui_scale';
 export const ROUTING_HUD_AUTO_HIDE_KEY = 'jev_routing_hud_auto_hide';
 export const SETTINGS_CHANGE_EVENT = 'jev-settings-change';
 
-export const UI_SCALE_MIN_PERCENT = 80;
-export const UI_SCALE_MAX_PERCENT = 125;
+export const UI_SCALE_MIN_PERCENT = 10;
+export const UI_SCALE_MAX_PERCENT = 200;
 export const UI_SCALE_STEP_PERCENT = 5;
 
 function normalizeUiScale(value: number): number {

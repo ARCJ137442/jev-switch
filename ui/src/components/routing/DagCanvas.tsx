@@ -195,9 +195,9 @@ export function DagCanvas(props: Props) {
                const activity = edgeActivityVisual(props.routeActivities?.[key], props.activityNow);
                const invalid = props.errors.has(edgeKey(route.left, route.right));
                const activityStyle: CSSProperties | undefined = activity.lineLevel > 0 || activity.outcomeCount > 0 ? {
-                 '--dag-edge-color': activity.outcomeCount ? `hsl(${activity.hue} ${activity.saturation}% 68%)` : 'var(--text-subtle)',
+                 '--dag-edge-color': `hsl(${activity.hue} ${activity.saturation}% 72%)`,
                  '--dag-edge-opacity': String(Math.max(0.42, activity.lineLevel)),
-                 '--dag-glow-alpha': `${Math.round(activity.glowLevel * 88)}%`,
+                 '--dag-glow-alpha': String(Math.min(0.86, activity.glowLevel * 0.86)),
                  '--dag-glow-radius': `${(activity.glowLevel * 16).toFixed(1)}px`,
                } as CSSProperties : undefined;
                const activitySummary = activity.activeCount > 0 || activity.outcomeCount > 0
@@ -207,6 +207,7 @@ export function DagCanvas(props: Props) {
                 style={activityStyle}
                 role="button" tabIndex={0} aria-pressed={selected} aria-label={`${route.left} → ${route.right}${route.upstream_model ? ` / ${route.upstream_model}` : ''}${activitySummary ? ` · ${activitySummary}` : ''}`}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); props.onSelect(key); } }}>
+                <path className="dag-glow" d={wirePath(from, to)} markerEnd={`url(#${marker})`} />
                 <path className="dag-wire" d={wirePath(from, to)} markerEnd={`url(#${marker})`} />
                 <path className="dag-hit" d={wirePath(from, to)} onClick={e => { e.stopPropagation(); props.onSelect(key); }} onContextMenu={e => { e.preventDefault(); props.onSelect(key); setContext({ ...point(e), edge: key }); }} />
                 <text className="dag-priority" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 7}>{route.priority}</text>

@@ -51,6 +51,7 @@ New-Item -ItemType Directory -Path $destinationPath | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $destinationPath 'resources/ui') -Force | Out-Null
 
 Copy-Item -LiteralPath $shellPath -Destination (Join-Path $destinationPath 'jev-switch.exe')
+& (Join-Path $PSScriptRoot 'verify-windows-app-icon.ps1') -ExecutablePath (Join-Path $destinationPath 'jev-switch.exe')
 Copy-Item -LiteralPath $daemonPath -Destination (Join-Path $destinationPath 'jev-switch-daemon.exe')
 Copy-Item -LiteralPath $daemonPath -Destination (Join-Path $destinationPath 'resources/jev-switch-daemon.exe')
 Copy-Item -LiteralPath $uiDistPath -Destination (Join-Path $destinationPath 'resources/ui') -Recurse

@@ -355,7 +355,7 @@ export const en = {
   'settings.showStatusBar': 'Show status bar',
   'settings.showStatusBarHint': 'Show the API address, current page and page-provided status items at the bottom of the window.',
   'settings.uiScale': 'Interface scale',
-  'settings.uiScaleHint': 'Applies across this app window and is restored when you reopen it.',
+  'settings.uiScaleHint': '10–200% range; the slider moves in 5% steps and the field accepts a custom value.',
   'settings.autoHideRoutingHud': 'Auto-hide Routing canvas toolbars',
   'settings.autoHideRoutingHudHint': 'Collapse the floating controls to an icon; hover or focus to reveal them.',
   'settings.language': 'Language',

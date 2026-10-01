@@ -25,7 +25,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { useStatusBarItems } from '../../app/statusBar';
 import { getCallerToken } from '../../auth/callerSession';
 import { parseRequestActivityDetail } from './activityDetail';
-import { buildHealthRows, type HealthRow } from '../../pages/statisticsMatrix';
+import { buildAdaptiveHealthRows } from '../../pages/statisticsMatrix';
 
 type Pane = 'activity' | 'tokens' | 'mine';
 type Copy = (key: string, vars?: Record<string, string | number>) => string;
@@ -553,6 +553,7 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
   const entryOptions = [...new Set(requestDetails.map(({ detail }) => detail?.endpointId).filter((id): id is string => id !== null && id !== undefined))].sort();
   const providerOptions = [...new Set(requestDetails.map(({ detail }) => detail?.provider).filter((id): id is string => id !== null && id !== undefined))].sort();
   const rangeStart = timeFilter === 'all' ? null : Date.now() - (ACTIVITY_RANGE_HOURS[timeFilter] ?? 720) * 60 * 60 * 1000;
+  const rangeEnd = Date.now();
   const filteredEvents = requestDetails.filter(({ event, detail }) => {
     if (kindFilter !== 'all' && event.kind !== kindFilter) return false;
     if (rangeStart !== null && event.timestamp < rangeStart) return false;
@@ -586,7 +587,14 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
       </div>
       {error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{copy(callerToken ? 'access.myLoadFailed' : 'access.eventsFailed', { reason: error })}</p>}
       {!streaming && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{copy('access.streamPaused')}</p>}
-      <SystemStatusMatrix events={events} dimension={matrixDimension} onDimensionChange={setMatrixDimension} copy={copy} />
+      <SystemStatusMatrix
+        events={filteredEvents}
+        dimension={matrixDimension}
+        onDimensionChange={setMatrixDimension}
+        startMs={rangeStart ?? (events.length ? Math.min(...events.map((event) => event.timestamp)) : rangeEnd)}
+        endMs={rangeEnd}
+        copy={copy}
+      />
       <div className="flex flex-wrap items-end gap-2" aria-label={copy('access.filters')}>
         <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.endpoint')}
           <select value={entryFilter} onChange={(event) => { setEntryFilter(event.target.value); setPageIndex(0); }} className="h-9 min-w-32 border px-2" style={fieldStyle}><option value="all">{copy('access.all')}</option>{entryOptions.map((id) => <option key={id} value={id}>{id}</option>)}</select>
@@ -601,11 +609,11 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
           <select value={kindFilter} onChange={(event) => { setKindFilter(event.target.value); setPageIndex(0); }} className="h-9 border px-2" style={fieldStyle}><option value="all">{copy('access.all')}</option>{['request', 'probe', 'config_change', 'error'].map((kind) => <option key={kind} value={kind}>{eventKindLabel(kind, copy)}</option>)}</select>
         </label>
         <label className="grid gap-1 text-xs" style={{ color: pageSizeValid ? 'var(--text-muted)' : 'var(--danger)' }}>{copy('access.pageSize')}
-          <input type="number" min={1} step={1} value={pageSize} onChange={(event) => { setPageSize(event.target.value); setPageIndex(0); }} className="h-9 border px-2 text-center tabular" style={{ ...fieldStyle, width: `${Math.max(5, pageSize.length + 1)}ch`, color: pageSizeValid ? 'var(--text)' : 'var(--danger)' }} aria-invalid={!pageSizeValid} />
+          <input type="number" min={1} step={1} value={pageSize} onChange={(event) => { setPageSize(event.target.value); setPageIndex(0); }} className="h-9 border px-2 text-center tabular" style={{ ...fieldStyle, width: `${Math.max(7, pageSize.length + 2)}ch`, minWidth: '7ch', color: pageSizeValid ? 'var(--text)' : 'var(--danger)' }} aria-invalid={!pageSizeValid} />
         </label>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-sm">
+      <div className="overflow-hidden">
+        <table className="w-full table-fixed border-collapse text-left text-sm">
           <thead style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
             <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
               <th className="px-2 py-2 text-xs font-medium sm:text-sm">{copy('access.time')}</th>
@@ -620,7 +628,7 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
                 <td className="whitespace-nowrap px-2 py-2 text-xs tabular sm:text-sm" style={{ color: 'var(--text-muted)' }}>{formatDate(event.timestamp, '—')}</td>
                 <td className="hidden whitespace-nowrap px-2 py-2 sm:table-cell"><span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span></td>
                 {!callerToken && <td className="hidden px-2 py-2 font-mono text-xs lg:table-cell">{event.token_id ?? '—'}</td>}
-                <td className="max-w-xl px-2 py-2">
+                <td className="max-w-xl break-words px-2 py-2">
                   <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs sm:hidden" style={{ color: 'var(--text-muted)' }}>
                     <span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span>
                     {!callerToken && <span className="max-w-full break-all font-mono">{event.token_id ?? '—'}</span>}
@@ -647,25 +655,38 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
   );
 }
 
-function SystemStatusMatrix({ events, dimension, onDimensionChange, copy }: {
+function SystemStatusMatrix({ events, dimension, onDimensionChange, startMs, endMs, copy }: {
   events: readonly ActivityEvent[];
   dimension: 'entry' | 'provider';
   onDimensionChange: (dimension: 'entry' | 'provider') => void;
+  startMs: number;
+  endMs: number;
   copy: Copy;
 }) {
-  const rows: HealthRow[] = buildHealthRows(events, dimension, Date.now(), 90);
-  const days = rows[0]?.cells.map((cell) => cell.day) ?? [];
+  const matrixRef = useRef<HTMLDivElement>(null);
+  const [matrixWidth, setMatrixWidth] = useState(900);
+  useEffect(() => {
+    const element = matrixRef.current;
+    if (!element) return;
+    const update = () => setMatrixWidth(Math.max(240, element.clientWidth));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const matrix = buildAdaptiveHealthRows(events, dimension, startMs, endMs, matrixWidth);
+  const { rows, buckets } = matrix;
   const cellColor = (rate: number | null) => {
     if (rate === null) return 'var(--surface-hover)';
     if (rate >= 0.98) return 'color-mix(in srgb, var(--success) 45%, var(--surface))';
     if (rate >= 0.8) return 'color-mix(in srgb, var(--warning) 50%, var(--surface))';
     return 'color-mix(in srgb, var(--danger) 45%, var(--surface))';
   };
-  const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' };
+  const granularityLabel = copy(`access.granularity${matrix.granularity[0].toUpperCase()}${matrix.granularity.slice(1)}`);
   return (
-    <section className="overflow-hidden p-3 sm:p-4" style={card} aria-labelledby="system-status-title">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h3 id="system-status-title" className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('access.systemStatus')}</h3>
+    <div ref={matrixRef} className="stats-health-matrix min-w-0" aria-labelledby="system-status-title">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+        <span id="system-status-title" className="text-xs" style={{ color: 'var(--text-muted)' }}>{granularityLabel}</span>
         <div className="inline-flex border p-0.5" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)' }} role="group" aria-label={copy('access.heatmapDimension')}>
           {(['entry', 'provider'] as const).map((item) => <button key={item} type="button" aria-pressed={dimension === item} onClick={() => onDimensionChange(item)} className="min-h-8 px-2 text-xs" style={{ borderRadius: 'var(--radius)', background: dimension === item ? 'var(--accent)' : 'transparent', color: dimension === item ? '#fff' : 'var(--text-muted)' }}>{copy(item === 'entry' ? 'access.entries' : 'access.providers')}</button>)}
         </div>
@@ -678,23 +699,23 @@ function SystemStatusMatrix({ events, dimension, onDimensionChange, copy }: {
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5" style={{ background: 'var(--danger)' }} />{copy('access.unhealthy')}</span>
       </div>
       {rows.length === 0 ? <p className="py-5 text-center text-sm" style={{ color: 'var(--text-muted)' }}>{copy('access.noHeatmapData')}</p> : (
-        <div className="overflow-x-auto" role="region" aria-label={copy('access.systemStatus')} tabIndex={0}>
-          <div className="min-w-[820px] space-y-1.5">
-            <div className="grid items-end gap-1" style={{ gridTemplateColumns: `minmax(9rem, 1.4fr) repeat(${days.length}, minmax(7px, 1fr))` }}>
+        <div role="region" aria-label={copy('access.systemStatus')} tabIndex={0}>
+          <div className="space-y-1.5">
+            <div className="grid items-end gap-0.5" style={{ gridTemplateColumns: `minmax(7rem, 1.4fr) repeat(${buckets.length}, minmax(0, 1fr))` }}>
               <span className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{dimension === 'entry' ? copy('access.endpoint') : copy('access.provider')}</span>
-              {days.map((day, index) => <span key={day} className="text-center font-mono text-[9px] tabular" title={day} style={{ color: 'var(--text-subtle)' }}>{index % 10 === 0 || index === days.length - 1 ? day.slice(8) : ''}</span>)}
+              {buckets.map((bucket, index) => <span key={bucket} className="truncate text-center font-mono text-[9px] tabular" title={bucket} style={{ color: 'var(--text-subtle)' }}>{index === 0 || index === buckets.length - 1 || index % Math.max(1, Math.ceil(buckets.length / 8)) === 0 ? bucket.slice(matrix.granularity === 'day' ? 8 : 11, matrix.granularity === 'second' ? 19 : 16) : ''}</span>)}
             </div>
-            {rows.map((row) => <div key={row.id} className="grid items-center gap-1" style={{ gridTemplateColumns: `minmax(9rem, 1.4fr) repeat(${row.cells.length}, minmax(7px, 1fr))` }}>
+            {rows.map((row) => <div key={row.id} className="grid items-center gap-0.5" style={{ gridTemplateColumns: `minmax(7rem, 1.4fr) repeat(${row.cells.length}, minmax(0, 1fr))` }}>
               <span className="truncate font-mono text-xs" title={row.label} style={{ color: 'var(--text)' }}>{row.label}</span>
               {row.cells.map((cell) => {
                 const label = copy('access.heatCell', { day: cell.day, count: cell.count, success: cell.success, failure: cell.failure, rate: cell.rate === null ? copy('access.noSamples') : `${(cell.rate * 100).toFixed(0)}%` });
-                return <button key={cell.day} type="button" aria-label={label} title={label} className="h-4 min-w-0 border transition-colors focus-visible:outline focus-visible:outline-2" style={{ borderColor: cell.rate === null ? 'var(--border)' : 'transparent', borderRadius: 2, background: cellColor(cell.rate), outlineColor: 'var(--accent)' }} />;
+                return <button key={cell.day} type="button" aria-label={label} title={label} className="stats-health-cell min-w-0 border transition-colors focus-visible:outline focus-visible:outline-2" style={{ aspectRatio: '1 / 1', width: '100%', borderColor: cell.rate === null ? 'var(--border)' : 'transparent', borderRadius: 2, background: cellColor(cell.rate), outlineColor: 'var(--accent)' }} />;
               })}
             </div>)}
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
 

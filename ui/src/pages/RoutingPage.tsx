@@ -10,7 +10,7 @@ import { RouteTableForm } from '../components/routing/RouteTableForm';
 import { useToast } from '../app/feedback';
 import { useI18n } from '../i18n';
 import { useStatusBarItems } from '../app/statusBar';
-import { getAdminActivity, streamActivity } from '../api/access';
+import { streamActivity } from '../api/access';
 import { advanceRouteActivities, applyRouteActivityEvent, nextRouteActivityUpdateDelay, retainRouteActivities, type RouteActivityState } from './routingActivity';
 
 interface GraphDocument { routes: Route[]; positions: Record<string, Point> }
@@ -143,13 +143,16 @@ export function RoutingPage() {
     if (loading || loadError) return;
     const controller = new AbortController();
     let active = true;
-    void getAdminActivity(0, 1).then((page) => streamActivity({ type: 'admin' }, page.next_since, controller.signal, (event) => {
+    // Route activity events use the in-memory EventBus cursor, which is separate
+    // from durable call-log IDs. Starting from the call-log cursor can skip all
+    // live route events when an external curl request arrives after a long history.
+    void streamActivity({ type: 'admin' }, 0, controller.signal, (event) => {
       if (!active) return;
       if (event.kind !== 'route_activity') return;
       const now = Date.now();
       setActivityNow(now);
       setRouteActivities((current) => applyRouteActivityEvent(current, doc.routes, event, now));
-    })).catch(() => undefined);
+    }).catch(() => undefined);
     return () => { active = false; controller.abort(); };
   }, [doc.routes, loading, loadError]);
   useEffect(() => {

@@ -201,7 +201,20 @@ export function SettingsPage() {
         {matches('ui scale zoom interface scale 界面缩放 倍率') && <label className="grid gap-2 text-sm sm:col-span-2">
           <span className="flex items-center justify-between gap-3">
             <span>{t('settings.uiScale' as MessageKey)}</span>
-            <output className="tabular font-mono" htmlFor="settings-ui-scale">{Math.round(uiScale * 100)}%</output>
+            <span className="inline-flex items-center gap-2">
+              <input
+                type="number"
+                min={UI_SCALE_MIN_PERCENT}
+                max={UI_SCALE_MAX_PERCENT}
+                step={1}
+                value={Math.round(uiScale * 100)}
+                onChange={(event) => setUiScale(writeUiScale(Number(event.target.value) / 100))}
+                className="h-9 border px-2 text-right tabular"
+                style={{ ...fieldStyle, width: '7ch' }}
+                aria-label={t('settings.uiScale' as MessageKey)}
+              />
+              <output className="tabular font-mono" htmlFor="settings-ui-scale">%</output>
+            </span>
           </span>
           <input
             id="settings-ui-scale"

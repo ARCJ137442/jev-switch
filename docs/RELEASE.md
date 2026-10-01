@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-01，源码候选版本为 `0.6.4`，待 `v0.6.4` tag CI 完成后成为当前 Release，至少包含 Windows Standalone、Portable、MSI、NSIS、Linux/Windows CLI 和 Docker 镜像；配置稳定签名 Secrets 时再附 Android APK。Android workflow 通过尝试以 PKCS12 和 JKS 两种格式打开密钥来识别格式，避免受 keytool 本地化输出影响；PKCS12 使用 keystore password 读取私钥，JKS 使用独立 key password。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按对应候选核验记录区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-01，最新公开发行版为 `v0.6.1`；源码候选版本为 `0.6.2`。`v0.6.2`、`v0.6.3`、`v0.6.4` 是 Android 签名验证失败、未创建公开 Release 的候选 tag；本次将所有修复合并到 `v0.6.2`，延续公开版本序列，不按每次 APK 重构建递增版本。`0.6.2` 还包含统计自适应热力图、真实路由事件辉光、10%–200% UI 缩放和演练场响应式 chip。Windows Release 至少包含 Standalone、Portable、MSI、NSIS、Linux/Windows CLI 和 Docker；配置稳定签名 Secrets 时再附 Android APK。Android workflow 读取 keystore 二进制 magic bytes 区分 PKCS12/JKS，再用显式格式校验 store password 和 alias，不依赖本地化 keytool 输出；PKCS12 使用 keystore password 读取私钥，JKS 使用独立 key password。Windows 单实例按精确版本隔离，EXE/窗口/托盘使用同一 canonical 品牌图标，并由发布门禁比较 EXE 内嵌图标与品牌 ICO。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按对应候选核验记录区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 

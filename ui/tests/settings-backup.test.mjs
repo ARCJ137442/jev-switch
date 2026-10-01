@@ -28,6 +28,7 @@ test('parses a valid backup and rejects malformed or unsupported settings before
   assert.throws(() => parseSettingsBackup('{'), /invalid JSON/);
   assert.throws(() => parseSettingsBackup(JSON.stringify({ format: 'jev-switch-settings', schema_version: 99 })), /unsupported/);
   assert.throws(() => parseSettingsBackup(JSON.stringify({ ...JSON.parse(valid), app_settings: { ...appSettings, uiScale: 3 } })), /UI scale/);
+  assert.equal(parseSettingsBackup(JSON.stringify({ ...JSON.parse(valid), app_settings: { ...appSettings, uiScale: 0.1 } })).app_settings.uiScale, 0.1);
   const invalidGateway = { ...gateway, providers: { test: { kind: 'laya', base: '', models: [4], enabled: true } } };
   assert.throws(() => parseSettingsBackup(JSON.stringify({ ...JSON.parse(valid), gateway: invalidGateway })), /invalid provider/);
 });

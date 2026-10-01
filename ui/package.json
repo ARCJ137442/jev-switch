@@ -1,6 +1,6 @@
 {
   "name": "jev-switch-ui",
-  "version": "0.6.4",
+  "version": "0.6.2",
   "private": true,
   "type": "module",
   "description": "Jev-Switch MVP React UI — providers toggle + model select + test panel",

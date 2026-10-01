@@ -109,6 +109,10 @@ pub fn main() {
 
                 // 首次显示前调整，避免大窗口闪现；服务尚未就绪也要显示等待/错误页。
                 if let Some(window) = app.get_webview_window("main") {
+                    let icon = app.default_window_icon().ok_or_else(|| {
+                        std::io::Error::other("the bundled Jev-Switch window icon is missing")
+                    })?;
+                    window.set_icon(icon.clone())?;
                     if let Err(error) = window_layout::fit_initial_window(&window) {
                         eprintln!("initial window layout: {error}");
                     }
@@ -257,9 +261,10 @@ fn build_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
         });
 
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
-    }
+    let icon = app
+        .default_window_icon()
+        .expect("the bundled Jev-Switch tray icon must be present");
+    builder = builder.icon(icon.clone());
     builder.build(app)?;
     Ok(())
 }
@@ -279,6 +284,16 @@ mod tests {
         thread,
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn single_instance_identity_isolated_for_each_patch_version() {
+        let identity = tauri_plugin_single_instance::semver_instance_key(env!("CARGO_PKG_VERSION"));
+        for other_version in ["0.6.0", "0.6.1", "0.6.3", "0.6.4"] {
+            let other_identity =
+                tauri_plugin_single_instance::semver_instance_key(other_version);
+            assert_ne!(identity, other_identity, "{other_version} must not capture 0.6.2");
+        }
+    }
     use tauri::{Manager, RunEvent};
 
     fn wait_for_visibility(

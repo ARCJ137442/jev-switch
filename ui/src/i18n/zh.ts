@@ -349,7 +349,7 @@ export const zh: Record<keyof typeof en, string> = {
   'settings.showStatusBar': '显示底部状态栏',
   'settings.showStatusBarHint': '在窗口底部显示 API 地址、当前页面及页面扩展状态。',
   'settings.uiScale': '界面缩放',
-  'settings.uiScaleHint': '缩放应用窗口中的全部界面，并在下次打开时恢复。',
+  'settings.uiScaleHint': '范围 10%–200%；滑块按 5% 调整，输入框可填写自定义倍率。',
   'settings.autoHideRoutingHud': '自动隐藏路由画布工具栏',
   'settings.autoHideRoutingHudHint': '将浮动控件折叠为图标；鼠标悬停或键盘聚焦时展开。',
   'settings.language': '语言',
