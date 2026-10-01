@@ -132,7 +132,7 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**正式发行版本截至 2026-10-01：**最新公开发行版为 `v0.6.1`；本次统一候选版本为 `0.6.2`，包含统计自适应热力图、真实路由辉光、10%–200% UI 缩放和演练场响应式修订，并由同名 tag 的 CI 生成下一次 Release。`v0.6.2`-`v0.6.4` 只是未创建公开 Release 的失败签名候选；本次合并修复避免每次构建尝试递增公开版本。通用 Rust、UI、Tauri 壳、浏览器行为、Android keystore 判型、Windows 图标资源校验和单实例版本隔离已自动验证；桌面核心路径、官方 TypeSafe 调用及 Android 初步安装/调用的历史人工证据分别按记录标注。原生桌面 WebView、托盘、稳定签名 APK、Android service/tile/通知和跨硬件性能仍需人工验收。
+**正式发行版本截至 2026-10-01：**最新公开发行版为 [`v0.6.2`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.6.2)，包含统计自适应热力图、真实路由辉光、10%–200% UI 缩放和演练场响应式修订。`v0.6.2`-`v0.6.4` 中早期失败候选从未创建公开 Release；公开版本序列从 v0.6.1 直接进入 v0.6.2。通用 Rust、UI、Tauri 壳、浏览器行为、Android keystore 判型、Windows 图标资源校验和单实例版本隔离已自动验证；桌面核心路径、官方 TypeSafe 调用及 Android 初步安装/调用的历史人工证据分别按记录标注。原生桌面 WebView、托盘、稳定签名 APK、Android service/tile/通知和跨硬件性能仍需人工验收。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 

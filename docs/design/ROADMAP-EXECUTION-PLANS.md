@@ -1,6 +1,6 @@
 # Roadmap Execution Plans
 
-> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。v0.6.2 候选已完成 CLI Phase 1、JSON 设置备份、真实路由 activity 辉光、HUD 自动隐藏、官网图标化、LAN opt-in 与网关启停，并修订 Android PKCS12/JKS 签名和 Windows 品牌图标发布门禁；v0.6.2-v0.6.4 都是未发布的失败 CI 候选，公开 Release 仍为 v0.6.1。维护者已人工确认便携/Standalone 桌面核心路径和官方 TypeSafe 调用。稳定签名 Android APK、安装、原生 service/tile/通知和全链路 gateway/SQLite 冷暖基线仍待完成。
+> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.6.2` 已包含 CLI Phase 1、JSON 设置备份、真实路由 activity 辉光、HUD 自动隐藏、统计自适应热力图、10%–200% UI 缩放、演练场响应式 chip、官网图标化、LAN opt-in 与网关启停，并通过 Android PKCS12/JKS 签名和 Windows 品牌图标发布门禁。早期失败候选从未创建公开 Release；稳定签名 APK 已随 v0.6.2 发布。Android 原生 service/tile/通知和全链路 gateway/SQLite 冷暖基线仍待人工确认。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 > **AI 披露**：本文由 AI 协助整理，执行顺序和最终范围由项目维护者确认。

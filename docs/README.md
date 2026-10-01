@@ -1,6 +1,6 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前源码候选版为 `v0.6.2`；Release 至少附 Windows Standalone/Portable、CLI 与 Docker，配置稳定签名 Secrets 后再附 Android arm64 APK。Android service/tile/通知仍按对应候选核验记录保留设备验收边界。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前公开版为 `v0.6.2`；Release 附 Windows Standalone/Portable、CLI、Docker 与稳定签名 Android arm64 APK。Android service/tile/通知仍按候选核验记录保留设备验收边界。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-30。
 
@@ -11,7 +11,7 @@
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **历史发布快照（截至 2026-09-27）**：当时最新正式版为 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，包含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。对应 Release gate 的 Rust、UI、Tauri 与版本检查通过；验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。用户提供的 Tauri 截图整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；这些材料不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。当前版本与能力以本文后续的 2026-09-30 产品基线、[发布手册](RELEASE.md)及对应核验记录为准。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段（2026-10-01）**：源码候选版为 v0.6.2；v0.6.2 的便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、统计自适应热力图/分页、JSON 设置备份、真实路由 activity/辉光、10%–200% UI 缩放、演练场响应式 chip、Android arm64 构建和 CI 已完成。MSI/NSIS 原生交互、稳定签名 Android 安装/真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应发布候选核验记录。
+> **当前产品基线与维护阶段（2026-10-01）**：公开版为 v0.6.2；Release 已附便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、统计自适应热力图/分页、JSON 设置备份、真实路由 activity/辉光、10%–200% UI 缩放、演练场响应式 chip、Android arm64 构建和稳定签名 APK。MSI/NSIS 原生人工交互、Android 真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
 
 ## 核心定位（一句话）
 
@@ -40,7 +40,7 @@
 | [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.6.2 通用反馈已实现；平台人工项仍待推进 |
 | [verification/v0.6.0-release-candidate-2026-10-01.md](verification/v0.6.0-release-candidate-2026-10-01.md) | v0.6.0 功能变更、自动门禁、Android 构建和人工基线 | 历史版本记录；当前补丁版本见 v0.6.2 核验记录 |
 | [verification/v0.6.1-release-candidate-2026-10-01.md](verification/v0.6.1-release-candidate-2026-10-01.md) | v0.6.1 发布、可选 Android 签名和 Windows Standalone 保证 | 历史补丁发布记录；Windows Standalone/CLI/Docker 发布成功，Android APK 未附 |
-| [verification/v0.6.2-release-candidate-2026-10-01.md](verification/v0.6.2-release-candidate-2026-10-01.md) | Windows 品牌图标/旧托盘进程隔离与 Android keystore 识别修复 | 待 v0.6.2 Release CI 完成后记录 APK 签名和资产哈希 |
+| [verification/v0.6.2-release-candidate-2026-10-01.md](verification/v0.6.2-release-candidate-2026-10-01.md) | Windows 品牌图标/旧托盘进程隔离与 Android keystore 识别修复 | v0.6.2 Release CI、资产哈希、签名指纹已记录 |
 | [verification/v0.6.2-ui-feedback-2026-10-01.md](verification/v0.6.2-ui-feedback-2026-10-01.md) | 统计自适应热力图、路由真实事件辉光、全平台缩放和演练场响应式修订 | 通用前端已自动/浏览器验证；原生平台待人工 |
 | [verification/site-v0.6.0-2026-10-01.md](verification/site-v0.6.0-2026-10-01.md) | v0.6.0 GitHub Pages 图标、主题、语言和响应式 DOM 核验 | DOM/无溢出通过；正式控制台截图仍待维护者翻新 |
 | [verification/android-build-stability-2026-10-01.md](verification/android-build-stability-2026-10-01.md) | Jev 图标源、Android Release 签名、版本码、CI 集成与旧 debug APK 升级边界 | 本地图标与 properties 生成通过；稳定密钥 Secrets 和 Release APK 待配置/验证 |
