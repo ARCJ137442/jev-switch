@@ -28,7 +28,7 @@
 | [verification/standalone-lmstudio-e2e-2026-09-29.md](verification/standalone-lmstudio-e2e-2026-09-29.md) | 较早 Standalone 候选的冷启动、缓存、五页 WebView 与 LM Studio 本地 SystemOne UI 路由 trace | 该记录只属于文档顶部候选哈希；真实系统托盘点击和第二次双击聚焦仍待人工确认 |
 | [verification/typesafe-model-discovery-2026-09-29.md](verification/typesafe-model-discovery-2026-09-29.md) | TypeSafe `/v1/models` 实测与 daemon/UI 自动模型发现 | 管理时目录/鉴权检查；不替代推理调用 |
 | [verification/runtime-telemetry-2026-09-30.md](verification/runtime-telemetry-2026-09-30.md) | Dashboard 当前 daemon 会话遥测、流量曲线、adapter attempt latency 与资源卡的实现和验证边界 | Phase 1/2 已落地；Tauri WebView 精确资源仍未提供 |
-| [verification/openrouter-adapter-2026-09-30.md](verification/openrouter-adapter-2026-09-30.md) | OpenRouter 官方 OpenAPI 核对、adapter 实现、模型目录和 WireMock 验证边界 | 已随 v0.5.0 发布；真实 key/live call 未验证 |
+| [verification/openrouter-adapter-2026-09-30.md](verification/openrouter-adapter-2026-09-30.md) | OpenRouter 官方 OpenAPI 核对、adapter 实现、模型目录和 WireMock 验证边界 | 已随 v0.6.0 发布；真实 key/live call 未验证 |
 | [verification/system-theme-2026-09-30.md](verification/system-theme-2026-09-30.md) | light/dark/system 首帧解析、系统切换和主题控件回归 | 源码与 UI 门禁通过；原生系统主题截图仍待验收 |
 | [verification/v0.2.0-human-acceptance-matrix-2026-09-30.md](verification/v0.2.0-human-acceptance-matrix-2026-09-30.md) | v0.2.0 Standalone、主题、OpenRouter、Pages、命令面板、路由动效、遥测和关闭性能的人类验收矩阵 | **v0.2.0 历史发布验收范围**；不得当作 v0.5.0 当前清单 |
 | [verification/windows-release-candidate-2026-09-29.md](verification/windows-release-candidate-2026-09-29.md) | v0.1.0/v0.2.0 Windows MSI、NSIS、Portable 与 Standalone 候选哈希和点时验证 | 历史候选证据；当前资产见 v0.5.0 Release |
@@ -37,8 +37,8 @@
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线、已发布体验与路线图用户旅程 | 前六节为历史构想；v0.2 旅程标已发布能力与边界；v0.3 旅程含 CLI/性能首轮体验 |
 | **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收边界** | **当前产品边界；v0.5.0 通用代码已自动验证；原生人工边界见发布记录** |
 | [design/USER-FEEDBACK-ITERATION-PLAN.md](design/USER-FEEDBACK-ITERATION-PLAN.md) | 本轮用户反馈的实施顺序、UI 原则、数据/安全边界和验收门槛 | 当前迭代入口；各 Phase 不代表 Release 承诺 |
-| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.5.0 已实现通用部分；品牌/霓虹/Android 原生项仍待推进 |
-| [verification/v0.5.0-release-candidate-2026-10-01.md](verification/v0.5.0-release-candidate-2026-10-01.md) | v0.5.0 功能变更、自动门禁、人工基线与验收顺序 | Release/Android 构建完成；桌面/Android 原生人工项待确认 |
+| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.6.0 候选已实现 JSON 备份、真实辉光、HUD、Android keepalive 源码和官网图标；平台人工项仍待推进 |
+| [verification/v0.6.0-release-candidate-2026-10-01.md](verification/v0.6.0-release-candidate-2026-10-01.md) | v0.6.0 功能变更、自动门禁、Android 构建和人工基线 | Windows/CLI/Docker Release 已发布；稳定签名 Android 因 Secrets 缺失未附，桌面/Android 原生人工项待确认 |
 | [verification/android-build-stability-2026-10-01.md](verification/android-build-stability-2026-10-01.md) | Jev 图标源、Android Release 签名、版本码、CI 集成与旧 debug APK 升级边界 | 本地图标与 properties 生成通过；稳定密钥 Secrets 和 Release APK 待配置/验证 |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
 | [design/SERVICE-ENDPOINT-CONFIG-PLAN.md](design/SERVICE-ENDPOINT-CONFIG-PLAN.md) | 对外入口 CRUD、持久化、实时生效及策略专项 | 历史专项设计；当前实现状态以主计划和对应版本验收记录为准 |
@@ -71,7 +71,7 @@
 | `design/ICON-SYSTEM-DESIGN.md` | 初版图标系统方案（作者 Claude Opus 4.8） | 原稿状态为历史；当前 Lucide 应用范围和未覆盖页面见 UI 图标/性能核验 |
 | `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 设计规范参考；原稿阶段状态已过期，当前实现/验收以主计划为准 |
 | `design/I18N-DESIGN.md` | **国际化与可扩展语言列表**（作者 Claude Opus 4.8；GPT-6 Luna 实施记录） | 2026-09-24 状态快照；当前已提供语言见 README，新增语言方向见 ROADMAP |
-| `RELEASE.md` | **发版手册**（版本门禁 / 流水线结构 / Windows、CLI、Docker 与 Android 产物） | `v0.5.0` 已发布 Windows、Linux/Windows CLI、Docker 与 Android 实验性资产；桌面/Android 原生人工边界见核验记录 |
+| `RELEASE.md` | **发版手册**（版本门禁 / 流水线结构 / Windows、CLI、Docker 与 Android 产物） | `v0.6.0` 已发布 Windows、Linux/Windows CLI、Docker；稳定签名 Android 因 Secrets 缺失未附，桌面/Android 原生人工边界见核验记录 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 用户提供的 v0.1.0 历史 UI 图册，不替代当前版截图 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
 | [verification/termux-build-deployment-2026-09-27.md](verification/termux-build-deployment-2026-09-27.md) | **Termux / Android arm64 构建与 daemon 烟测历史** | 点时源码固定到 `f1670e7`；后续 CLI 已实现，见 CLI 文档 |
