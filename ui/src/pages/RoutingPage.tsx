@@ -14,6 +14,10 @@ import { streamActivity } from '../api/access';
 import { advanceRouteActivities, applyRouteActivityEvent, nextRouteActivityUpdateDelay, retainRouteActivities, type RouteActivityState } from './routingActivity';
 
 interface GraphDocument { routes: Route[]; positions: Record<string, Point> }
+// Keep route activity in the in-memory SPA session so switching pages does not
+// replay completed responses as fresh glow pulses. Nothing is written to disk.
+let routeActivityCursor = 0;
+let routeActivityCache: RouteActivityState = {};
 const serialize = routeDocumentSignature;
 const layoutKey = () => `jev-routing-layout-v1:${getBase() || location.origin}`;
 const draftKey = () => `jev-routing-draft-v1:${getBase() || location.origin}`;
@@ -54,7 +58,7 @@ export function RoutingPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
-  const [routeActivities, setRouteActivities] = useState<RouteActivityState>({});
+  const [routeActivities, setRouteActivities] = useState<RouteActivityState>(() => routeActivityCache);
   const [activityNow, setActivityNow] = useState(() => Date.now());
   const alive = useRef(true);
   const loadGeneration = useRef(0);
@@ -69,7 +73,11 @@ export function RoutingPage() {
   useStatusBarItems(statusItems);
 
   useEffect(() => {
-    setRouteActivities((current) => retainRouteActivities(current, doc.routes));
+    setRouteActivities((current) => {
+      const next = retainRouteActivities(current, doc.routes);
+      routeActivityCache = next;
+      return next;
+    });
   }, [doc.routes]);
 
   useEffect(() => {
@@ -78,7 +86,11 @@ export function RoutingPage() {
     const timer = window.setTimeout(() => {
       const now = Date.now();
       setActivityNow(now);
-      setRouteActivities((current) => advanceRouteActivities(current, now));
+      setRouteActivities((current) => {
+        const next = advanceRouteActivities(current, now);
+        routeActivityCache = next;
+        return next;
+      });
     }, delay);
     return () => window.clearTimeout(timer);
   }, [routeActivities, activityNow]);
@@ -146,12 +158,19 @@ export function RoutingPage() {
     // Route activity events use the in-memory EventBus cursor, which is separate
     // from durable call-log IDs. Starting from the call-log cursor can skip all
     // live route events when an external curl request arrives after a long history.
-    void streamActivity({ type: 'admin' }, 0, controller.signal, (event) => {
+    void streamActivity({ type: 'admin' }, routeActivityCursor, controller.signal, (event) => {
       if (!active) return;
       if (event.kind !== 'route_activity') return;
+      const eventId = typeof event.id === 'number' ? event.id : Number(event.id ?? 0);
+      if (Number.isFinite(eventId) && eventId <= routeActivityCursor) return;
+      if (Number.isFinite(eventId)) routeActivityCursor = eventId;
       const now = Date.now();
       setActivityNow(now);
-      setRouteActivities((current) => applyRouteActivityEvent(current, doc.routes, event, now));
+      setRouteActivities((current) => {
+        const next = applyRouteActivityEvent(current, doc.routes, event, now);
+        routeActivityCache = next;
+        return next;
+      });
     }).catch(() => undefined);
     return () => { active = false; controller.abort(); };
   }, [doc.routes, loading, loadError]);

@@ -36,6 +36,8 @@ export interface EdgeActivityVisual {
   successRate: number | null;
 }
 
+const ROUTE_ACTIVITY_COLOR_FADE_MS = 8 * 1000;
+
 interface RouteActivityDetail {
   phase?: unknown;
   activity_id?: unknown;
@@ -186,13 +188,19 @@ export function edgeActivityVisual(state: EdgeActivityState | undefined, now: nu
   const lineLevel = Math.max(pulseLevel, inFlightLevel);
   const glowLevel = Math.max(0, ...state.glows.filter((at) => now - at < ROUTE_ACTIVITY_GLOW_MS).map((at) => Math.exp(-(now - at) / 1200)));
   const outcomes = state.outcomes.filter((sample) => now - sample.at <= ROUTE_ACTIVITY_WINDOW_MS).slice(-ROUTE_ACTIVITY_RESULT_LIMIT);
-  const successRate = outcomes.length ? outcomes.filter((sample) => sample.success).length / outcomes.length : null;
+  const outcomeWeights = outcomes.map((sample) => ({
+    sample,
+    weight: Math.exp(-Math.max(0, now - sample.at) / ROUTE_ACTIVITY_COLOR_FADE_MS),
+  }));
+  const totalOutcomeWeight = outcomeWeights.reduce((sum, item) => sum + item.weight, 0);
+  const successWeight = outcomeWeights.reduce((sum, item) => sum + (item.sample.success ? item.weight : 0), 0);
+  const successRate = totalOutcomeWeight > 0.001 ? successWeight / totalOutcomeWeight : null;
   return {
     activeCount,
     lineLevel,
     glowLevel,
     hue: successRate === null ? 0 : 120 * successRate,
-    saturation: outcomes.length ? Math.min(86, 24 + outcomes.length * 0.6) : 0,
+    saturation: totalOutcomeWeight > 0.001 ? Math.min(86, totalOutcomeWeight * 58) : 0,
     outcomeCount: outcomes.length,
     successRate,
   };

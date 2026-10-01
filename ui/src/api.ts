@@ -26,6 +26,7 @@ import type { Question } from './generated/Question';
 import type { UpstreamCapabilityEntry } from './generated/UpstreamCapabilityEntry';
 import type { Usage } from './generated/Usage';
 import { getCallerToken as getMemoryCallerToken } from './auth/callerSession';
+import { isTauri } from '@tauri-apps/api/core';
 
 export type {
   Answer,
@@ -57,9 +58,16 @@ const DEFAULT_BASE = BASE;
 export function getBase(): string {
   if (typeof window !== 'undefined') {
     const fromGlobal = (window as unknown as { __JEV_BASE__?: string }).__JEV_BASE__;
+    const saved = readApiBasePreference();
+    // Android Tauri owns the embedded daemon and its WebView origin is not the
+    // daemon HTTP origin. Keep the UI on the local backend unless the user has
+    // explicitly configured another address.
+    if (isTauri() && /Android/i.test(navigator.userAgent) && !fromGlobal && !saved) {
+      return DEFAULT_BASE;
+    }
     // 正式构建始终随托管源走，不能以11435端口猜测是否由daemon提供。
     // Vite开发环境仍默认指向本机daemon；显式运行时override优先。
-    return resolveApiBase(window.location.href, Boolean(import.meta.env?.DEV), fromGlobal ?? readApiBasePreference(), DEFAULT_BASE);
+    return resolveApiBase(window.location.href, Boolean(import.meta.env?.DEV), fromGlobal ?? saved, DEFAULT_BASE);
   }
   return DEFAULT_BASE;
 }

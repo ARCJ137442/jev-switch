@@ -15,6 +15,7 @@ import { readAutoProviderProbe, readRoutingHudAutoHide, readShowStatusBar, readU
 import { createSettingsBackup, parseSettingsBackup } from '../settings/backup';
 import { getAndroidDebugLogStatus, isAndroidTauriRuntime, setAndroidDebugLog, type AndroidDebugLogStatus } from '../api/androidDebug';
 import { getAndroidKeepaliveNotificationStatus, getAndroidNotificationPermissionState, requestAndroidNotificationPermission, setAndroidKeepaliveNotification } from '../api/androidGateway';
+import { getGatewayServiceStatus } from '../api/gatewayControl';
 import pkg from '../../package.json';
 
 const fieldClass = 'min-h-10 border px-3 text-sm';
@@ -58,6 +59,14 @@ export function SettingsPage() {
     });
     fetchHealth().then((result) => { if (alive) setHealth(result); }).catch(() => undefined);
     if (isAndroidTauriRuntime()) {
+      getGatewayServiceStatus().then((gateway) => {
+        if (!alive || !gateway?.bind || readApiBasePreference()) return;
+        const port = gateway.bind.match(/:(\d+)$/)?.[1] ?? '11435';
+        const localBase = `http://127.0.0.1:${port}`;
+        saveApiBasePreference(localBase);
+        setApiBase(localBase);
+        window.dispatchEvent(new Event('jev-api-base-change'));
+      }).catch(() => undefined);
       getAndroidDebugLogStatus().then((result) => { if (alive) setDebugLog(result); }).catch(() => undefined);
       getAndroidKeepaliveNotificationStatus().then((result) => { if (alive) setKeepaliveNotificationEnabled(result.enabled); }).catch(() => undefined);
       getAndroidNotificationPermissionState().then((result) => { if (alive) setNotificationPermission(result); }).catch(() => undefined);

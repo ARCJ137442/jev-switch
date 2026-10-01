@@ -410,6 +410,26 @@ function OneTimeSecret({ secret, copy, onClose }: { secret: string; copy: Copy; 
   );
 }
 
+type ActivityFilterMemory = {
+  pageSize: string;
+  pageIndex: number;
+  entryFilter: string;
+  providerFilter: string;
+  timeFilter: string;
+  kindFilter: string;
+  matrixDimension: 'entry' | 'provider';
+};
+
+const activityFilterMemory: ActivityFilterMemory = {
+  pageSize: '50',
+  pageIndex: 0,
+  entryFilter: 'all',
+  providerFilter: 'all',
+  timeFilter: '30d',
+  kindFilter: 'all',
+  matrixDimension: 'entry',
+};
+
 function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy }) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const eventsRef = useRef<ActivityEvent[]>([]);
@@ -419,13 +439,16 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
   const [refreshing, setRefreshing] = useState(false);
   const [olderAvailable, setOlderAvailable] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [pageSize, setPageSize] = useState('50');
-  const [pageIndex, setPageIndex] = useState(0);
-  const [entryFilter, setEntryFilter] = useState('all');
-  const [providerFilter, setProviderFilter] = useState('all');
-  const [timeFilter, setTimeFilter] = useState('30d');
-  const [kindFilter, setKindFilter] = useState('all');
-  const [matrixDimension, setMatrixDimension] = useState<'entry' | 'provider'>('entry');
+  const [pageSize, setPageSize] = useState(() => activityFilterMemory.pageSize);
+  const [pageIndex, setPageIndex] = useState(() => activityFilterMemory.pageIndex);
+  const [entryFilter, setEntryFilter] = useState(() => activityFilterMemory.entryFilter);
+  const [providerFilter, setProviderFilter] = useState(() => activityFilterMemory.providerFilter);
+  const [timeFilter, setTimeFilter] = useState(() => activityFilterMemory.timeFilter);
+  const [kindFilter, setKindFilter] = useState(() => activityFilterMemory.kindFilter);
+  const [matrixDimension, setMatrixDimension] = useState<'entry' | 'provider'>(() => activityFilterMemory.matrixDimension);
+  useEffect(() => {
+    Object.assign(activityFilterMemory, { pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension });
+  }, [pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension]);
   const statusItems = useMemo(() => [{ id: 'activity-count', label: copy('access.loadedCount', { count: events.length }) }], [copy, events.length]);
   useStatusBarItems(statusItems);
   const cursorRef = useRef(0);

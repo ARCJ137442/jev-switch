@@ -1,7 +1,8 @@
 //! Android 本机网关生命周期。
 //!
-//! Android 不使用 Windows sidecar：Tauri 进程在用户明确启动后装配 daemon library
-//! 与 ListenSupervisor。UI 可以重建，运行时句柄留在应用状态里；默认安装状态永远是关闭。
+//! Android 不使用 Windows sidecar：Tauri 进程直接持有 daemon library
+//! 与 ListenSupervisor。UI 可以重建，运行时句柄留在应用状态里；首次打开默认启动，
+//! 只有用户明确停止后才在下一次打开时保持关闭。
 
 use std::{
     net::SocketAddr,
@@ -62,9 +63,12 @@ pub struct AndroidGatewayState {
 
 impl AndroidGatewayState {
     pub fn new(config_path: PathBuf, desired_state_path: PathBuf, keepalive_notification_state_path: PathBuf) -> Self {
+        // Android is a self-contained gateway app: a fresh install starts its
+        // embedded backend by default. An explicit stopped marker is the only
+        // state that suppresses restoration on the next launch.
         let desired_running = std::fs::read_to_string(&desired_state_path)
-            .ok()
-            .is_some_and(|value| value.trim() == "running");
+            .map(|value| value.trim() != "stopped")
+            .unwrap_or(true);
         let debug_state_path = desired_state_path.with_file_name("debug-logging.state");
         let debug_log_path = desired_state_path.with_file_name("jev-switch-debug.log");
         let debug_logging = std::fs::read_to_string(&debug_state_path)
@@ -170,8 +174,7 @@ impl AndroidGatewayState {
 
         let mut config = Config::load(&self.config_path)
             .map_err(|error| format!("load Android gateway config failed: {error}"))?;
-        // A user-initiated service start activates model calls for this process. The
-        // Android default remains stopped until start() is explicitly requested.
+        // A user-initiated or restored service start activates model calls for this process.
         config.gateway_enabled = Some(true);
         let mode = config
             .effective_mode()
@@ -368,7 +371,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn desired_state_defaults_to_stopped_and_round_trips() {
+    fn desired_state_defaults_to_running_and_round_trips() {
         let root = std::env::temp_dir().join(format!("jev-android-state-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&root);
         let config = root.join("providers.toml");
@@ -376,7 +379,7 @@ mod tests {
         std::fs::write(&config, "").unwrap();
         let keepalive = root.join("keepalive-notification.state");
         let state = AndroidGatewayState::new(config, desired.clone(), keepalive.clone());
-        assert!(!state.desired_running.load(Ordering::SeqCst));
+        assert!(state.desired_running.load(Ordering::SeqCst));
         assert!(state.keepalive_notification_status().enabled, "notifications default on");
         state.set_keepalive_notification(false).unwrap();
         assert!(!AndroidGatewayState::new(root.join("providers.toml"), desired.clone(), keepalive.clone()).keepalive_notification_status().enabled);

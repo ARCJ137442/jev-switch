@@ -80,9 +80,9 @@ pub fn main() {
                     desired_state_path,
                     keepalive_state_path,
                 );
-                // A user who explicitly left the gateway running gets a best-effort
-                // process restoration. First install remains stopped because the
-                // desired-state marker is created only after an explicit start.
+                // Android owns the embedded daemon. Fresh install and a previous
+                // running state both restore the local backend before the UI is usable;
+                // only an explicit stopped marker keeps it off.
                 let running = if android_state.wants_running() {
                     match android_state.start() {
                         Ok(status) => status.running,

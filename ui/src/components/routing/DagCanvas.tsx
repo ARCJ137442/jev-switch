@@ -207,7 +207,7 @@ export function DagCanvas(props: Props) {
                 style={activityStyle}
                 role="button" tabIndex={0} aria-pressed={selected} aria-label={`${route.left} → ${route.right}${route.upstream_model ? ` / ${route.upstream_model}` : ''}${activitySummary ? ` · ${activitySummary}` : ''}`}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); props.onSelect(key); } }}>
-                <path className="dag-glow" d={wirePath(from, to)} markerEnd={`url(#${marker})`} />
+                <path className="dag-glow" d={wirePath(from, to)} />
                 <path className="dag-wire" d={wirePath(from, to)} markerEnd={`url(#${marker})`} />
                 <path className="dag-hit" d={wirePath(from, to)} onClick={e => { e.stopPropagation(); props.onSelect(key); }} onContextMenu={e => { e.preventDefault(); props.onSelect(key); setContext({ ...point(e), edge: key }); }} />
                 <text className="dag-priority" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 7}>{route.priority}</text>
