@@ -1972,7 +1972,7 @@ dependencies = [
 
 [[package]]
 name = "jev-adapters"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "async-trait",
  "jev-core",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "jev-core"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "async-trait",
  "jev-protocol",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "jev-protocol"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2004,7 +2004,7 @@ dependencies = [
 
 [[package]]
 name = "jev-switch-daemon"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2032,7 +2032,7 @@ dependencies = [
 
 [[package]]
 name = "jev-switch-shell"
-version = "0.6.3"
+version = "0.6.4"
 dependencies = [
  "jev-switch-daemon",
  "serde",
