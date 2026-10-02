@@ -62,6 +62,10 @@ export async function getAndroidNotificationPermissionState(): Promise<AndroidNo
   return normalizeNotificationPermissionState(result?.state);
 }
 
+export function getAndroidForegroundServiceActive(): Promise<boolean> {
+  return invoke<boolean>('android_foreground_service_active');
+}
+
 export async function requestAndroidNotificationPermission(): Promise<AndroidNotificationPermissionState> {
   return normalizeNotificationPermissionState(await invoke<string>('android_request_notification_permission'));
 }

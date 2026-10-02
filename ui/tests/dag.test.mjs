@@ -31,13 +31,29 @@ test('snap resolves correct model port inside radius without requiring a DOM hit
   assert.equal(nearestPort(ports, target, 'output', 'entry'), null, 'direction is enforced');
 });
 
-test('provider positions stay stable across row order and reconnecting to another account', () => {
+test('layout is independent of route row order, and saved account positions survive reconnects', () => {
   const entries = [{ id: 'entry', enabled: true }];
   const providers = [{ id: 'personal', enabled: true, models: ['M1'] }, { id: 'team', enabled: true, models: ['M1'] }];
   const routes = [route('entry', 'alias'), route('alias', 'personal', 'M1'), route('entry', 'team', 'M1')];
   const positions = rows => Object.fromEntries(buildDag(rows, entries, providers).map(n => [n.id, [n.x, n.y]]));
   assert.deepEqual(positions(routes), positions([...routes].reverse()));
-  assert.deepEqual(positions(routes), positions([routes[0], { ...routes[1], right: 'team' }, routes[2]]));
+  const saved = { personal: { x: 900, y: 120 }, team: { x: 900, y: 420 } };
+  const reconnected = buildDag([routes[0], { ...routes[1], right: 'team' }, routes[2]], entries, providers, saved);
+  for (const node of reconnected.filter(node => node.kind === 'provider')) assert.deepEqual({ x: node.x, y: node.y }, saved[node.id]);
+});
+
+test('Sugiyama layout separates variable-height cards and leaves room for long-hop edges', () => {
+  const routes = [route('entry', 'short'), route('entry', 'long'), route('short', 'middle'), route('middle', 'account', 'M4'), route('long', 'account', 'M1')];
+  const providers = [{ id: 'account', enabled: true, models: ['M1', 'M2', 'M3', 'M4'] }];
+  const nodes = buildDag(routes, [{ id: 'entry', enabled: true }], providers);
+  const byId = Object.fromEntries(nodes.map(node => [node.id, node]));
+  for (const edge of routes) assert(byId[edge.left].x + byId[edge.left].width < byId[edge.right].x);
+  for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+    const a = nodes[i], b = nodes[j];
+    assert(a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y,
+      `${a.id} and ${b.id} must not overlap`);
+  }
+  assert(byId.account.height > byId.entry.height);
 });
 
 test('history restores every edge attribute and card position after reconnect/delete', () => {

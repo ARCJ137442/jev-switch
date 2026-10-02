@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Radar, RefreshCw, Settings2, XCircle } from 'lucide-react';
+import { copyText } from '../../api/nativeTransfer';
 import {
   createCallerToken,
   getAdminActivity,
@@ -24,7 +25,7 @@ import { useToast } from '../../app/feedback';
 import { useAuth } from '../../auth/AuthContext';
 import { useStatusBarItems } from '../../app/statusBar';
 import { getCallerToken } from '../../auth/callerSession';
-import { parseRequestActivityDetail } from './activityDetail';
+import { activityRows, matchesActivityProvider, parseRequestActivityDetail, type ActivityPerspective } from './activityDetail';
 import { buildAdaptiveHealthRows } from '../../pages/statisticsMatrix';
 
 type Pane = 'activity' | 'tokens' | 'mine';
@@ -128,6 +129,29 @@ function EventDetails({ event, copy }: { event: ActivityEvent; copy: Copy }) {
         <span style={{ color: 'var(--text-muted)' }}>{copy('access.costValue', { value: cost })}</span>
       </div>
       {rawDisclosure}
+    </div>
+  );
+}
+
+function ProviderAttemptDetails({ event, attempt, copy }: { event: ActivityEvent; attempt: NonNullable<ReturnType<typeof activityRows>[number]['attempt']>; copy: Copy }) {
+  const parent = parseRequestActivityDetail(event.kind, event.detail);
+  const succeeded = attempt.outcome === 'succeeded';
+  const status = attempt.status === null ? copy(succeeded ? 'access.attemptSucceeded' : attempt.outcome === 'cancelled' ? 'access.attemptCancelled' : 'access.attemptFailed') : `HTTP ${attempt.status}`;
+  return (
+    <div className="min-w-48 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <strong>{attempt.provider} / {attempt.upstreamModel ?? '—'}</strong>
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" style={{ color: succeeded ? 'var(--success)' : 'var(--danger)', background: succeeded ? 'var(--success-bg)' : 'var(--danger-bg)' }}>
+          {succeeded ? <CheckCircle2 size={13} aria-hidden="true" /> : <XCircle size={13} aria-hidden="true" />}{status}
+        </span>
+        <span className="tabular text-xs" style={{ color: 'var(--text-muted)' }}>{attempt.latencyMs === null ? '—' : `${attempt.latencyMs} ms`}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <span>{copy('access.endpoint')}: {parent?.endpointId ?? '—'}</span>
+        {parent?.requestId && <span>{copy('access.requestId')}: <code>{parent.requestId}</code></span>}
+        {attempt.attempt !== null && <span>{copy('access.attemptNumber', { number: attempt.attempt })}</span>}
+        {attempt.retryDecision && <span>{attempt.retryDecision}</span>}
+      </div>
     </div>
   );
 }
@@ -397,7 +421,7 @@ function OneTimeSecret({ secret, copy, onClose }: { secret: string; copy: Copy; 
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <button type="button" onClick={async () => {
           try {
-            await navigator.clipboard.writeText(secret);
+            await copyText(secret);
             setCopied(true);
             toast('ok', copy('access.copied'));
           } catch {
@@ -411,6 +435,7 @@ function OneTimeSecret({ secret, copy, onClose }: { secret: string; copy: Copy; 
 }
 
 type ActivityFilterMemory = {
+  perspective: ActivityPerspective;
   pageSize: string;
   pageIndex: number;
   entryFilter: string;
@@ -421,6 +446,7 @@ type ActivityFilterMemory = {
 };
 
 const activityFilterMemory: ActivityFilterMemory = {
+  perspective: 'entry',
   pageSize: '50',
   pageIndex: 0,
   entryFilter: 'all',
@@ -431,6 +457,7 @@ const activityFilterMemory: ActivityFilterMemory = {
 };
 
 function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy }) {
+  const [perspective, setPerspective] = useState<ActivityPerspective>(() => activityFilterMemory.perspective);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const eventsRef = useRef<ActivityEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -447,8 +474,8 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
   const [kindFilter, setKindFilter] = useState(() => activityFilterMemory.kindFilter);
   const [matrixDimension, setMatrixDimension] = useState<'entry' | 'provider'>(() => activityFilterMemory.matrixDimension);
   useEffect(() => {
-    Object.assign(activityFilterMemory, { pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension });
-  }, [pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension]);
+    Object.assign(activityFilterMemory, { perspective, pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension });
+  }, [perspective, pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension]);
   const statusItems = useMemo(() => [{ id: 'activity-count', label: copy('access.loadedCount', { count: events.length }) }], [copy, events.length]);
   useStatusBarItems(statusItems);
   const cursorRef = useRef(0);
@@ -574,24 +601,25 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
 
   const requestDetails = events.map((event) => ({ event, detail: parseRequestActivityDetail(event.kind, event.detail) }));
   const entryOptions = [...new Set(requestDetails.map(({ detail }) => detail?.endpointId).filter((id): id is string => id !== null && id !== undefined))].sort();
-  const providerOptions = [...new Set(requestDetails.map(({ detail }) => detail?.provider).filter((id): id is string => id !== null && id !== undefined))].sort();
+  const providerOptions = [...new Set(requestDetails.flatMap(({ detail }) => [detail?.provider, ...(detail?.attempts.map((attempt) => attempt.provider) ?? [])]).filter((id): id is string => id !== null && id !== undefined))].sort();
   const rangeStart = timeFilter === 'all' ? null : Date.now() - (ACTIVITY_RANGE_HOURS[timeFilter] ?? 720) * 60 * 60 * 1000;
   const rangeEnd = Date.now();
   const filteredEvents = requestDetails.filter(({ event, detail }) => {
     if (kindFilter !== 'all' && event.kind !== kindFilter) return false;
     if (rangeStart !== null && event.timestamp < rangeStart) return false;
     if (entryFilter !== 'all' && detail?.endpointId !== entryFilter) return false;
-    if (providerFilter !== 'all' && detail?.provider !== providerFilter) return false;
+    if (!matchesActivityProvider(event, providerFilter, perspective)) return false;
     return true;
   }).map(({ event }) => event);
+  const filteredRows = activityRows(filteredEvents, perspective).filter((row) => providerFilter === 'all' || row.attempt === null || row.attempt.provider === providerFilter);
   const parsedPageSize = Number(pageSize);
   const pageSizeValid = Number.isSafeInteger(parsedPageSize) && parsedPageSize > 0;
   const pageSizeNumber = pageSizeValid ? parsedPageSize : 50;
-  const pageCount = Math.max(1, Math.ceil(filteredEvents.length / pageSizeNumber));
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSizeNumber));
   const safePageIndex = Math.min(pageIndex, pageCount - 1);
-  const pageEvents = filteredEvents.slice(safePageIndex * pageSizeNumber, (safePageIndex + 1) * pageSizeNumber);
-  const pageFrom = filteredEvents.length === 0 ? 0 : safePageIndex * pageSizeNumber + 1;
-  const pageTo = Math.min((safePageIndex + 1) * pageSizeNumber, filteredEvents.length);
+  const pageRows = filteredRows.slice(safePageIndex * pageSizeNumber, (safePageIndex + 1) * pageSizeNumber);
+  const pageFrom = filteredRows.length === 0 ? 0 : safePageIndex * pageSizeNumber + 1;
+  const pageTo = Math.min((safePageIndex + 1) * pageSizeNumber, filteredRows.length);
 
   const card: React.CSSProperties = {
     background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
@@ -613,12 +641,18 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
       <SystemStatusMatrix
         events={filteredEvents}
         dimension={matrixDimension}
+        providerFilter={providerFilter}
         onDimensionChange={setMatrixDimension}
         startMs={rangeStart ?? (events.length ? Math.min(...events.map((event) => event.timestamp)) : rangeEnd)}
         endMs={rangeEnd}
         copy={copy}
       />
       <div className="flex flex-wrap items-end gap-2" aria-label={copy('access.filters')}>
+        <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.perspective')}
+          <select value={perspective} onChange={(event) => { setPerspective(event.target.value as ActivityPerspective); setPageIndex(0); }} className="h-9 border px-2" style={fieldStyle}>
+            <option value="entry">{copy('access.entryPerspective')}</option><option value="provider">{copy('access.providerPerspective')}</option>
+          </select>
+        </label>
         <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.endpoint')}
           <select value={entryFilter} onChange={(event) => { setEntryFilter(event.target.value); setPageIndex(0); }} className="h-9 min-w-32 border px-2" style={fieldStyle}><option value="all">{copy('access.all')}</option>{entryOptions.map((id) => <option key={id} value={id}>{id}</option>)}</select>
         </label>
@@ -646,8 +680,8 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
             </tr>
           </thead>
           <tbody>
-            {pageEvents.map((event) => (
-              <tr key={event.id} className="border-b align-top" style={{ borderColor: 'var(--border)' }}>
+            {pageRows.map(({ key, event, attempt }) => (
+              <tr key={key} className="border-b align-top" style={{ borderColor: 'var(--border)' }}>
                 <td className="whitespace-nowrap px-2 py-2 text-xs tabular sm:text-sm" style={{ color: 'var(--text-muted)' }}>{formatDate(event.timestamp, '—')}</td>
                 <td className="hidden whitespace-nowrap px-2 py-2 sm:table-cell"><span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span></td>
                 {!callerToken && <td className="hidden px-2 py-2 font-mono text-xs lg:table-cell">{event.token_id ?? '—'}</td>}
@@ -656,17 +690,17 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
                     <span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span>
                     {!callerToken && <span className="max-w-full break-all font-mono">{event.token_id ?? '—'}</span>}
                   </div>
-                  <EventDetails event={event} copy={copy} />
+                  {attempt ? <ProviderAttemptDetails event={event} attempt={attempt} copy={copy} /> : <EventDetails event={event} copy={copy} />}
                 </td>
               </tr>
             ))}
             {initialLoading && events.length === 0 && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy('access.loadingEvents')}</td></tr>}
-            {!initialLoading && pageEvents.length === 0 && !error && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{filteredEvents.length === 0 ? copy('access.noEvents') : copy('access.noFilteredEvents')}</td></tr>}
+            {!initialLoading && pageRows.length === 0 && !error && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy(perspective === 'provider' ? 'access.noAttemptRows' : filteredEvents.length === 0 ? 'access.noEvents' : 'access.noFilteredEvents')}</td></tr>}
           </tbody>
         </table>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-        <span className="tabular">{copy('access.pageRange', { from: pageFrom, to: pageTo, total: filteredEvents.length })}</span>
+        <span className="tabular">{copy('access.pageRange', { from: pageFrom, to: pageTo, total: filteredRows.length })}</span>
         <div className="flex items-center gap-1">
           <button type="button" disabled={safePageIndex === 0} onClick={() => setPageIndex((index) => Math.max(0, index - 1))} className="grid h-8 w-8 place-items-center border" style={fieldStyle} title={copy('access.previousPage')} aria-label={copy('access.previousPage')}><ChevronLeft size={15} /></button>
           <span className="tabular px-2">{copy('access.pageNumber', { page: safePageIndex + 1, pages: pageCount })}</span>
@@ -678,9 +712,10 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
   );
 }
 
-function SystemStatusMatrix({ events, dimension, onDimensionChange, startMs, endMs, copy }: {
+function SystemStatusMatrix({ events, dimension, providerFilter, onDimensionChange, startMs, endMs, copy }: {
   events: readonly ActivityEvent[];
   dimension: 'entry' | 'provider';
+  providerFilter: string;
   onDimensionChange: (dimension: 'entry' | 'provider') => void;
   startMs: number;
   endMs: number;
@@ -697,7 +732,7 @@ function SystemStatusMatrix({ events, dimension, onDimensionChange, startMs, end
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const matrix = buildAdaptiveHealthRows(events, dimension, startMs, endMs, matrixWidth);
+  const matrix = buildAdaptiveHealthRows(events, dimension, startMs, endMs, matrixWidth, providerFilter);
   const { rows, buckets } = matrix;
   const cellColor = (rate: number | null) => {
     if (rate === null) return 'var(--surface-hover)';

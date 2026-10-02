@@ -414,6 +414,31 @@ pub fn android_export_debug_log(
 }
 
 #[tauri::command]
+pub fn android_export_json_file(app: tauri::AppHandle, name: String, content: String) -> Result<String, String> {
+    use tauri::Manager;
+    if !name.ends_with(".json") || !(1..=128).contains(&(name.len() - 5)) || !name[..name.len() - 5].chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-')) {
+        return Err("Invalid JSON export filename".into());
+    }
+    if content.len() > 5 * 1024 * 1024 {
+        return Err("JSON export exceeds the 5 MiB limit".into());
+    }
+    let cache = app.path().app_cache_dir().map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&cache).map_err(|error| error.to_string())?;
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|error| error.to_string())?.as_nanos();
+    let path = cache.join(format!("jev-switch-export-{}-{nonce}.json", std::process::id()));
+    std::fs::write(&path, content).map_err(|error| error.to_string())?;
+    let result = super::android_keepalive::export_json_file(&app, &path, &name);
+    let _ = std::fs::remove_file(&path);
+    result
+}
+
+#[tauri::command]
+pub fn android_write_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
+    if text.len() > 1024 * 1024 { return Err("Clipboard text exceeds the 1 MiB limit".into()); }
+    super::android_keepalive::write_clipboard(&app, &text)
+}
+
+#[tauri::command]
 pub fn android_keepalive_notification_status(
     state: State<'_, AndroidGatewayState>,
 ) -> KeepaliveNotificationStatus {
@@ -444,6 +469,11 @@ pub fn android_set_keepalive_notification(
 #[tauri::command]
 pub fn android_notification_permission_state(app: tauri::AppHandle) -> Result<String, String> {
     super::android_keepalive::notification_permission_state(&app)
+}
+
+#[tauri::command]
+pub fn android_foreground_service_active(app: tauri::AppHandle) -> Result<bool, String> {
+    super::android_keepalive::foreground_service_active(&app)
 }
 
 #[tauri::command]

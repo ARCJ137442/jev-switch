@@ -89,6 +89,7 @@ function buildRowsForBuckets(
   granularity: HeatmapGranularity,
   startMs: number,
   endMs: number,
+  providerFilter = 'all',
 ): HealthRow[] {
   const allowed = new Set(buckets);
   const groups = new Map<string, Map<string, { success: number; failure: number }>>();
@@ -96,15 +97,32 @@ function buildRowsForBuckets(
     if (event.timestamp < startMs || event.timestamp > endMs) continue;
     const detail = parseDetail(event);
     if (!detail) continue;
-    const id = dimension === 'entry' ? detail.endpoint_id : detail.provider;
     const bucket = formatHeatmapBucket(event.timestamp, granularity);
-    if (typeof id !== 'string' || !id || !allowed.has(bucket)) continue;
-    let byBucket = groups.get(id);
-    if (!byBucket) groups.set(id, byBucket = new Map());
-    let cell = byBucket.get(bucket);
-    if (!cell) byBucket.set(bucket, cell = { success: 0, failure: 0 });
-    if (detail.success === true) cell.success += 1;
-    else if (detail.success === false) cell.failure += 1;
+    if (!allowed.has(bucket)) continue;
+    const trace = detail.route_trace;
+    const attempts = trace && typeof trace === 'object' && !Array.isArray(trace)
+      ? (trace as Record<string, unknown>).attempts : null;
+    const samples: Array<{ id: unknown; success: unknown }> = dimension === 'entry'
+      ? [{ id: detail.endpoint_id, success: detail.success }]
+      : Array.isArray(attempts)
+        ? attempts.flatMap((raw) => {
+          if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+          const attempt = raw as Record<string, unknown>;
+          return attempt.outcome === 'succeeded' || attempt.outcome === 'failed'
+            ? [{ id: attempt.provider_id, success: attempt.outcome === 'succeeded' }]
+            : [];
+        })
+        : [{ id: detail.provider, success: detail.success }];
+    for (const { id, success } of samples) {
+      if (typeof id !== 'string' || !id) continue;
+      if (dimension === 'provider' && providerFilter !== 'all' && id !== providerFilter) continue;
+      let byBucket = groups.get(id);
+      if (!byBucket) groups.set(id, byBucket = new Map());
+      let cell = byBucket.get(bucket);
+      if (!cell) byBucket.set(bucket, cell = { success: 0, failure: 0 });
+      if (success === true) cell.success += 1;
+      else if (success === false) cell.failure += 1;
+    }
   }
 
   return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([id, byBucket]) => ({
@@ -143,13 +161,14 @@ export function buildAdaptiveHealthRows(
   startMs: number,
   endMs: number,
   availableWidth: number,
+  providerFilter = 'all',
 ): AdaptiveHealthMatrix {
   const safeStart = Math.min(startMs, endMs);
   const safeEnd = Math.max(startMs, endMs);
   const granularity = selectHeatmapGranularity(safeStart, safeEnd, availableWidth);
   const buckets = bucketKeys(safeStart, safeEnd, granularity);
   return {
-    rows: buildRowsForBuckets(events, dimension, buckets, granularity, safeStart, safeEnd),
+    rows: buildRowsForBuckets(events, dimension, buckets, granularity, safeStart, safeEnd, providerFilter),
     granularity,
     buckets,
   };

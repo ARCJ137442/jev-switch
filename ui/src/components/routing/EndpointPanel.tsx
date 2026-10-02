@@ -7,6 +7,7 @@ import type { RouteEdge } from '../../generated/RouteEdge';
 import { useI18n } from '../../i18n';
 import { useToast } from '../../app/feedback';
 import { useStatusBarItems } from '../../app/statusBar';
+import { copyText } from '../../api/nativeTransfer';
 import './entry.css';
 
 const strategyTypes = ['failover', 'race', 'load_balance', 'shadow'] as const;
@@ -67,7 +68,7 @@ export function EndpointPanel({ disabled = false, onChanged }: Props) {
   };
   const copy = async (id: string) => {
     try {
-      await navigator.clipboard.writeText(id); setCopied(id); clearTimeout(copyTimer.current);
+      await copyText(id); setCopied(id); clearTimeout(copyTimer.current);
       copyTimer.current = setTimeout(() => setCopied(null), 1800);
     } catch (e) { setError(message(e)); }
   };

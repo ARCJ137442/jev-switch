@@ -1,16 +1,16 @@
 # Jev-Switch Roadmap
 
-> **TL;DR**：v0.6.0 候选已完成源码与自动门禁；本轮 JSON 设置备份、真实路由 activity 辉光、HUD 自动隐藏、Android keepalive/tile 源码和官网图标化已进入候选。维护者已报告 Android 初步安装与官方 Jev 调用通过；稳定签名、原生 service/tile/通知、Tauri 原生 WebView、安装器、全链路性能和 TUI 仍按核验记录等待人工验收。
+> **TL;DR**：`v0.6.3` 已正式发布并通过稳定 Android 签名门禁；维护者确认新版 APK 的本机网关启停和 UI 连接正常。`v0.7.0` 候选已接入原生 JSON/剪贴板、provider attempt 双视图与 Dagre 排布，仍需对应人工验收；Android service/tile/通知、后台生命周期、安装器、全链路性能和 TUI 继续按各自证据验收。详见[候选核验](docs/verification/v0.7.0-release-candidate-2026-10-03.md)与[权限审查](docs/verification/android-permission-audit-2026-10-03.md)。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）<br>
 > **AI 披露**：本文由 AI 协助整理；范围与优先顺序以项目维护者后续确认为准。<br>
-> **更新日期**：2026-10-01
+> **更新日期**：2026-10-03
 
 ## 目标方向
 
 Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的路由过程。后续体验改进应服务这些目标：减少开发者重复操作，让每次调用的真实路径容易理解；不以装饰动效或未验证的性能宣传代替可测结果。
 
-当前源码候选版为 `v0.6.0`，待 tag CI 完成发布。桌面核心路径和 Android 初步安装/调用的人工证据分别来自维护者报告；下述规划不属于已完成人工验收的能力承诺。
+当前公开版本为 `v0.6.3`，下一 minor 候选是 `v0.7.0`。桌面核心路径、Android 初步官方 Jev 调用，以及新版 APK 本机网关启停/连接的人工证据分别来自维护者报告；下述规划不属于已完成人工验收的能力承诺。
 
 配套的前后变化与用户场景见[用户旅程文档第七、八节](docs/USER-JOURNEYS.md)，作为本路线图方向的体验叙事；两处内容均属未来提案，优先级与验收边界以本文件为准。
 
@@ -31,7 +31,7 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 | 桌面单实例与重复启动重定向 | 面向 PC 桌面版提供可配置的单例模式。开启时，第二次启动拦截重复窗口，把已运行窗口恢复并聚焦；必要时将导航目标交给已有实例。默认值需在实施前结合 portable/MSI 与并行调试场景裁决，关闭后允许真正多开。 | 用户从开始菜单、桌面快捷方式又点了一次，不会突然得到两个窗口和两套令人困惑的状态；已有窗口会回到前台。需要并行调试的人仍可关闭单例模式，并为不同实例明确选择端口和数据边界。 | 两个启动入口均不会误占/停止 daemon；恢复窗口后导航与配置状态一致；用户能看见单例开关且重启后生效；关闭模式允许并行实例时使用各自清楚的端口和数据边界。 | 中高：桌面使用体验 |
 | Jev 路由顾问与受控自我迭代（探索） | 研究让 Jev 本身参与入口、提供商与路由决策：用户可以给提供商和入口写用途/质量备注，并标注推荐、成功、失败或不适用案例；由选定的决策模型（例如用户配置的本地 Laya 模型）回答“这个提供商值得链接到这个入口吗？”，给出证据、置信度、备选路由与可撤销的配置建议。中长期再评估基于足量标注迭代策略，甚至在明确边界内自动应用低风险改进。 | 现在用户要靠自己记得“这个入口适合哪些模型、上周为什么把某个提供商排除”。顾问能先读用户写下的用途和历史标注，用本地 Laya 给出“建议连接/暂不推荐”的理由和需要补测的点；用户确认后再落配置。标注越积越多，建议就越贴近团队经验；未来是否能自动维护部分路由，要先证明效果可量化、可回滚，再逐级放权。 | 初期只提供建议，不静默改路由；逐项展示所用备注/历史证据、模型、置信度和不确定点；用户可接受、拒绝、修正并撤销。决策模型及数据发送范围由用户选择，默认优先本地；不把原始敏感请求自动用于训练。自治阶段须另行验证标注质量、离线回放/留出集表现、失败回退、策略版本和人工接管；只有用户明确启用的低风险规则才可自动生效。 | 探索性方向：从可解释建议到经验证的有限自治 |
 | 路由图实时动效 | 已接入 admin SSE 和持久活动游标，以真实 request route_trace 短暂标记成功、失败和同候选重试边；缺少 trace 不绘制虚构路线。 | 路由图会对真实调用的命中边给出短暂反馈，帮助维护者把活动记录与配置图对应起来。 | v0.2.0 UI 代码随 Release；事件映射和 reduced-motion 样式有构建/代码验证。本次浏览器核验以静态图和移动布局为主，不新增真实上游调用证据。并发 trace 独立辨识/显示开关仍可后续打磨。 | **Phase 1 已发布；增强项后置** |
-| Tauri 2 / Android | 已完成 Tauri 2/Android 工具链约束、React 控制台复用边界和 GitHub CI 路径梳理；daemon library 已在 Android target 编译。v0.5.0 附带 APK 是历史 debug-signed 构建；v0.6.2 已把 Android 加入主 Release，使用稳定签名、统一黑底白色 J 图标和同次发布 metadata。详细执行见[Android 构建与验收计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。 | 没有 Termux 的普通用户可从普通下载区获取 APK；安装后 APP 默认启动内嵌后端，需要时在首页停止，设置里的空 API 地址自动指向实际监听端口，通知/tile 可继续控制，切后台或旋转也不丢服务状态。Android 维护优先级次于 Windows 桌面。 | CI 已验证 stable signer、ABI/commit/versionCode/SHA-256、J 图标和正式资产；APK 安装、模拟器/真机触屏、软键盘、HTTPS/局域网、原生 service/tile/通知和后台生命周期仍各自需要设备证据。 | **正式 APK 渠道：v0.6.2 已发布，设备验收持续进行** |
+| Tauri 2 / Android | daemon library 已在 Android target 编译；v0.6.2 起使用稳定签名和统一 J 图标随主 Release 发布，v0.6.3 修复 release WebView 的本机 HTTP 访问；v0.7.0 候选增加原生文件/剪贴板桥和独立 service 状态。详细执行见[Android 构建与验收计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。 | 没有 Termux 的用户可下载 APK；首次打开自动启动内嵌后端，用户明确停止后下次保持关闭，空 API 地址指向本机监听端口。维护者已确认 v0.6.3 本机启停和 UI 连接。 | CI 已验证既有版 signer、ABI/commit/versionCode/SHA-256、图标和正式资产；新候选的原生 service/tile/通知、后台生命周期、文件导出/剪贴板和热点 LAN 仍需设备证据。 | **正式 APK 渠道：平台验收持续进行** |
 | Android APP | Tauri 2 Android 复用 React 控制台和 daemon library；默认启动内嵌网关，Dashboard 可明确启停；GitHub Actions 主 Release 同时构建、稳定签名并附加 Android APK。 | 普通移动端用户可以直接下载、安装、打开完整 APP；没有 Termux 也能配置和运行本机网关，空 API 地址会自动指向本机监听地址。Android 是正式渠道但维护优先级次于 Windows；系统级体验按已实测能力逐项说明。 | 固定 keystore Secrets、J 图标源一致性、APK signer 指纹、versionCode、实际设备覆盖安装和后台生命周期均有独立门槛；发行标签不替代功能证据。 | **正式分发渠道；次于 Windows 的维护优先级** |
 | Termux CLI/TUI 与 CLI 发布形态（Phase 1） | 参考 [cc-switch-cli](https://github.com/SaladDay/cc-switch-cli)，已实现独立 `jev-switch-cli` 薄客户端：`status`、`models`、`invoke`、`routes`、`events`，复用 daemon HTTP API 与环境变量鉴权；Linux/Windows CLI 随 v0.6.0 发布，Termux/Android arm64 通过设备本机 `cargo install`。TUI 仍后置，只有 SSH/低带宽/无浏览器场景形成稳定需求才评估 ratatui。 | 用户在 Termux 里不必安装完整桌面应用，也能检查 daemon、查看模型、发起 Jev 请求和翻阅路由事件；JSON 输出可以接脚本，表格输出适合终端。对只想在 Android 上使用的人，Termux + 浏览器 Web UI 仍是更完整的路径；需要原生触控时再比较 Tauri Android。 | CLI 仅做 HTTP 转发，不复制路由、SQLite 或 provider key 管理；`JEV_SWITCH_URL`、`JEV_SWITCH_TOKEN`、`JEV_SWITCH_ADMIN_TOKEN` 分别控制地址、调用和管理访问；token 不进参数、history 或日志；请求限制 2 MiB，事件 limit 上限 500，禁用 HTTP 重定向。覆盖 local/cloud 鉴权、事件游标、断线错误、非 TTY/JSON、Unicode 错误和敏感字段脱敏。 | **Phase 1 随 v0.6.0 候选发布；尚未经人工实测，TUI 保持后置** |
 | GitHub Pages 官方首页 | 已部署到 GitHub Pages：产品定位、控制台截图、快速开始、下载和限制说明；Release published 后工作流自动刷新版本元数据和下载链接。 | 访客从 GitHub 首页链接即可看懂定位、浏览 UI 图册并找到当前发行版入口。 | Pages workflow 已在 v0.5.0 发布后重新部署；官网中英文、主题和平台下载可用，`site/assets/` 中截图仍是历史素材，需用最终候选人工翻新。 | **已部署；截图翻新待人工完成** |
@@ -68,16 +68,18 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 
 ## 建议推进次序
 
-1. 完成 daemon 路由、SQLite 历史、冷暖启动与 UI 活动面板的固定条件 p50/p95/p99 基线；复用性能专项已有 measurement setup。
-2. 以同样的有界请求方式检查 CLI、调用端和后台页面是否还存在可复现的重复请求；只有测量出收益再继续改轮询/缓存。
-3. 在 Provider/Access 等剩余界面按同一图标语义评估高频动作；用最终 v0.5.0 候选翻新 Pages 截图并做移动截图验收。
-4. 收集 v0.5.0 CLI 使用反馈；只有表格 CLI 无法覆盖可复现的 SSH/低带宽/无浏览器任务时，再设计 TUI。
-5. 继续 Tauri 2 Android 可行性评估、服务发现、数据目录迁移、首次引导、端口避让、单实例和路由顾问等独立方向，按依赖和用户收益重新排期。
+1. 完成 Android 已发布渠道的权限/文件/通知/tile/后台设备矩阵，真机验收 v0.7.0 候选的原生 JSON/剪贴板桥与前台服务状态；详见[权限审查](docs/verification/android-permission-audit-2026-10-03.md)。
+2. 在已实现的 provider attempt 持久 trace 双视图上补全路由策略组合矩阵、历史游标与实时活动序号边界；这是入口组织提供商的核心可解释性收口。
+3. 完成 daemon 路由、SQLite 历史、冷暖启动与 UI 活动面板的固定条件 p50/p95/p99 基线；复用性能专项已有 measurement setup。
+4. 以同样的有界请求方式检查 CLI、调用端和后台页面是否还存在可复现的重复请求；只有测量出收益再继续改轮询/缓存。
+5. 在 Provider/Access 等剩余界面按同一图标语义评估高频动作；用最新候选翻新 Pages 截图并做移动截图验收。
+6. 收集 CLI 使用反馈；只有表格 CLI 无法覆盖可复现的 SSH/低带宽/无浏览器任务时，再设计 TUI。
+7. 继续受限服务发现、数据目录迁移、首次引导、端口避让、单实例和路由顾问等独立方向，按依赖和用户收益重新排期。
 
 ## 决策边界
 
 - 本文描述方向，不指定发布日期、版本号或保证实现顺序；开始每项前仍需结合用户反馈、依赖和实测调整。
-- v0.5.0 正式 Release 内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter adapters，并包含 Windows Standalone、Linux/Windows CLI、Docker 与历史 debug-signed Android arm64 APK。维护者已人工确认便携/Standalone 桌面核心路径、官方 TypeSafe 调用和 Android 初步安装/调用；后续 Android APK 将作为正式下载渠道而非实验性资产，但原生 service/tile/通知、OpenRouter live-key、TUI 和全链路性能仍按实际证据边界说明。普通 OpenAI/Anthropic chat API 不属于产品兼容范围。
+- v0.6.3 正式 Release 内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter adapters，并包含 Windows Standalone、Linux/Windows CLI、Docker 与稳定签名 Android arm64 APK。维护者已人工确认便携/Standalone 桌面核心路径、官方 TypeSafe 调用、Android 初步调用及新版 APK 本机启停/连接；原生 service/tile/通知、OpenRouter live-key、TUI 和全链路性能仍按实际证据边界说明。普通 OpenAI/Anthropic chat API 不属于产品兼容范围。
 - 服务发现仅扫描用户明确提供/选择的目标范围；探查和模型推理分开授权，快速添加必须经过结果确认和凭据设置。
 - 路由顾问先作为建议系统；任何扩大自治程度的变更都需要单独的用户授权、可回放评估、版本化和回滚路径。用户标注不能默认等同于可用于训练或自动改配置的授权。
 - standalone 是交付形态目标，不得省略可验证的 sidecar 身份、资源校验和故障恢复；应用数据与可执行文件分离。默认 exe 邻近目录不可写时必须明确交给用户选择，不得静默改写目录策略。

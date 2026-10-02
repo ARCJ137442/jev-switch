@@ -51,6 +51,15 @@ pub fn notification_permission_state<R: Runtime>(app: &AppHandle<R>) -> Result<S
         .to_string())
 }
 
+pub fn foreground_service_active<R: Runtime>(app: &AppHandle<R>) -> Result<bool, String> {
+    let plugin = app.state::<NativeKeepalive>();
+    let result: Value = plugin
+        .0
+        .run_mobile_plugin("foregroundServiceStatus", serde_json::json!({}))
+        .map_err(|error| format!("read Android foreground service state failed: {error}"))?;
+    Ok(result.get("active").and_then(Value::as_bool).unwrap_or(false))
+}
+
 pub fn request_notification_permission<R: Runtime>(app: &AppHandle<R>) -> Result<String, String> {
     let plugin = app.state::<NativeKeepalive>();
     let result: Value = plugin
@@ -83,4 +92,22 @@ pub fn export_debug_log<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<S
         .run_mobile_plugin("exportDebugLog", serde_json::json!({ "path": path.display().to_string() }))
         .map_err(|error| format!("export Android debug log failed: {error}"))?;
     Ok(result.get("result").and_then(Value::as_str).unwrap_or("shared").to_string())
+}
+
+pub fn export_json_file<R: Runtime>(app: &AppHandle<R>, path: &Path, name: &str) -> Result<String, String> {
+    let plugin = app.state::<NativeKeepalive>();
+    let result: Value = plugin
+        .0
+        .run_mobile_plugin("exportJsonFile", serde_json::json!({ "path": path.display().to_string(), "name": name }))
+        .map_err(|error| format!("export Android JSON file failed: {error}"))?;
+    Ok(result.get("result").and_then(Value::as_str).unwrap_or("shared").to_string())
+}
+
+pub fn write_clipboard<R: Runtime>(app: &AppHandle<R>, text: &str) -> Result<(), String> {
+    let plugin = app.state::<NativeKeepalive>();
+    let _: Value = plugin
+        .0
+        .run_mobile_plugin("writeClipboard", serde_json::json!({ "text": text }))
+        .map_err(|error| format!("write Android clipboard failed: {error}"))?;
+    Ok(())
 }

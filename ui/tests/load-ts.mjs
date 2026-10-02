@@ -1,9 +1,15 @@
-import { readFile } from 'node:fs/promises';
-import ts from 'typescript';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 
-// These modules only import types; transpile their current source without a build artifact.
+// Bundle test targets so layout modules can share their production dependencies.
 export async function loadTs(path) {
-  const source = await readFile(new URL(path, import.meta.url), 'utf8');
-  const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
-  return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+  const result = await build({
+    entryPoints: [fileURLToPath(new URL(path, import.meta.url))],
+    bundle: true,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+    write: false,
+  });
+  return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].contents).toString('base64')}`);
 }

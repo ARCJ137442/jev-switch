@@ -196,6 +196,22 @@ if ($null -eq $activeTile) {
     [void]$tileService.AppendChild($activeTile)
 }
 [void]$activeTile.SetAttribute('value', $androidNamespace, 'true')
+$fileProvider = $application.SelectSingleNode("provider[@android:name='androidx.core.content.FileProvider']", $namespaces)
+if ($null -eq $fileProvider) {
+    $fileProvider = $manifest.CreateElement('provider')
+    $fileProvider.SetAttribute('name', $androidNamespace, 'androidx.core.content.FileProvider')
+    [void]$application.AppendChild($fileProvider)
+}
+[void]$fileProvider.SetAttribute('authorities', $androidNamespace, '${applicationId}.fileprovider')
+[void]$fileProvider.SetAttribute('exported', $androidNamespace, 'false')
+[void]$fileProvider.SetAttribute('grantUriPermissions', $androidNamespace, 'true')
+$filePaths = $fileProvider.SelectSingleNode("meta-data[@android:name='android.support.FILE_PROVIDER_PATHS']", $namespaces)
+if ($null -eq $filePaths) {
+    $filePaths = $manifest.CreateElement('meta-data')
+    $filePaths.SetAttribute('name', $androidNamespace, 'android.support.FILE_PROVIDER_PATHS')
+    [void]$fileProvider.AppendChild($filePaths)
+}
+[void]$filePaths.SetAttribute('resource', $androidNamespace, '@xml/jev_debug_file_paths')
 $manifest.Save($manifestPath)
 
 $stringsPath = Join-Path $resRoot 'values/strings.xml'

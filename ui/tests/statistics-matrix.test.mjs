@@ -29,3 +29,19 @@ test('adaptive health matrix follows the selected time range and picks the fines
   assert.equal(matrix.rows[0].cells.reduce((sum, cell) => sum + cell.count, 0), 1);
   assert.equal(matrix.rows[0].cells.filter((cell) => cell.count > 0).length, 1);
 });
+
+test('provider heatmap counts each dispatched attempt while entry heatmap counts one client request', () => {
+  const at = Date.UTC(2026, 9, 3, 10);
+  const events = [{ timestamp: at, kind: 'request', detail: JSON.stringify({
+    endpoint_id: 'jev-vercel', provider: 'jev-typesafe', success: true,
+    route_trace: { attempts: [
+      { provider_id: 'vercel', outcome: 'failed' },
+      { provider_id: 'jev-typesafe', outcome: 'succeeded' },
+    ] },
+  }) }];
+  const entry = buildAdaptiveHealthRows(events, 'entry', at, at, 900);
+  assert.deepEqual(entry.rows.map((row) => [row.id, row.cells[0].success, row.cells[0].failure]), [['jev-vercel', 1, 0]]);
+  const provider = buildAdaptiveHealthRows(events, 'provider', at, at, 900);
+  assert.deepEqual(provider.rows.map((row) => [row.id, row.cells[0].success, row.cells[0].failure]), [['jev-typesafe', 1, 0], ['vercel', 0, 1]]);
+  assert.deepEqual(buildAdaptiveHealthRows(events, 'provider', at, at, 900, 'vercel').rows.map((row) => row.id), ['vercel']);
+});

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { copyText } from '../../api/nativeTransfer';
 
 interface CopyButtonProps {
   text: string;
@@ -17,7 +18,7 @@ export function CopyButton({ text, className = '', size = 16, onCopy }: CopyButt
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyText(text);
       setCopied(true);
       onCopy?.();
       setTimeout(() => setCopied(false), 2000);

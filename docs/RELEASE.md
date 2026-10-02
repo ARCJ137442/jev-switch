@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-02，最新公开发行版为 [`v0.6.3`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.6.3)。`v0.6.3` 包含路由策略补丁和 Android 网关控制修复：`on_error=next` 在同候选 retryable 重试耗尽或遇到任意上游调用/响应错误后继续下一候选；Android WebView 不再直接调用自定义 plugin ACL 命令，通知服务失败也不会回滚已启动的本地 daemon。维护者确认首页启停可用后，又发现旧签名 APK 的 release 清单禁用了明文 HTTP，导致 WebView 无法连接本机网关；同版本源码现修复 release 网络配置、加入原生/WebView 双路径 `/health` 诊断及应用内日志查看/导出，真机连通待新版 APK 验收。Windows Release 已包含 Standalone、Portable、MSI、NSIS、Linux/Windows CLI 和 Docker；Android 资产是否附带以本次 workflow 的签名门禁为准。统计自适应热力图、真实路由事件辉光、10%–200% UI 缩放和演练场响应式 chip 属于 `v0.6.2` 基线。Android workflow 读取 keystore 二进制 magic bytes 区分 PKCS12/JKS，再用显式格式校验 store password 和 alias，不依赖本地化 keytool 输出；PKCS12 使用 keystore password 读取私钥，JKS 使用独立 key password。Windows 单实例按精确版本隔离，EXE/窗口/托盘使用同一 canonical 品牌图标，并由发布门禁比较 EXE 内嵌图标与品牌 ICO。维护者已决定 Android APK 作为正式下载渠道（维护优先级次于 Windows），不再使用“实验性”标签；新版记录签名指纹、APK SHA-256、版本名和单调版本码。v0.5.0 的临时 debug 签名与新版证书不同，升级到首个稳定签名包前需卸载 v0.5.0 APK 一次。桌面原生 WebView、Android service/tile/通知和全链路性能仍按对应候选核验记录区分证据。Android 配置也必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-03，最新公开发行版为 [`v0.6.3`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.6.3)，`v0.7.0` 正在核验与发布。前者修复多跳 `on_error=next` 的 failover 和 Android 本机网关连接；维护者已确认新版 APK 的网关启停及 UI 连接。新候选增加持久 provider attempt 双视图、Android 原生 JSON/剪贴板桥与 service 状态、移动端样例选择、设置搜索/局域网开关和 Dagre 路由排布。自动门禁、Release 资产与未完成人工验收项见[本轮核验](verification/v0.7.0-release-candidate-2026-10-03.md)。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名，不再标“实验性”。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
@@ -21,7 +21,7 @@
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.6.3；统一修改上述五处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.7.0；统一修改上述五处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui

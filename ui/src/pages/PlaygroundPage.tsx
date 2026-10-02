@@ -11,6 +11,7 @@ import { useI18n, type MessageKey } from '../i18n';
 import { useAuth } from '../auth/AuthContext';
 import type { JevRequest } from '../api';
 import { selectExample } from '../components/playground/sampleSelection';
+import { copyText, saveJsonFile } from '../api/nativeTransfer';
 
 const PLAYGROUND_STORAGE_KEY = 'jev-playground-workspace-v1';
 const EXAMPLE_FILE_MAX_BYTES = 1024 * 1024;
@@ -61,13 +62,7 @@ function readWorkspace(): SavedPlaygroundWorkspace | null {
 }
 
 function downloadExamples(examples: ExamplePayload[]) {
-  const blob = new Blob([JSON.stringify({ schema_version: 1, examples }, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = 'jev-playground-examples.json';
-  anchor.click();
-  URL.revokeObjectURL(url);
+  return saveJsonFile('jev-playground-examples.json', JSON.stringify({ schema_version: 1, examples }, null, 2));
 }
 
 type PublicModelStatus = 'loading' | 'ready' | 'empty' | 'unauthorized' | 'forbidden' | 'network-error' | 'request-error';
@@ -156,11 +151,13 @@ export function PlaygroundPage() {
   }, [server.status, auth.isReadOnly]);
 
   const curlModel = targets[0]?.modelId ?? 'your-public-model-id';
-  const onPickExample = (example: ExamplePayload, shiftKey: boolean) => {
-    setActiveExampleId(example.id);
-    setSelectedBatchExampleIds((current) => selectExample(current, example.id, shiftKey));
-    setStateJson(JSON.stringify(example.payload.state, null, 2));
-    setQuestionsJson(JSON.stringify(example.payload.questions, null, 2));
+  const onPickExample = (example: ExamplePayload, exclusive: boolean) => {
+    const selected = selectExample(selectedBatchExampleIds, example.id, exclusive);
+    const focused = selected.includes(example.id) ? example : examples.find((item) => item.id === selected[0]) ?? example;
+    setSelectedBatchExampleIds(selected);
+    setActiveExampleId(focused.id);
+    setStateJson(JSON.stringify(focused.payload.state, null, 2));
+    setQuestionsJson(JSON.stringify(focused.payload.questions, null, 2));
   };
   const batchCases = examples.filter((example) => selectedBatchExampleIds.includes(example.id)).map((example) => ({ id: example.id, label: example.label, stateJson: JSON.stringify(example.payload.state), questionsJson: JSON.stringify(example.payload.questions) }));
   const statusItems = useMemo(() => [
@@ -207,7 +204,7 @@ export function PlaygroundPage() {
             <ExampleChips examples={examples} selectedIds={selectedBatchExampleIds} onPick={onPickExample} />
             <input ref={importInput} type="file" accept="application/json,.json" className="sr-only" onChange={(event) => void importExamples(event.currentTarget.files?.[0])}/>
             <button type="button" className="inline-flex h-9 items-center gap-1.5 border px-2 text-xs" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', color: 'var(--text-muted)' }} title={t('pg.importExamples' as MessageKey)} aria-label={t('pg.importExamples' as MessageKey)} onClick={() => importInput.current?.click()}><Upload size={14}/>{t('pg.importExamples' as MessageKey)}</button>
-            <button type="button" className="inline-flex h-9 items-center gap-1.5 border px-2 text-xs" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', color: 'var(--text-muted)' }} title={t('pg.exportExamples' as MessageKey)} aria-label={t('pg.exportExamples' as MessageKey)} onClick={() => downloadExamples(examples)}><Download size={14}/>{t('pg.exportExamples' as MessageKey)}</button>
+            <button type="button" className="inline-flex h-9 items-center gap-1.5 border px-2 text-xs" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', color: 'var(--text-muted)' }} title={t('pg.exportExamples' as MessageKey)} aria-label={t('pg.exportExamples' as MessageKey)} onClick={() => void downloadExamples(examples).catch((error: unknown) => setExampleError(error instanceof Error ? error.message : String(error)))}><Download size={14}/>{t('pg.exportExamples' as MessageKey)}</button>
           </div>
           <div className="playground-daemon-status flex items-center gap-2 text-xs" style={{ color: 'var(--text-subtle)' }}>
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: server.status === 'ok' ? 'var(--success)' : 'var(--text-subtle)' }} />
@@ -264,7 +261,7 @@ function CurlExample({ base, model, stateJson, questionsJson }: { base: string; 
   }, [base, model, questionsJson, stateJson]);
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(command);
+      await copyText(command);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {

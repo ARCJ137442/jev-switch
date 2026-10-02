@@ -1,3 +1,4 @@
+import dagre from '@dagrejs/dagre';
 import type { Route } from '../../api/admin';
 
 export interface DagProvider {
@@ -24,30 +25,13 @@ export function routeDocumentSignature(routes: Route[]): string {
   ])).sort());
 }
 
-/** Variable-size Sugiyama columns with deterministic crossing-reduction sweeps. */
+/** Dagre's Sugiyama layout inserts virtual nodes for long edges and respects each card's dimensions. */
 export function buildDag(routes: Route[], entries: DagEntry[], providers: DagProvider[], positions: Record<string, Point> = {}): DagNode[] {
   const providerIds = new Set(providers.map(p => p.id));
   const entryIds = new Set(entries.map(e => e.id));
-  // Reconnecting a wire or reordering stored rows must not swap account cards.
+  // Stable IDs and sorted edges prevent storage row order from changing layout.
   const aliases = [...new Set(routes.flatMap(r => [r.left, r.right]))].filter(id => !providerIds.has(id) && !entryIds.has(id)).sort();
-  const allIds = [...new Set([...entryIds, ...aliases, ...providerIds])];
-  const levels = new Map(allIds.map(id => [id, 0]));
-  const incoming = new Map(allIds.map(id => [id, 0]));
-  const outgoing = new Map<string, string[]>();
-  for (const route of routes) {
-    outgoing.set(route.left, [...(outgoing.get(route.left) ?? []), route.right]);
-    incoming.set(route.right, (incoming.get(route.right) ?? 0) + 1);
-  }
-  const queue = allIds.filter(id => incoming.get(id) === 0);
-  for (let i = 0; i < queue.length; i++) {
-    const id = queue[i];
-    for (const right of outgoing.get(id) ?? []) {
-      levels.set(right, Math.max(levels.get(right) ?? 0, (levels.get(id) ?? 0) + 1));
-      incoming.set(right, (incoming.get(right) ?? 1) - 1);
-      if (incoming.get(right) === 0) queue.push(right);
-    }
-  }
-  const lastColumn = Math.max(1, ...allIds.filter(id => !providerIds.has(id)).map(id => (levels.get(id) ?? 0) + 1));
+  const allIds = [...new Set([...entryIds, ...aliases, ...providerIds])].sort();
   const metadata = new Map<string, Omit<DagNode, 'x' | 'y'>>();
   for (const id of allIds) {
     const provider = providers.find(p => p.id === id);
@@ -68,63 +52,43 @@ export function buildDag(routes: Route[], entries: DagEntry[], providers: DagPro
     });
   }
 
-  const columnOf = (id: string) => providerIds.has(id) ? lastColumn : levels.get(id) ?? 0;
-  const maxColumn = Math.max(0, ...allIds.map(columnOf));
-  const layers = Array.from({ length: maxColumn + 1 }, () => [] as string[]);
-  for (const id of allIds) layers[columnOf(id)].push(id);
-  for (const layer of layers) layer.sort((left, right) => left.localeCompare(right));
-
-  const parents = new Map(allIds.map(id => [id, new Set<string>()]));
-  const children = new Map(allIds.map(id => [id, new Set<string>()]));
-  for (const route of routes) {
-    if (!metadata.has(route.left) || !metadata.has(route.right)) continue;
-    parents.get(route.right)?.add(route.left);
-    children.get(route.left)?.add(route.right);
+  const graph = new dagre.graphlib.Graph();
+  graph.setGraph({ rankdir: 'LR', nodesep: 38, ranksep: 96, marginx: 30, marginy: 56 });
+  graph.setDefaultEdgeLabel(() => ({}));
+  for (const id of allIds) {
+    const { width, height } = metadata.get(id)!;
+    graph.setNode(id, { width, height });
   }
-  const orderInLayer = (layerIndex: number) => new Map(layers[layerIndex].map((id, index) => [id, index]));
-  const sortByBarycenter = (layerIndex: number, neighborMap: Map<string, Set<string>>) => {
-    const neighborOrder = new Map<number, Map<string, number>>();
-    for (let neighborLayer = 0; neighborLayer < layers.length; neighborLayer++) {
-      if (neighborLayer !== layerIndex) neighborOrder.set(neighborLayer, orderInLayer(neighborLayer));
-    }
-    const score = (id: string): number => {
-      const neighbors = [...(neighborMap.get(id) ?? [])]
-        .filter(neighbor => columnOf(neighbor) !== layerIndex)
-        .map(neighbor => neighborOrder.get(columnOf(neighbor))?.get(neighbor))
-        .filter((index): index is number => index !== undefined);
-      return neighbors.length ? neighbors.reduce((sum, index) => sum + index, 0) / neighbors.length : Number.POSITIVE_INFINITY;
-    };
-    layers[layerIndex].sort((left, right) => score(left) - score(right) || left.localeCompare(right));
-  };
-
-  // Alternating median/barycenter sweeps reduce crossings while stable ID ties keep results reproducible.
-  for (let pass = 0; pass < 6; pass++) {
-    for (let layer = 1; layer < maxColumn; layer++) sortByBarycenter(layer, parents);
-    for (let layer = maxColumn - 1; layer >= 0; layer--) sortByBarycenter(layer, children);
+  const uniqueEdges = new Set<string>();
+  for (const route of [...routes].sort((a, b) => routeIdentity(a).localeCompare(routeIdentity(b)))) {
+    if (!metadata.has(route.left) || !metadata.has(route.right) || route.left === route.right) continue;
+    const key = JSON.stringify([route.left, route.right]);
+    if (uniqueEdges.has(key)) continue;
+    uniqueEdges.add(key);
+    graph.setEdge(route.left, route.right);
   }
-
-  const xByColumn: number[] = [];
-  let x = 30;
-  for (const layer of layers) {
-    xByColumn.push(x);
-    const widest = Math.max(250, ...layer.map(id => metadata.get(id)!.width));
-    x += widest + 80;
+  dagre.layout(graph);
+  // Provider accounts share the terminal rank, but retain Dagre's crossing-reduced order.
+  const providerColumn = Math.max(30, ...allIds.filter(id => !providerIds.has(id)).map(id => {
+    const item = graph.node(id);
+    return item.x + metadata.get(id)!.width / 2 + 96;
+  }));
+  const providerOrder = [...providerIds].sort((a, b) => graph.node(a).y - graph.node(b).y || a.localeCompare(b));
+  let providerBottom = 56;
+  const providerYs = new Map<string, number>();
+  for (const id of providerOrder) {
+    const node = metadata.get(id)!;
+    const y = Math.max(56, graph.node(id).y - node.height / 2, providerBottom);
+    providerYs.set(id, y);
+    providerBottom = y + node.height + 38;
   }
-  const yById = new Map<string, number>();
-  for (const layer of layers) {
-    let y = 56;
-    for (const id of layer) {
-      yById.set(id, y);
-      y += metadata.get(id)!.height + 28;
-    }
-  }
-
   return allIds.map(id => {
-    const column = columnOf(id);
+    const layout = graph.node(id);
+    const node = metadata.get(id)!;
     return {
-      ...metadata.get(id)!,
-      x: positions[id]?.x ?? xByColumn[column],
-      y: positions[id]?.y ?? yById.get(id) ?? 56,
+      ...node,
+      x: positions[id]?.x ?? (providerIds.has(id) ? providerColumn : layout.x - node.width / 2),
+      y: positions[id]?.y ?? (providerIds.has(id) ? providerYs.get(id)! : layout.y - node.height / 2),
     };
   });
 }

@@ -7,6 +7,7 @@ import android.os.Build
 import android.service.quicksettings.TileService
 
 internal object RuntimeKeepaliveState {
+    @Volatile var foregroundServiceActive: Boolean = false
     const val EXTRA_TOGGLE_GATEWAY = "jev-switch.toggle-gateway"
     const val EXTRA_GATEWAY_RUNNING = "jev-switch.gateway-running"
     private const val PREFS_NAME = "jev-switch.keepalive"

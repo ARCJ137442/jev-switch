@@ -26,10 +26,12 @@ class JevKeepaliveService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+        RuntimeKeepaliveState.foregroundServiceActive = true
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        RuntimeKeepaliveState.foregroundServiceActive = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }

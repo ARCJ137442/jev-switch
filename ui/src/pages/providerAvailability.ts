@@ -6,22 +6,32 @@ export interface ProviderAvailability {
   rate: number | null;
 }
 
-function readProviderSample(event: ActivityEvent): { provider: string; success: boolean } | null {
-  if (event.kind !== 'request') return null;
+function readProviderSamples(event: ActivityEvent): Array<{ provider: string; success: boolean }> {
+  if (event.kind !== 'request') return [];
   let value: unknown;
   try {
     value = JSON.parse(event.detail);
   } catch {
-    return null;
+    return [];
   }
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return [];
   const record = value as Record<string, unknown>;
-  if (typeof record.provider !== 'string' || record.provider.trim() === '') return null;
-  if (typeof record.success === 'boolean') return { provider: record.provider, success: record.success };
-  if (typeof record.status === 'number' && Number.isInteger(record.status) && record.status >= 100 && record.status <= 599) {
-    return { provider: record.provider, success: record.status >= 200 && record.status < 300 };
+  const trace = record.route_trace;
+  if (trace && typeof trace === 'object' && !Array.isArray(trace) && Array.isArray((trace as Record<string, unknown>).attempts)) {
+    return ((trace as Record<string, unknown>).attempts as unknown[]).flatMap((raw) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+      const attempt = raw as Record<string, unknown>;
+      return typeof attempt.provider_id === 'string' && (attempt.outcome === 'succeeded' || attempt.outcome === 'failed')
+        ? [{ provider: attempt.provider_id, success: attempt.outcome === 'succeeded' }]
+        : [];
+    });
   }
-  return null;
+  if (typeof record.provider !== 'string' || record.provider.trim() === '') return [];
+  if (typeof record.success === 'boolean') return [{ provider: record.provider, success: record.success }];
+  if (typeof record.status === 'number' && Number.isInteger(record.status) && record.status >= 100 && record.status <= 599) {
+    return [{ provider: record.provider, success: record.status >= 200 && record.status < 300 }];
+  }
+  return [];
 }
 
 export function summarizeProviderAvailability(
@@ -33,8 +43,8 @@ export function summarizeProviderAvailability(
   for (const providerId of providerIds) {
     const samples = events
       .filter((event) => event.kind === 'request')
-      .map(readProviderSample)
-      .filter((sample): sample is { provider: string; success: boolean } => sample?.provider === providerId)
+      .flatMap(readProviderSamples)
+      .filter((sample) => sample.provider === providerId)
       .slice(0, windowSize)
       .reverse()
       .map((sample) => sample.success ? 'success' as const : 'failure' as const);

@@ -10,6 +10,17 @@ export interface RequestActivityDetail {
   inputTokens: number | null;
   outputTokens: number | null;
   costUsd: number | null;
+  attempts: ProviderAttemptDetail[];
+}
+
+export interface ProviderAttemptDetail {
+  provider: string;
+  upstreamModel: string | null;
+  attempt: number | null;
+  outcome: 'succeeded' | 'failed' | 'cancelled';
+  status: number | null;
+  latencyMs: number | null;
+  retryDecision: string | null;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -47,6 +58,25 @@ export function parseRequestActivityDetail(kind: string, detail: string): Reques
 
   const status = readInteger(value.status, 100, 599);
   const usage = isObject(value.usage) ? value.usage : null;
+  const routeTrace = isObject(value.route_trace) ? value.route_trace : null;
+  const attempts = Array.isArray(routeTrace?.attempts)
+    ? routeTrace.attempts.flatMap((raw): ProviderAttemptDetail[] => {
+      if (!isObject(raw)) return [];
+      const provider = readText(raw.provider_id);
+      const outcome = raw.outcome;
+      // A skipped candidate is not an actual provider call.
+      if (!provider || (outcome !== 'succeeded' && outcome !== 'failed' && outcome !== 'cancelled')) return [];
+      return [{
+        provider,
+        upstreamModel: readText(raw.upstream_model),
+        attempt: readInteger(raw.attempt, 1),
+        outcome,
+        status: readInteger(raw.upstream_status, 100, 599),
+        latencyMs: readInteger(raw.latency_ms),
+        retryDecision: readText(raw.retry_decision),
+      }];
+    })
+    : [];
   const success = typeof value.success === 'boolean'
     ? value.success
     : status === null ? null : status >= 200 && status < 300;
@@ -63,5 +93,34 @@ export function parseRequestActivityDetail(kind: string, detail: string): Reques
     inputTokens: readInteger(usage?.input_tokens),
     outputTokens: readInteger(usage?.output_tokens),
     costUsd: readCost(value.cost_usd),
+    attempts,
   };
 }
+
+export type ActivityPerspective = 'entry' | 'provider';
+
+export interface ActivityRow {
+  key: string;
+  event: ActivityEvent;
+  attempt: ProviderAttemptDetail | null;
+}
+
+/** One durable parent call can yield several actual provider-call rows. */
+export function activityRows(events: readonly ActivityEvent[], perspective: ActivityPerspective): ActivityRow[] {
+  if (perspective === 'entry') return events.map((event) => ({ key: String(event.id), event, attempt: null }));
+  return events.flatMap((event) => {
+    const detail = parseRequestActivityDetail(event.kind, event.detail);
+    return (detail?.attempts ?? []).map((attempt, index) => ({ key: `${event.id}:${index}`, event, attempt }));
+  });
+}
+
+export function matchesActivityProvider(event: ActivityEvent, provider: string, perspective: ActivityPerspective): boolean {
+  if (provider === 'all') return true;
+  const detail = parseRequestActivityDetail(event.kind, event.detail);
+  if (!detail) return false;
+  if (detail.attempts.length) return detail.attempts.some((attempt) => attempt.provider === provider);
+  // Old parent rows lack an attempt trace. Only the entry view may filter by
+  // the known selected provider; never invent a provider-call row from it.
+  return perspective === 'entry' && detail.provider === provider;
+}
+import type { ActivityEvent } from '../../api/access';

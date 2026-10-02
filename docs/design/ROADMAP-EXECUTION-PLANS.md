@@ -1,13 +1,13 @@
 # Roadmap Execution Plans
 
-> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.6.2` 已包含 CLI Phase 1、JSON 设置备份、真实路由 activity 辉光、HUD 自动隐藏、统计自适应热力图、10%–200% UI 缩放、演练场响应式 chip、官网图标化、LAN opt-in 与网关启停，并通过 Android PKCS12/JKS 签名和 Windows 品牌图标发布门禁。早期失败候选从未创建公开 Release；稳定签名 APK 已随 v0.6.2 发布。Android 原生 service/tile/通知和全链路 gateway/SQLite 冷暖基线仍待人工确认。
+> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.6.3` 已包含 CLI Phase 1、JSON 设置备份、真实路由 activity 辉光、HUD 自动隐藏、统计自适应热力图、UI 缩放、LAN opt-in、网关启停与多跳 failover 修复。`v0.7.0` 候选增加 provider attempt 双视图、Dagre 排布和 Android 原生 JSON/剪贴板；维护者只确认过 v0.6.3 Android 本机启停与 UI 连接，service/tile/通知、新文件/剪贴板和全链路性能仍有独立验收边界。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 > **AI 披露**：本文由 AI 协助整理，执行顺序和最终范围由项目维护者确认。
 
 ## 现状判断
 
-当前代码和 v0.6.2 候选已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测、headless CLI、JSON 设置备份、真实 route activity 辉光、HUD 自动隐藏和 Android keepalive/tile 源码。维护者已确认桌面核心路径、官方 TypeSafe 调用和 Android 初步安装/调用；MSI/NSIS 原生交互、稳定签名 Android APK、Android 真机 service/tile/通知、全链路性能和真实用户配置恢复仍须单独验收。
+当前代码和 v0.6.3 Release 已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测、headless CLI、JSON 设置备份、真实 route activity 辉光、HUD 自动隐藏和 Android keepalive/tile 源码。维护者已确认桌面核心路径、官方 TypeSafe 调用、Android 初步调用及 v0.6.3 本机网关启停/连接；MSI/NSIS 原生交互、Android 真机 service/tile/通知、全链路性能和真实用户配置恢复仍须单独验收。
 
 `abc793f` 已把 upstream attempt timing 合入主线：`TimedUpstream` 在 daemon 组合边界记录每次真实 adapter attempt（包括失败与重试），并提供会话级 `avg_upstream_latency_ms` 与 `upstream_attempts`。它是 transport + parsing 的 adapter processing time，不是纯网络耗时；不写 SQLite，也不与 gateway latency 相加。性能计划应直接复用这组数据，再补固定场景的 p50/p95/p99。
 
@@ -30,7 +30,7 @@ Android 方向已从“可行性调研”进入“完整网关应用实现”：
 | [GitHub Pages 首页](ROADMAP-PLAN-GITHUB-PAGES.md) | v0.2.0 页面已部署；v0.5.0 网站文案、Release metadata 和主题/语言切换已同步 | 推送/部署更新及移动端正式截图 |
 | [OpenRouter adapter](ROADMAP-PLAN-OPENROUTER.md) | adapter 已随 v0.2.0 发布并通过离线/WireMock 门禁 | 未使用 live key 验证账户能力/费用 |
 | 图标/性能首轮 | v0.5.0 已实现高频 UI 图标、健康探测并发/共享状态和隐藏页遥测暂停，并通过 UI tests/build、Windows 原生隔离和桌面自动门禁；品牌图标和跨硬件基线仍未完成 | 安装器、跨硬件和全链路 daemon/SQLite/UI 性能基线仍在本轮之后 |
-| [Android APP 正式发布与验收计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用实现阶段；Android daemon library、前台 service、通知、Quick Settings tile 和稳定签名 workflow 已进入主线，v0.6.2 默认启动内嵌后端，APP/通知/tile 共用启停状态机 | APK 安装、模拟器、真机、原生 service/tile 或后台生命周期仍需人工证据；不因有签名 workflow 就宣称设备验收完成 |
+| [Android APP 正式发布与验收计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用已稳定签名随 v0.6.3 发布；内置后端本机启停和 UI 连接有维护者设备证据；v0.7.0 候选补 Android 7–9 分享、原生 JSON/剪贴板与权限清单门禁，详见[权限审查](../verification/android-permission-audit-2026-10-03.md) | 原生 service/tile/通知、后台/OEM 回收、文件导出/剪贴板、热点 LAN 和跨 Android 版本行为仍需人工证据 |
 
 ## 共用交付门槛
 

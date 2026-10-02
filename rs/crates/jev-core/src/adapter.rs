@@ -520,7 +520,11 @@ impl Registry {
                     "attempt": attempt,
                     "outcome": "in_flight"
                 }));
-                match upstream.evaluate(attempt_req.clone()).await {
+                let started_at = std::time::Instant::now();
+                let result = upstream.evaluate(attempt_req.clone()).await;
+                route_attempts.last_mut().expect("attempt was recorded")["latency_ms"] =
+                    serde_json::json!(started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64);
+                match result {
                     Ok(mut resp) => {
                         route_attempts.last_mut().expect("attempt was recorded")["outcome"] =
                             serde_json::json!("succeeded");
@@ -683,7 +687,11 @@ impl Registry {
         for attempt in 1..=self.retry.max_attempts.max(1) {
             upstream_calls += 1;
             attempts.push(serde_json::json!({"provider_id":item.candidate.upstream_id,"upstream_model":item.candidate.upstream_model,"hops":item.candidate.hops,"priority":item.candidate.priority,"attempt":attempt,"outcome":"in_flight"}));
-            match upstream.evaluate(upstream_req.clone()).await {
+            let started_at = std::time::Instant::now();
+            let result = upstream.evaluate(upstream_req.clone()).await;
+            attempts.last_mut().expect("attempt was recorded")["latency_ms"] =
+                serde_json::json!(started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64);
+            match result {
                 Ok(mut response) => {
                     attempts.last_mut().expect("attempt was recorded")["outcome"] =
                         serde_json::json!("succeeded");
@@ -817,6 +825,7 @@ impl Registry {
                         "attempt":attempt_id,
                         "outcome":"in_flight"
                     }));
+                let started_at = std::time::Instant::now();
                 let result = upstream.evaluate(upstream_req).await;
                 if let Some(entry) = attempt_log
                     .lock()
@@ -827,6 +836,7 @@ impl Registry {
                             == Some(u64::from(attempt_id))
                     })
                 {
+                    entry["latency_ms"] = serde_json::json!(started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64);
                     match &result {
                         Ok(_) => entry["outcome"] = serde_json::json!("succeeded"),
                         Err(error) => {
@@ -1069,6 +1079,7 @@ mod tests {
         /// 429 但按本地类映射 retryable=false（不重试同候选；下一候选由 on_error 决定）。
         LocalErr429,
         Err401,
+        HttpStatus(u16, bool),
         BadResponse,
     }
 
@@ -1138,6 +1149,12 @@ mod tests {
                     status: 401,
                     body: "unauthorized".into(),
                     retryable: false,
+                }),
+                Mode::HttpStatus(status, retryable) => Err(JevError::Upstream {
+                    upstream_id: self.id.clone(),
+                    status,
+                    body: "test upstream error".into(),
+                    retryable,
                 }),
                 Mode::BadResponse => Err(JevError::BadResponse {
                     upstream_id: self.id.clone(),
@@ -1606,6 +1623,9 @@ mod tests {
             response.extra["route_trace"]["attempts"][0]["upstream_status"],
             401
         );
+        for attempt in response.extra["route_trace"]["attempts"].as_array().unwrap() {
+            assert!(attempt["latency_ms"].as_u64().is_some());
+        }
 
         let events = events.lock().unwrap();
         assert_eq!(events.len(), 4);
@@ -1642,6 +1662,41 @@ mod tests {
         assert_eq!(h2.calls.load(Ordering::SeqCst), 1);
         assert_eq!(response.upstream_calls, Some(2));
         assert_eq!(response.extra["route_trace"]["selected_provider"], "laya");
+    }
+
+    #[tokio::test]
+    async fn on_error_policy_matrix_preserves_actual_calls_and_status_across_http_classes() {
+        for (status, retryable) in [(400, false), (401, false), (402, false), (429, false), (429, true), (503, true)] {
+            for policy in [OnError::Next, OnError::Fail] {
+                let mut first = edge("jev", "first", 0);
+                first.on_error = policy;
+                let mut registry = Registry::with_retry(
+                    vec![first, edge("jev", "second", 1)],
+                    RetryPolicy::no_retry(),
+                );
+                let (first, first_handle) = fake("first", &[QuestionType::Noul], Mode::HttpStatus(status, retryable));
+                let (second, second_handle) = fake("second", &[QuestionType::Noul], Mode::Ok);
+                registry.register(first);
+                registry.register(second);
+                let result = registry.invoke_with_strategy_traced(
+                    noul_request("jev"), plain_ctx(), RoutingStrategy::Failover,
+                ).await;
+                assert_eq!(first_handle.calls.load(Ordering::SeqCst), 1, "status {status} policy {policy:?}");
+                if policy == OnError::Next {
+                    let response = result.expect("next must advance after any upstream HTTP failure");
+                    assert_eq!(second_handle.calls.load(Ordering::SeqCst), 1);
+                    assert_eq!(response.upstream_calls, Some(2));
+                    assert_eq!(response.extra["route_trace"]["attempts"][0]["upstream_status"], status);
+                    assert_eq!(response.extra["route_trace"]["attempts"][0]["retry_decision"], "next_candidate");
+                    assert_eq!(response.extra["route_trace"]["attempts"][1]["outcome"], "succeeded");
+                } else {
+                    let failure = result.expect_err("fail must stop after the first provider error");
+                    assert_eq!(second_handle.calls.load(Ordering::SeqCst), 0);
+                    assert_eq!(failure.route_trace["attempts"][0]["upstream_status"], status);
+                    assert_eq!(failure.route_trace["attempts"][0]["retry_decision"], "stop_by_candidate_policy");
+                }
+            }
+        }
     }
 
     /* ── ProtocolAdapter 默认恒等 + 对象可用 ──────────────────── */

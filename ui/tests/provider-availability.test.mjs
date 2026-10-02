@@ -35,3 +35,18 @@ test('malformed and non-request events do not enter the denominator', () => {
   ]);
   assert.deepEqual(summary.typesafe, { samples: ['success'], successes: 1, rate: 100 });
 });
+
+test('failed fallback branch counts against its own provider rather than the successful parent', () => {
+  const failedOver = {
+    ...event(10, 'jev-typesafe', true),
+    detail: JSON.stringify({ provider: 'jev-typesafe', success: true, route_trace: { attempts: [
+      { provider_id: 'vercel', outcome: 'failed', upstream_status: 401 },
+      { provider_id: 'jev-typesafe', outcome: 'succeeded' },
+      { provider_id: 'skipped', outcome: 'skipped' },
+    ] } }),
+  };
+  const summary = summarizeProviderAvailability(['vercel', 'jev-typesafe', 'skipped'], [failedOver]);
+  assert.deepEqual(summary.vercel, { samples: ['failure'], successes: 0, rate: 0 });
+  assert.deepEqual(summary['jev-typesafe'], { samples: ['success'], successes: 1, rate: 100 });
+  assert.deepEqual(summary.skipped, { samples: [], successes: 0, rate: null });
+});

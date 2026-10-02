@@ -875,6 +875,32 @@ mod tests {
     }
 
     #[test]
+    fn failover_history_keeps_one_parent_with_two_durable_provider_attempts() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::init_database(&conn).unwrap();
+        let trace = serde_json::json!({
+            "requested_model": "jev-vercel",
+            "selected_provider": "jev-typesafe",
+            "attempts": [
+                {"provider_id":"vercel","upstream_model":"typesafe-ai/jev","outcome":"failed","upstream_status":401,"latency_ms":114,"retry_decision":"next_candidate"},
+                {"provider_id":"jev-typesafe","upstream_model":"jev-latest","outcome":"succeeded","latency_ms":902}
+            ],
+            "upstream_calls": 2
+        });
+        conn.execute(
+            "INSERT INTO call_logs (timestamp,endpoint_id,route_key,upstream_provider,upstream_model,success,latency_ms,http_status,request_id,route_trace_json,upstream_calls)
+             VALUES (1,'jev-vercel','jev-vercel→typesafe-ai/jev','jev-typesafe','jev-latest',1,1100,200,'jev-147',?1,2)",
+            [trace.to_string()],
+        ).unwrap();
+        let history = request_events(&conn, None, 0, None, 50).unwrap();
+        assert_eq!(history.events.len(), 1);
+        let detail: serde_json::Value = serde_json::from_str(&history.events[0].detail).unwrap();
+        assert_eq!(detail["route_trace"]["attempts"].as_array().unwrap().len(), 2);
+        assert_eq!(detail["route_trace"]["attempts"][0]["upstream_status"], 401);
+        assert_eq!(detail["route_trace"]["attempts"][1]["provider_id"], "jev-typesafe");
+    }
+
+    #[test]
     fn aggregate_cost_is_unknown_when_any_dispatched_call_cost_is_unaccounted() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         crate::db::init_database(&conn).unwrap();

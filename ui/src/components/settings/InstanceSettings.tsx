@@ -13,6 +13,8 @@ import {
 } from '../../api/admin';
 import { useToast } from '../../app/feedback';
 import { useI18n, type MessageKey } from '../../i18n';
+import { SearchMark } from './SearchMark';
+import { settingMatches } from './settingsSearch';
 
 type DialogState = { type: 'mode'; mode: AdminStatus['mode'] } | { type: 'password' } | { type: 'lan-warning' } | null;
 
@@ -21,6 +23,8 @@ interface InstanceSettingsProps {
   onStatusChange: (status: AdminStatus) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  searchQuery?: string;
+  highlightQuery?: string;
 }
 
 export function InstanceSettings({
@@ -28,6 +32,8 @@ export function InstanceSettings({
   onStatusChange,
   open,
   onOpenChange,
+  searchQuery = '',
+  highlightQuery = '',
 }: InstanceSettingsProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -71,6 +77,11 @@ export function InstanceSettings({
 
   const copy = (key: string, vars?: Record<string, string | number>) =>
     t(key as MessageKey, vars);
+  const display = (key: string) => <SearchMark text={copy(key)} query={highlightQuery} />;
+  const showMode = settingMatches(searchQuery, 'mode local cloud 访问模式 本地 云端', copy('instance.modeTitle'), copy('instance.localHint'), copy('instance.modeHint'));
+  const showLan = settingMatches(searchQuery, 'lan local network 局域网 访问', copy('instance.lanTitle'), copy('instance.lanToggle'), copy('instance.lanHint'));
+  const showPassword = settingMatches(searchQuery, 'password admin 密码 管理员', copy('instance.passwordSection'), copy('instance.passwordHint'));
+  const showListen = settingMatches(searchQuery, 'listen address port 监听 地址 端口', copy('instance.listenTitle'), copy('instance.listenHint'));
 
   const openDialog = (next: Exclude<DialogState, null>) => {
     setSecret('');
@@ -251,20 +262,20 @@ export function InstanceSettings({
       >
         <summary className="cursor-pointer list-none px-5 py-4">
           <span className="font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
-            {copy('instance.settingsTitle')}
+            {display('instance.settingsTitle')}
           </span>
           <span className="ml-3" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-            {copy('instance.settingsSummary')}
+            {display('instance.settingsSummary')}
           </span>
         </summary>
 
         <div className="grid gap-0 border-t md:grid-cols-2" style={{ borderColor: 'var(--border)' }}>
-          <section className="space-y-3 p-5 md:border-r" style={{ borderColor: 'var(--border)' }}>
+          {showMode && <section className="space-y-3 p-5 md:border-r" style={{ borderColor: 'var(--border)' }}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('instance.modeTitle')}</h2>
+                <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{display('instance.modeTitle')}</h2>
                 <p className="mt-1" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-                  {copy('instance.localHint')}
+                  {display('instance.localHint')}
                 </p>
               </div>
               <span className="rounded-full px-2.5 py-1 font-mono text-xs" style={{ background: 'var(--surface-hover)' }}>
@@ -272,7 +283,7 @@ export function InstanceSettings({
               </span>
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-              {copy('instance.modeHint')}
+              {display('instance.modeHint')}
             </p>
             {status?.password_set === false && (
               <p role="status" style={{ color: 'var(--warning)', fontSize: 'var(--text-sm)' }}>
@@ -287,26 +298,31 @@ export function InstanceSettings({
             >
               {copy('instance.switchTo', { mode: modeTarget })}
             </button>
-          </section>
+          </section>}
 
-          {status?.mode === 'local' && <section className="space-y-3 border-t p-5 md:col-span-2" style={{ borderColor: 'var(--border)' }}>
+          {status?.mode === 'local' && showLan && <section className="space-y-3 border-t p-5 md:col-span-2" style={{ borderColor: 'var(--border)' }}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="grid gap-1">
-                <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('instance.lanTitle')}</h2>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{copy('instance.lanHint')}</p>
+                <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{display('instance.lanTitle')}</h2>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{display('instance.lanHint')}</p>
               </div>
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={lanAccessEnabled === true} disabled={busy || lanAccessEnabled === null} onChange={(event) => { if (event.target.checked) openDialog({ type: 'lan-warning' }); else void disableLanAccess(); }} className="h-4 w-4 accent-[var(--accent)]" />
-                {copy(lanAccessEnabled ? 'instance.lanOn' : 'instance.lanOff')}
-              </label>
+              <button
+                type="button"
+                aria-pressed={lanAccessEnabled === true}
+                disabled={busy || lanAccessEnabled === null}
+                onClick={() => { if (lanAccessEnabled) void disableLanAccess(); else openDialog({ type: 'lan-warning' }); }}
+                style={{ ...button, background: lanAccessEnabled ? 'var(--accent)' : 'var(--surface-hover)', borderColor: lanAccessEnabled ? 'var(--accent)' : 'var(--border)', color: lanAccessEnabled ? '#fff' : 'var(--text)' }}
+              >
+                {display('instance.lanToggle')}
+              </button>
             </div>
             <p className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{status.bind}</p>
           </section>}
 
-          <section className="space-y-3 p-5">
+          {showPassword && <section className="space-y-3 p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('instance.passwordSection')}</h2>
+                <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{display('instance.passwordSection')}</h2>
                 <p className="mt-1" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
                   {status?.password_set ? copy('instance.passwordConfigured') : copy('instance.passwordMissing')}
                 </p>
@@ -315,12 +331,12 @@ export function InstanceSettings({
                 {copy(status?.password_set ? 'instance.changePassword' : 'instance.setPassword')}
               </button>
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{copy('instance.passwordHint')}</p>
-          </section>
+            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{display('instance.passwordHint')}</p>
+          </section>}
 
-          <section className="space-y-3 border-t p-5 md:col-span-2" style={{ borderColor: 'var(--border)' }}>
+          {showListen && <section className="space-y-3 border-t p-5 md:col-span-2" style={{ borderColor: 'var(--border)' }}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('instance.listenTitle')}</h2>
+              <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{display('instance.listenTitle')}</h2>
               <code className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{status?.bind ?? '—'}</code>
             </div>
             {editingListen ? (
@@ -358,8 +374,8 @@ export function InstanceSettings({
                 </button>
               </div>
             )}
-            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{copy('instance.listenHint')}</p>
-          </section>
+            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{display('instance.listenHint')}</p>
+          </section>}
 
           {status?.env_override_active && (
             <p className="border-t px-5 py-3 md:col-span-2" role="status" style={{ borderColor: 'var(--border)', color: 'var(--warning)', fontSize: 'var(--text-xs)' }}>
