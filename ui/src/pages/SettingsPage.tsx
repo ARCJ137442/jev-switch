@@ -13,7 +13,8 @@ import { getLangPreference } from '../i18n/core';
 import { applyThemePreference, readThemePreference, type ThemePreference } from '../theme';
 import { readAutoProviderProbe, readRoutingHudAutoHide, readShowStatusBar, readUiScale, SETTINGS_CHANGE_EVENT, UI_SCALE_MAX_PERCENT, UI_SCALE_MIN_PERCENT, UI_SCALE_STEP_PERCENT, writeAutoProviderProbe, writeRoutingHudAutoHide, writeShowStatusBar, writeUiScale } from '../settings/preferences';
 import { createSettingsBackup, parseSettingsBackup } from '../settings/backup';
-import { getAndroidDebugLogStatus, isAndroidTauriRuntime, setAndroidDebugLog, type AndroidDebugLogStatus } from '../api/androidDebug';
+import { isAndroidTauriRuntime } from '../api/androidDebug';
+import { AndroidDiagnostics } from '../components/settings/AndroidDiagnostics';
 import { getAndroidKeepaliveNotificationStatus, getAndroidNotificationPermissionState, requestAndroidNotificationPermission, setAndroidKeepaliveNotification, type AndroidNotificationPermissionState } from '../api/androidGateway';
 import { getGatewayServiceStatus } from '../api/gatewayControl';
 import pkg from '../../package.json';
@@ -36,7 +37,6 @@ export function SettingsPage() {
   const [status, setStatus] = useState<AdminStatus | null>(null);
   const [health, setHealth] = useState<HealthBody | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const [debugLog, setDebugLog] = useState<AndroidDebugLogStatus | null>(null);
   const [keepaliveNotificationEnabled, setKeepaliveNotificationEnabled] = useState(true);
   const [notificationPermission, setNotificationPermission] = useState<AndroidNotificationPermissionState>('unknown');
   const [releaseCheck, setReleaseCheck] = useState<ReleaseCheckResult | null>(null);
@@ -67,7 +67,6 @@ export function SettingsPage() {
         setApiBase(localBase);
         window.dispatchEvent(new Event('jev-api-base-change'));
       }).catch(() => undefined);
-      getAndroidDebugLogStatus().then((result) => { if (alive) setDebugLog(result); }).catch(() => undefined);
       getAndroidKeepaliveNotificationStatus().then((result) => { if (alive) setKeepaliveNotificationEnabled(result.enabled); }).catch(() => undefined);
       getAndroidNotificationPermissionState().then((result) => { if (alive) setNotificationPermission(result); }).catch(() => undefined);
     }
@@ -253,8 +252,8 @@ export function SettingsPage() {
     { id: 'connection', label: t('settings.apiAddress' as MessageKey), terms: 'gateway api url address endpoint connection 网关 API 地址 连接', content: (
       matches('gateway api url address endpoint connection 网关 API 地址 连接') && <div className="grid gap-2">
         <label className="grid gap-2 text-sm"><span>{t('settings.apiAddress' as MessageKey)}</span><input className={fieldClass} style={fieldStyle} type="url" value={apiBase} onChange={(event) => setApiBase(event.target.value)} placeholder={t('settings.apiAddressPlaceholder' as MessageKey)} /></label>
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.apiAddressHint' as MessageKey)}</p>
-        <div className="flex flex-wrap gap-2"><button type="button" className={fieldClass} style={fieldStyle} onClick={saveApiAddress}>{saved ? t('settings.addressSaved' as MessageKey) : t('settings.saveAddress' as MessageKey)}</button><button type="button" className={fieldClass} style={fieldStyle} onClick={() => { setApiBase(''); clearApiBasePreference(); window.dispatchEvent(new Event('jev-api-base-change')); }}>{t('settings.resetAddress' as MessageKey)}</button></div>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{t((isAndroidTauriRuntime() ? 'settings.androidApiAddressHint' : 'settings.apiAddressHint') as MessageKey)}</p>
+        <div className="flex flex-wrap gap-2"><button type="button" className={fieldClass} style={fieldStyle} onClick={saveApiAddress}>{saved ? t('settings.addressSaved' as MessageKey) : t('settings.saveAddress' as MessageKey)}</button><button type="button" className={fieldClass} style={fieldStyle} onClick={() => { setApiBase(''); clearApiBasePreference(); window.dispatchEvent(new Event('jev-api-base-change')); }}>{t((isAndroidTauriRuntime() ? 'settings.androidResetAddress' : 'settings.resetAddress') as MessageKey)}</button></div>
       </div>
     ) },
     { id: 'settings-backup', label: t('settings.backup' as MessageKey), terms: 'backup restore export import json api key secret config 备份 恢复 导出 导入 密钥 配置', content: (
@@ -269,13 +268,7 @@ export function SettingsPage() {
       </div>
     ) },
     ...(isAndroidTauriRuntime() ? [{ id: 'android-debug', label: t('settings.androidDebug' as MessageKey), terms: 'android debug log diagnostics 安卓 调试 日志 诊断', content: (
-      matches('android debug log diagnostics 安卓 调试 日志 诊断') && <label className="flex items-start gap-3 text-sm">
-        <input type="checkbox" checked={debugLog?.enabled === true} onChange={async (event) => {
-          try { setDebugLog(await setAndroidDebugLog(event.target.checked)); }
-          catch (error) { setStatusError(error instanceof Error ? error.message : String(error)); }
-        }} className="mt-1 h-4 w-4 accent-[var(--accent)]" />
-        <span className="grid gap-1"><strong>{t('settings.androidDebugToggle' as MessageKey)}</strong><span style={{ color: 'var(--text-muted)' }}>{t('settings.androidDebugHint' as MessageKey)}</span>{debugLog?.path && <code className="break-all text-xs" style={{ color: 'var(--text-subtle)' }}>{debugLog.path}</code>}</span>
-      </label>
+      matches('android debug log diagnostics 安卓 调试 日志 诊断') && <AndroidDiagnostics />
     ) }] : []),
     ...(isAndroidTauriRuntime() ? [{ id: 'android-keepalive', label: t('settings.androidKeepalive' as MessageKey), terms: 'android foreground service persistent notification background 保活 常驻 通知 后台', content: (
       matches('android foreground service persistent notification background 保活 常驻 通知 后台') && <div className="grid gap-3">

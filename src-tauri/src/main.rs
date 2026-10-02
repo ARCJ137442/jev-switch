@@ -52,11 +52,15 @@ pub fn main() {
         builder = builder.plugin(android_keepalive::init());
         builder = builder.invoke_handler(tauri::generate_handler![
             android_gateway::gateway_status,
+            android_gateway::android_gateway_probe,
             android_gateway::start_gateway,
             android_gateway::stop_gateway,
             android_gateway::toggle_gateway,
             android_gateway::android_debug_log_status,
             android_gateway::android_set_debug_log,
+            android_gateway::android_read_debug_log,
+            android_gateway::android_record_web_probe,
+            android_gateway::android_export_debug_log,
             android_gateway::android_keepalive_notification_status,
             android_gateway::android_set_keepalive_notification,
             android_gateway::android_notification_permission_state,

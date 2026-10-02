@@ -104,6 +104,58 @@ async fn send(app: axum::Router, method: &str, uri: &str, body: Option<String>) 
     (status, String::from_utf8_lossy(&bytes).to_string())
 }
 
+#[tokio::test]
+async fn android_webview_origin_can_read_health_and_preflight_admin_requests() {
+    let app = build_app(state_with(
+        Registry::new(Vec::new()),
+        temp_config("android-webview-cors", ""),
+    ));
+    let health = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .header("origin", "http://tauri.localhost")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(health.status().as_u16(), 200);
+    assert_eq!(
+        health.headers().get("access-control-allow-origin").unwrap(),
+        "http://tauri.localhost"
+    );
+
+    let preflight = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/v1/admin/providers")
+                .header("origin", "http://tauri.localhost")
+                .header("access-control-request-method", "GET")
+                .header("access-control-request-headers", "authorization")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preflight.status().as_u16(), 200);
+    assert_eq!(
+        preflight.headers().get("access-control-allow-origin").unwrap(),
+        "http://tauri.localhost"
+    );
+    assert!(
+        preflight
+            .headers()
+            .get("access-control-allow-headers")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("authorization")
+    );
+}
+
 fn edge(left: &str, right: &str, priority: i32) -> RouteEdge {
     RouteEdge {
         left: left.into(),

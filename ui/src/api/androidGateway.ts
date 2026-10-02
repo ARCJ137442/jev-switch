@@ -6,6 +6,14 @@ export interface AndroidGatewayStatus {
   desired_running: boolean;
 }
 
+export interface AndroidGatewayProbe {
+  running: boolean;
+  bind: string | null;
+  http_status: number | null;
+  identity_ok: boolean;
+  error: string | null;
+}
+
 export interface AndroidKeepaliveNotificationStatus {
   enabled: boolean;
 }
@@ -23,6 +31,10 @@ export function isAndroidTauri(): boolean {
 export async function getAndroidGatewayStatus(): Promise<AndroidGatewayStatus | null> {
   if (!isAndroidTauri()) return null;
   return invoke<AndroidGatewayStatus>('gateway_status');
+}
+
+export function probeAndroidGateway(): Promise<AndroidGatewayProbe> {
+  return invoke<AndroidGatewayProbe>('android_gateway_probe');
 }
 
 export async function startAndroidGateway(): Promise<AndroidGatewayStatus> {

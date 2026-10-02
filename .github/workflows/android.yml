@@ -196,6 +196,12 @@ jobs:
           } finally {
             Pop-Location
           }
+          $variant = $flavor.Substring(0, 1).ToLowerInvariant() + $flavor.Substring(1) + 'Release'
+          $manifestPath = "src-tauri/gen/android/app/build/intermediates/packaged_manifests/$variant/process${flavor}ReleaseManifestForPackage/AndroidManifest.xml"
+          if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw "Packaged Android manifest is missing: $manifestPath" }
+          [xml]$manifest = Get-Content -LiteralPath $manifestPath -Raw
+          $cleartext = $manifest.DocumentElement.application.GetAttribute('usesCleartextTraffic', 'http://schemas.android.com/apk/res/android')
+          if ($cleartext -ne 'true') { throw "Android release APK would block its HTTP loopback gateway: usesCleartextTraffic=$cleartext" }
 
       - name: Prepare stable signing keystore
         if: steps.signing.outputs.available == 'true'

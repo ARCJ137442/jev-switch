@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::path::Path;
 use tauri::{
     plugin::{Builder, PluginHandle, TauriPlugin},
     AppHandle, Manager, Runtime, Wry,
@@ -73,4 +74,13 @@ pub fn take_pending_gateway_toggle<R: Runtime>(app: &AppHandle<R>) -> Result<boo
         .get("pending")
         .and_then(Value::as_bool)
         .unwrap_or(false))
+}
+
+pub fn export_debug_log<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<String, String> {
+    let plugin = app.state::<NativeKeepalive>();
+    let result: Value = plugin
+        .0
+        .run_mobile_plugin("exportDebugLog", serde_json::json!({ "path": path.display().to_string() }))
+        .map_err(|error| format!("export Android debug log failed: {error}"))?;
+    Ok(result.get("result").and_then(Value::as_str).unwrap_or("shared").to_string())
 }

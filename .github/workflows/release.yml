@@ -313,13 +313,15 @@ jobs:
           body: |
             ## 版本说明
 
-            公共版本号按已发布的 GitHub Release 顺序递增；失败的 CI 候选不会作为公开版本，相关修复会合并到下一次实际发行。
+            本次按维护者要求继续使用 `0.6.3`，签名 APK 的 `versionCode` 保持 `6003`，可覆盖同签名旧包。由于下载文件名不变，请核对随包 JSON 中的 commit 与 APK SHA-256，避免误装浏览器缓存的旧附件。
 
             ## 本版修复
 
             - Windows 窗口、任务栏、托盘及 Android launcher 使用同一黑底白色 J 图标；CI 检查母版哈希、无黄色/彩色像素和全部 ICO 尺寸。
             - 不同补丁版本使用独立的单实例身份，旧版驻留托盘时不会拦截新版本启动。
             - Android 稳定签名按 keystore 实际格式处理 PKCS12/JKS，并校验 APK 签名与 SHA-256 证书指纹。
+            - 多跳路由中 `on_error=next` 在 Vercel 等候选失败后继续尝试下一提供商；真实 Vercel 401 → TypeSafe 官方成功链路已验证。
+            - Android release APK 允许本机和用户指定局域网 HTTP API，修复后端已启动但 WebView `Failed to fetch`；设置页新增原生/WebView 双路 `/health` 检查、应用内日志查看和导出。新版 Android 真机网络、日志导出与后台生命周期仍待人工验收。
 
             ## 安装
 

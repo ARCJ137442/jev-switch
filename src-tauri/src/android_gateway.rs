@@ -5,13 +5,14 @@
 //! 只有用户明确停止后才在下一次打开时保持关闭。
 
 use std::{
+    io::{Read, Write},
     net::SocketAddr,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Mutex,
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use jev_switch_daemon::{
@@ -24,6 +25,7 @@ use tauri::{Manager, State};
 
 const DEFAULT_CONFIG: &str = include_str!("default_providers.toml");
 const MAX_DEBUG_LOG_BYTES: u64 = 512 * 1024;
+const HEALTH_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct GatewayStatus {
@@ -39,6 +41,15 @@ pub struct DebugLogStatus {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct GatewayProbe {
+    pub running: bool,
+    pub bind: Option<String>,
+    pub http_status: Option<u16>,
+    pub identity_ok: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct KeepaliveNotificationStatus {
     pub enabled: bool,
 }
@@ -46,7 +57,6 @@ pub struct KeepaliveNotificationStatus {
 struct RunningGateway {
     runtime: tokio::runtime::Runtime,
     handle: ListenHandle,
-    bound: SocketAddr,
 }
 
 pub struct AndroidGatewayState {
@@ -129,6 +139,14 @@ impl AndroidGatewayState {
         }
     }
 
+    fn read_debug_log(&self) -> Result<String, String> {
+        match std::fs::read_to_string(&self.debug_log_path) {
+            Ok(text) => Ok(text),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+            Err(error) => Err(format!("read Android debug log failed: {error}")),
+        }
+    }
+
     fn debug_event(&self, event: &str) {
         if !self.debug_logging.load(Ordering::SeqCst) {
             return;
@@ -169,7 +187,7 @@ impl AndroidGatewayState {
             .lock()
             .map_err(|_| "Android gateway state lock poisoned".to_string())?;
         if let Some(gateway) = guard.as_ref() {
-            return Ok(self.status(Some(gateway.bound)));
+            return Ok(self.status(Some(gateway.handle.bound())));
         }
 
         let mut config = Config::load(&self.config_path)
@@ -204,7 +222,6 @@ impl AndroidGatewayState {
         *guard = Some(RunningGateway {
             runtime,
             handle,
-            bound,
         });
         self.debug_event(&format!("gateway_start bind={bound}"));
         Ok(self.status(Some(bound)))
@@ -228,12 +245,12 @@ impl AndroidGatewayState {
     }
 
     fn set_debug_logging(&self, enabled: bool) -> Result<DebugLogStatus, String> {
-        self.debug_logging.store(enabled, Ordering::SeqCst);
         std::fs::write(
             &self.debug_state_path,
             if enabled { "enabled\n" } else { "disabled\n" },
         )
         .map_err(|error| format!("persist Android debug log preference failed: {error}"))?;
+        self.debug_logging.store(enabled, Ordering::SeqCst);
         if enabled {
             self.debug_event("debug_logging_enabled");
         }
@@ -267,8 +284,91 @@ pub fn gateway_status(state: State<'_, AndroidGatewayState>) -> GatewayStatus {
         .lock()
         .expect("Android gateway state lock")
         .as_ref()
-        .map(|gateway| gateway.bound);
+        .map(|gateway| gateway.handle.bound());
     state.status(running)
+}
+
+/// Probe the actual HTTP listener from Android native code. This distinguishes
+/// a bound socket from WebView cleartext/CORS failures without exposing keys.
+#[tauri::command]
+pub async fn android_gateway_probe(app: tauri::AppHandle) -> Result<GatewayProbe, String> {
+    let bound = match app.state::<AndroidGatewayState>().running.lock() {
+        Ok(guard) => guard.as_ref().map(|gateway| gateway.handle.bound()),
+        Err(_) => return Err("gateway state lock failed".into()),
+    };
+    let Some(bound) = bound else {
+        return Ok(GatewayProbe {
+            running: false,
+            bind: None,
+            http_status: None,
+            identity_ok: false,
+            error: None,
+        });
+    };
+    let target = SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), bound.port());
+    let result = match tauri::async_runtime::spawn_blocking(move || probe_health(target)).await {
+        Ok(probe) => probe,
+        Err(error) => GatewayProbe {
+            running: true,
+            bind: Some(bound.to_string()),
+            http_status: None,
+            identity_ok: false,
+            error: Some(format!("native health probe task failed: {error}")),
+        },
+    };
+    app.state::<AndroidGatewayState>().debug_event(if result.identity_ok {
+        "native_health_ok"
+    } else {
+        "native_health_failed"
+    });
+    Ok(GatewayProbe {
+        running: true,
+        bind: Some(bound.to_string()),
+        ..result
+    })
+}
+
+fn probe_health(address: SocketAddr) -> GatewayProbe {
+    let mut probe = GatewayProbe {
+        running: true,
+        bind: Some(address.to_string()),
+        http_status: None,
+        identity_ok: false,
+        error: None,
+    };
+    let response = (|| -> Result<String, std::io::Error> {
+        let mut stream = std::net::TcpStream::connect_timeout(&address, HEALTH_PROBE_TIMEOUT)?;
+        stream.set_read_timeout(Some(HEALTH_PROBE_TIMEOUT))?;
+        stream.set_write_timeout(Some(HEALTH_PROBE_TIMEOUT))?;
+        let request = format!(
+            "GET /health HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+            address.port()
+        );
+        stream.write_all(request.as_bytes())?;
+        let mut response = String::new();
+        stream.take(8192).read_to_string(&mut response)?;
+        Ok(response)
+    })();
+    match response {
+        Ok(response) => {
+            let (head, body) = response.split_once("\r\n\r\n").unwrap_or((&response, ""));
+            probe.http_status = head
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .and_then(|value| value.parse().ok());
+            probe.identity_ok = probe.http_status == Some(200)
+                && serde_json::from_str::<serde_json::Value>(body).ok().is_some_and(|value| {
+                    value.get("product").and_then(serde_json::Value::as_str) == Some("jev-switch")
+                        && value.get("status").and_then(serde_json::Value::as_str) == Some("ok")
+                });
+            if !probe.identity_ok {
+                probe.error = Some("/health returned an unexpected response".into());
+            }
+        }
+        Err(error) => probe.error = Some(format!("native /health request failed: {error}")),
+    }
+    probe
 }
 
 #[tauri::command]
@@ -282,6 +382,35 @@ pub fn android_set_debug_log(
     enabled: bool,
 ) -> Result<DebugLogStatus, String> {
     state.set_debug_logging(enabled)
+}
+
+#[tauri::command]
+pub fn android_read_debug_log(state: State<'_, AndroidGatewayState>) -> Result<String, String> {
+    state.read_debug_log()
+}
+
+#[tauri::command]
+pub fn android_record_web_probe(
+    state: State<'_, AndroidGatewayState>,
+    ok: bool,
+    http_status: Option<u16>,
+) {
+    let result = if ok { "web_health_ok" } else { "web_health_failed" };
+    let status = http_status
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "none".into());
+    state.debug_event(&format!("{result} status={status}"));
+}
+
+#[tauri::command]
+pub fn android_export_debug_log(
+    app: tauri::AppHandle,
+    state: State<'_, AndroidGatewayState>,
+) -> Result<String, String> {
+    if !state.debug_log_path.is_file() {
+        return Err("Android debug log is empty; enable recording and reproduce the issue first".into());
+    }
+    super::android_keepalive::export_debug_log(&app, &state.debug_log_path)
 }
 
 #[tauri::command]

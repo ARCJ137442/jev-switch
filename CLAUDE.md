@@ -42,7 +42,7 @@ Jev-Switch 是 Jev 原生模型网关，提供 React 控制台、Tauri 桌面壳
 | 本地 daemon | 设置 `$env:JEV_SWITCH_CONFIG="rs\providers.example.toml"` 后运行 `cargo run --manifest-path rs/Cargo.toml` |
 | 健康检查 | `curl http://127.0.0.1:11435/health` |
 
-版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.6.3`；版本字段（含 Android 配置）、发行产物、README 与核验记录必须保持一致。v0.6.3 在 v0.6.2 基础上修复 `on_error=next` 对非 retryable 上游错误不继续 failover 的问题；Tauri 原生 WebView、安装器、稳定签名 Android 原生 service/tile/通知和全链路性能仍必须单独标注边界。
+版本号与完整发版步骤见 [docs/RELEASE.md](docs/RELEASE.md)。当前源码版本为 `0.6.3`；版本字段（含 Android 配置）、发行产物、README 与核验记录必须保持一致。v0.6.3 在 v0.6.2 基础上修复 `on_error=next` 对非 retryable 上游错误不继续 failover 的问题，并补正 Android release APK 对本机 HTTP 网关的访问设置与可导出的连接诊断；新版 APK 的真机连通仍须单独确认。Tauri 原生 WebView、安装器、稳定签名 Android 原生 service/tile/通知和全链路性能仍必须单独标注边界。
 
 ## 文档入口
 

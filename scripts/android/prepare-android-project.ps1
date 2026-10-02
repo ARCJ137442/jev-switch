@@ -86,6 +86,20 @@ if (-not (Test-Path -LiteralPath $resRoot -PathType Container) -or -not (Test-Pa
     throw "Tauri Android project is not initialized: $androidRoot"
 }
 
+# Tauri's generated release variant disables cleartext by default. The embedded
+# gateway and user-selected LAN services use HTTP, so a signed APK would bind
+# 127.0.0.1 successfully while Android WebView rejects every API fetch.
+$gradleSource = [IO.File]::ReadAllText($buildFile)
+$cleartextDefault = 'manifestPlaceholders["usesCleartextTraffic"] = "false"'
+if ($gradleSource.Contains($cleartextDefault)) {
+    $gradleSource = $gradleSource.Replace($cleartextDefault, 'manifestPlaceholders["usesCleartextTraffic"] = "true"')
+    [IO.File]::WriteAllText($buildFile, $gradleSource, [Text.UTF8Encoding]::new($false))
+}
+if ($gradleSource -match 'manifestPlaceholders\["usesCleartextTraffic"\] = "false"' -or
+    $gradleSource -notmatch 'defaultConfig\s*\{\s*manifestPlaceholders\["usesCleartextTraffic"\] = "true"') {
+    throw 'Android release cleartext setting is not enabled for the local HTTP gateway.'
+}
+
 $generatedSources = Join-Path $mainSourceRoot 'java/io/github/arcj137442/jevswitch/keepalive'
 New-Item -ItemType Directory -Path $generatedSources -Force | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $keepaliveSource 'java') -Filter '*.kt' -File | ForEach-Object {
@@ -294,3 +308,4 @@ Write-Host "Android launcher resources synced from app-icon.png ($copied files).
 Write-Host "Android user-facing name: $androidDisplayName; internal package/binary id remains jev-switch."
 Write-Host 'Android recent-task icon and stale template icon cleanup verified.'
 Write-Host 'Android foreground keepalive service and Quick Settings tile synced.'
+Write-Host 'Android release permits HTTP for the embedded loopback gateway and user-selected LAN APIs.'
