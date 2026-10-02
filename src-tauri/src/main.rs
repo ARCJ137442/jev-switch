@@ -288,10 +288,10 @@ mod tests {
     #[test]
     fn single_instance_identity_isolated_for_each_patch_version() {
         let identity = tauri_plugin_single_instance::semver_instance_key(env!("CARGO_PKG_VERSION"));
-        for other_version in ["0.6.0", "0.6.1", "0.6.3", "0.6.4"] {
+        for other_version in ["0.6.0", "0.6.1", "0.6.2", "0.6.4"] {
             let other_identity =
                 tauri_plugin_single_instance::semver_instance_key(other_version);
-            assert_ne!(identity, other_identity, "{other_version} must not capture 0.6.2");
+            assert_ne!(identity, other_identity, "{other_version} must not capture current build");
         }
     }
     use tauri::{Manager, RunEvent};

@@ -13,7 +13,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
 - **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与[当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
 - **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。
-- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.6.2` 合并修复 Android keystore 类型探测、Windows 窗口/任务栏/托盘/EXE 使用黑底白色 `J` 图标和精确版本单实例隔离；此前的 JSON 设置备份、真实路由 activity 辉光、Routing HUD 自动隐藏、Android keepalive/tile 源码、懒加载页面和官网图标化继续保留。之前 v0.6.2-v0.6.4 都是未公开发布的签名候选，公开版本序列仍从 v0.6.1 到 v0.6.2。
+- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.6.3` 在 v0.6.2 基线上修复多跳 `on_error=next` 的非 retryable 错误 failover，并保留 Android keystore 类型探测、Windows 窗口/任务栏/托盘/EXE 使用黑底白色 `J` 图标和精确版本单实例隔离；此前的 JSON 设置备份、真实路由 activity 辉光、Routing HUD 自动隐藏、Android keepalive/tile 源码、懒加载页面和官网图标化继续保留。
 - **可编辑调用路由 DAG**：支持对外入口、路由节点和提供商模型端口之间的多跳与分支，并配置候选优先级和失败处理；简单直连只是 DAG 的一种形式。
 - **演练场横向比较**：可比较多个对外入口、直接上游模型或混合目标；结果分别呈现实际路径、耗时、usage 与错误。
 - **密钥边界**：上游 key 留在 daemon；管理 API 只返回脱敏状态，不提供明文读回接口。不要把真实 key 提交到仓库或聊天。
@@ -22,7 +22,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **Headless CLI Phase 1**：`jev-switch-cli` 通过 daemon HTTP API 提供 `status`、`models`、`invoke`、`routes`、`events`，支持 JSON/表格输出，适合 Termux、SSH 与脚本；TUI 和完整 Android 原生交互仍后置。详见 [CLI 文档](docs/CLI.md)。
 - **统计与实时路由反馈**：统计页按当前筛选范围提供入口/提供商健康矩阵，格子保持正方形并按宽度自适应日/时/分/秒粒度；路由 DAG 从独立实时事件流呈现固定线宽、请求曝光和响应辉光。历史调用支持自定义每页条数。
 - **跨平台界面偏好**：设置支持 10%–200% 的全局 UI 缩放，滑块步长 5% 并可输入自定义倍率；演练场样例 chip 在窄屏自动换行，Shift 多选语义保持一致。
-- **Android APP**：作为正式下载渠道维护，优先级次于 Windows 桌面。v0.5.0 Release 中的 debug-signed APK 是历史构建；v0.6.2 源码包含稳定签名 workflow、按 JKS magic bytes 识别 PKCS12/JKS、前台 service、常驻通知、Quick Settings tile 和统一网关状态桥。打开 APP 会直接启动内嵌本机后端，首页可以启停；设置里的空 API 地址会自动指向实际本机监听端口。后台 service、通知、Quick Settings tile、局域网、旋转/键盘稳定性仍按各功能的实际设备证据验收。详见 [Android 构建与验收计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
+- **Android APP**：作为正式下载渠道维护，优先级次于 Windows 桌面。v0.5.0 Release 中的 debug-signed APK 是历史构建；v0.6.3 源码包含稳定签名 workflow、按 JKS magic bytes 识别 PKCS12/JKS、前台 service、常驻通知、Quick Settings tile 和统一网关状态桥。打开 APP 会直接启动内嵌本机后端，首页可以启停；设置里的空 API 地址会自动指向实际本机监听端口。后台 service、通知、Quick Settings tile、局域网、旋转/键盘稳定性仍按各功能的实际设备证据验收。详见 [Android 构建与验收计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - **当前迭代入口**：路由画布/HUD、演练场批量矩阵、Provider/Entry 搜索、统计/设置、运行控制和探测偏好按[用户反馈迭代计划](docs/design/USER-FEEDBACK-ITERATION-PLAN.md)分阶段推进。
 - **图标与运行效率**：主导航、Dashboard 状态速览、调用活动和 Routing 高频工具已有 Lucide 语义图标；Dashboard 连通性探测限制并发并合并状态提交，health 状态共享，隐藏页暂停遥测。具体测量和范围见[图标/性能验证记录](docs/verification/ui-icon-performance-2026-09-30.md)。
 - **五页控制台**：Dashboard、Providers、Entries、Routing DAG、Playground；当前提供简体中文和英文，语言注册表可扩展。
@@ -132,10 +132,10 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**正式发行版本截至 2026-10-01：**最新公开发行版为 [`v0.6.2`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.6.2)，包含统计自适应热力图、真实路由辉光、10%–200% UI 缩放和演练场响应式修订。`v0.6.2`-`v0.6.4` 中早期失败候选从未创建公开 Release；公开版本序列从 v0.6.1 直接进入 v0.6.2。通用 Rust、UI、Tauri 壳、浏览器行为、Android keystore 判型、Windows 图标资源校验和单实例版本隔离已自动验证；桌面核心路径、官方 TypeSafe 调用及 Android 初步安装/调用的历史人工证据分别按记录标注。原生桌面 WebView、托盘、稳定签名 APK、Android service/tile/通知和跨硬件性能仍需人工验收。
+**正式发行版本截至 2026-10-02：**最新公开发行版为 [`v0.6.3`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.6.3)，在 v0.6.2 基础上修复多跳 `on_error=next` 的非 retryable 错误 failover，并增加 Vercel 失败→TypeSafe 成功的路由回归覆盖与真实请求证据。统计自适应热力图、真实路由辉光、10%–200% UI 缩放和演练场响应式修订属于 v0.6.2 基线。通用 Rust、UI、Tauri 壳、浏览器行为、Android keystore 判型、Windows 图标资源校验和单实例版本隔离已自动验证；桌面核心路径、官方 TypeSafe 调用及 Android 初步安装/调用的历史人工证据分别按记录标注。原生桌面 WebView、托盘、稳定签名 APK、Android service/tile/通知和跨硬件性能仍需人工验收。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 
 同一便携运行时的 Playground 已用同一份内置输入跑通公开入口↔公开入口、直连上游↔直连上游、公开入口↔直连上游三种比较；六列均成功调用本地 Laya，HTTP 200，request ID 与 SQLite route trace 对齐。该实例的 Vercel 公开入口也实测 HTTP 200；远端 dry-run workflow 已构建 MSI、NSIS 与便携 artifact 并通过哈希核对，Docker cloud 持久化和 CI 测试也有通过记录。
 
-验收边界：维护者已人工确认 v0.4.0 便携/Standalone 桌面核心路径、官方 TypeSafe 调用及 v0.5.0 Android 初步安装/官方调用；MSI/NSIS 安装器、Android 原生 service/tile/通知、OpenRouter live call、真实用户配置恢复和全链路性能仍按各自核验记录处理。v0.5.0 Release 的 Android APK 使用临时 debug 签名，仅作历史证据；v0.6.2 将验证稳定签名 APK 的 PKCS12/JKS 兼容、Windows 品牌图标与更新进程隔离。详细边界见[下一轮用户反馈计划](docs/design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md)和对应发布核验记录。
+验收边界：维护者已人工确认 v0.4.0 便携/Standalone 桌面核心路径、官方 TypeSafe 调用及 v0.5.0 Android 初步安装/官方调用；MSI/NSIS 安装器、Android 原生 service/tile/通知、OpenRouter live call、真实用户配置恢复和全链路性能仍按各自核验记录处理。v0.5.0 Release 的 Android APK 使用临时 debug 签名，仅作历史证据；v0.6.3 的稳定签名 APK、Windows 品牌图标与更新进程隔离仍按本次 Release 资产和人工平台验收记录区分。详细边界见[下一轮用户反馈计划](docs/design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md)和对应发布核验记录。

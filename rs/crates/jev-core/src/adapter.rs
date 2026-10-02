@@ -82,11 +82,11 @@ RetryPolicy（A6 · 07 P1-3 / contracts/02 §3 分层允许项）
 
 /// 同候选内重试策略。
 ///
-/// - **顺序（写死）**：先同候选退避重试，耗尽后才交给 failover（`on_error=next`
-///   跨候选）。`on_error=fail` **首错即返** —— 不做同候选重试也不 failover
-///   （contracts/03 §4「第一次错误即返回」字面）。
-/// - 仅 `JevError::retryable()` 为 true 的错误进入重试（429/5xx/Timeout/Network；
-///   本地类上游 `retryable_status=[0]` → 恒 false → **不重试**）。
+/// - **顺序（写死）**：`on_error=next` 时先对 retryable 错误做同候选退避重试，耗尽
+///   或遇到非 retryable 错误后尝试下一候选。`on_error=fail` **首错即返**，不重试也不
+///   failover（contracts/03 §4「第一次错误即返回」字面）。
+/// - 仅 `JevError::retryable()` 为 true 的错误进入同候选重试（429/5xx/Timeout/Network；
+///   本地类上游 `retryable_status=[0]` → 恒 false → **不重试同一提供商**）。
 /// - 退避：第 n 次失败后 sleep `backoff_base * 2^(n-1)`（n 从 1 起，指数封顶防溢出）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetryPolicy {
@@ -318,8 +318,8 @@ impl Registry {
     /// 行为（contracts/03 §4 + 07 P1-3）：
     /// - 无匹配边 / 全悬空 → [`JevError::UnknownModel`] / [`JevError::UnknownUpstream`]（404）
     /// - capability 不匹配 → 跳过该候选（不计入失败语义、不实发）
-    /// - **顺序**：`on_error=fail` 首错即返；`next` 时先同候选按 [`RetryPolicy`]
-    ///   退避重试，耗尽 → 下一候选；不可重试错误 → 即返
+    /// - **顺序**：`on_error=fail` 首错即返；`next` 时先对 retryable 错误按
+    ///   [`RetryPolicy`] 同候选退避重试，耗尽或遇到非 retryable 错误 → 下一候选
     /// - 全败 → 返回最后错误（调用方按 `http_status()` 映射）
     /// - 成功 → `upstream_calls = 实发次数`
     pub async fn invoke(&self, req: JevRequest, ctx: RouteCtx) -> Result<JevResponse, JevError> {
@@ -456,7 +456,7 @@ impl Registry {
         let mut cap_skip: Option<JevError> = None;
         let mut route_attempts = Vec::<serde_json::Value>::new();
 
-        for item in &plan {
+        for (candidate_index, item) in plan.iter().enumerate() {
             let Some(upstream) = self.router.upstream(&item.candidate.upstream_id) else {
                 route_attempts.push(serde_json::json!({
                     "provider_id": item.candidate.upstream_id,
@@ -544,10 +544,10 @@ impl Registry {
                             "stop_by_candidate_policy"
                         } else if e.retryable() && attempt < self.retry.max_attempts {
                             "retry_same_candidate"
-                        } else if e.retryable() {
+                        } else if candidate_index + 1 < plan.len() {
                             "next_candidate"
                         } else {
-                            "stop_non_retryable"
+                            "no_next_candidate"
                         };
                         annotate_attempt_failure(
                             route_attempts.last_mut().expect("attempt was recorded"),
@@ -573,19 +573,9 @@ impl Registry {
                             }
                             continue;
                         }
-                        // 重试耗尽 / 不可重试：
-                        if e.retryable() {
-                            self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: false });
-                            last_err = Some(e);
-                            break; // on_error=next → 下一候选（跨候选 failover）
-                        }
                         self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: false });
-                        return Err(InvocationFailure::new(
-                            &req.model,
-                            route_attempts,
-                            upstream_calls,
-                            e,
-                        )); // 不可重试 → 即返
+                        last_err = Some(e);
+                        break; // on_error=next：重试耗尽或不可重试，都交给下一候选
                     }
                 }
             }
@@ -1076,9 +1066,9 @@ mod tests {
         Err429OnceThenOk,
         /// 前 2 次 429、之后成功（A6 退避耗尽/failover 顺序路径）。
         Err429TwiceThenOk,
-        /// 429 但按本地类映射 retryable=false（laya 语义 —— 不重试不 failover）。
+        /// 429 但按本地类映射 retryable=false（不重试同候选；下一候选由 on_error 决定）。
         LocalErr429,
-        Err400,
+        Err401,
         BadResponse,
     }
 
@@ -1143,10 +1133,10 @@ mod tests {
                     }
                 }
                 Mode::LocalErr429 => rate_limited(false),
-                Mode::Err400 => Err(JevError::Upstream {
+                Mode::Err401 => Err(JevError::Upstream {
                     upstream_id: self.id.clone(),
-                    status: 400,
-                    body: "bad".into(),
+                    status: 401,
+                    body: "unauthorized".into(),
                     retryable: false,
                 }),
                 Mode::BadResponse => Err(JevError::BadResponse {
@@ -1550,42 +1540,108 @@ mod tests {
         assert_eq!(failure.route_trace["attempts"][1]["provider_id"], "laya");
         assert_eq!(
             failure.route_trace["attempts"][1]["retry_decision"],
-            "stop_non_retryable"
+            "no_next_candidate"
         );
         assert_eq!(failure.route_trace["failure"]["http_status"], 429);
         assert!(!failure.route_trace.to_string().contains("rate limited"));
     }
 
     #[tokio::test]
-    async fn non_retryable_stops_even_with_next() {
-        let mut reg = Registry::new(vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)]);
-        let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Mode::Err400);
-        let (v2, h2) = fake("laya", &[QuestionType::Noul], Mode::Ok);
-        reg.register(v1);
-        reg.register(v2);
-        let err = reg
-            .invoke(noul_request("jev"), plain_ctx())
+    async fn nested_non_retryable_failure_fails_over_to_next_candidate() {
+        let mut entry = edge("jev-vercel", "typesafe-ai/jev", 10);
+        entry.upstream_model = Some("typesafe-ai/jev".into());
+        let mut official = edge("typesafe-ai/jev", "jev-typesafe", 1);
+        official.upstream_model = Some("jev-latest".into());
+        let mut registry = Registry::with_retry(
+            vec![entry, edge("typesafe-ai/jev", "vercel", 0), official],
+            RetryPolicy::new(3, std::time::Duration::ZERO),
+        );
+        let (vercel, vercel_handle) = fake("vercel", &[QuestionType::Boolean], Mode::Err401);
+        let (typesafe, typesafe_handle) = fake("jev-typesafe", &[QuestionType::Noul], Mode::Ok);
+        registry.register(vercel);
+        registry.register(typesafe);
+
+        let events = Arc::new(Mutex::new(Vec::<RouteActivity>::new()));
+        let captured = events.clone();
+        registry.set_route_activity_observer(Some(Arc::new(move |event| {
+            captured.lock().unwrap().push(event);
+        })));
+
+        let response = registry
+            .invoke_with_strategy_traced(
+                noul_request("jev-vercel"),
+                plain_ctx(),
+                RoutingStrategy::Failover,
+            )
             .await
-            .unwrap_err();
-        assert_eq!(err.http_status(), 400);
-        assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
-        assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
+            .expect("non-retryable Vercel failure should advance to TypeSafe");
+
+        assert_eq!(vercel_handle.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(typesafe_handle.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            vercel_handle.seen.lock().unwrap().as_slice(),
+            &["typesafe-ai/jev"]
+        );
+        assert_eq!(
+            typesafe_handle.seen.lock().unwrap().as_slice(),
+            &["jev-latest"]
+        );
+        assert_eq!(response.upstream_calls, Some(2));
+        assert_eq!(
+            response.extra["route_trace"]["selected_provider"],
+            "jev-typesafe"
+        );
+        assert_eq!(
+            response.extra["route_trace"]["attempts"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            response.extra["route_trace"]["attempts"][0]["retry_decision"],
+            "next_candidate"
+        );
+        assert_eq!(
+            response.extra["route_trace"]["attempts"][0]["upstream_status"],
+            401
+        );
+
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 4);
+        assert_eq!(events[0].provider_id, "vercel");
+        assert_eq!(events[0].phase, RouteActivityPhase::Started);
+        assert_eq!(
+            events[1].phase,
+            RouteActivityPhase::Finished { success: false }
+        );
+        assert_eq!(events[2].provider_id, "jev-typesafe");
+        assert_eq!(events[2].phase, RouteActivityPhase::Started);
+        assert_eq!(
+            events[3].phase,
+            RouteActivityPhase::Finished { success: true }
+        );
+        assert_eq!(events[0].route_edges.len(), 2);
+        assert_eq!(events[0].route_edges[1].right, "vercel");
+        assert_eq!(events[2].route_edges.len(), 2);
+        assert_eq!(events[2].route_edges[1].right, "jev-typesafe");
     }
 
     #[tokio::test]
-    async fn bad_response_502_no_failover() {
+    async fn bad_response_fails_over_when_on_error_is_next() {
         let mut reg = Registry::new(vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)]);
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Mode::BadResponse);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Mode::Ok);
         reg.register(v1);
         reg.register(v2);
-        let err = reg
+        let response = reg
             .invoke(noul_request("jev"), plain_ctx())
             .await
-            .unwrap_err();
-        assert_eq!(err.http_status(), 502);
+            .expect("bad response from first candidate advances to the next");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
-        assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(h2.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(response.upstream_calls, Some(2));
+        assert_eq!(response.extra["route_trace"]["selected_provider"], "laya");
     }
 
     /* ── ProtocolAdapter 默认恒等 + 对象可用 ──────────────────── */
@@ -1733,10 +1789,10 @@ mod tests {
         );
     }
 
-    /// 本地类上游（JevError::retryable()=false）：**不重试、不 failover**、
-    /// 次候选零触碰；429 非 retryable → 透传 429（非 503）。
+    /// 本地类上游（JevError::retryable()=false）不重试同一提供商，但 `on_error=next`
+    /// 仍会切换到下一候选；429 保持原状态码，不改写成 503。
     #[tokio::test]
-    async fn local_style_upstream_429_not_retried_not_failed_over() {
+    async fn local_style_upstream_429_skips_same_provider_retry_but_fails_over() {
         let mut reg = Registry::with_retry(
             vec![edge("jev", "local", 10), edge("jev", "b", 30)],
             RetryPolicy::new(5, std::time::Duration::from_millis(1)), // 预算再大也不用
@@ -1746,22 +1802,26 @@ mod tests {
         reg.register(v1);
         reg.register(v2);
 
-        let err = reg
-            .invoke(noul_request("jev"), plain_ctx())
-            .await
-            .unwrap_err();
-        assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "本地不重试");
+        let response = reg.invoke(noul_request("jev"), plain_ctx()).await.unwrap();
+        assert_eq!(
+            h1.calls.load(Ordering::SeqCst),
+            1,
+            "本地错误不在同一提供商重试"
+        );
         assert_eq!(
             h2.calls.load(Ordering::SeqCst),
-            0,
-            "retryable=false 也不 failover"
+            1,
+            "on_error=next advances after a non-retryable failure"
+        );
+        assert_eq!(response.upstream_calls, Some(2));
+        assert_eq!(
+            response.extra["route_trace"]["attempts"][0]["upstream_status"],
+            429
         );
         assert_eq!(
-            err.http_status(),
-            429,
-            "非 retryable → 透传上游码（非 503）"
+            response.extra["route_trace"]["attempts"][0]["retry_decision"],
+            "next_candidate"
         );
-        assert!(!err.retryable());
     }
 
     /// on_error=fail：首错即返 —— 即使策略给了重试预算也不重试（契约字面）。

@@ -31,6 +31,34 @@ test('correlates started, retry and finished events across every real DAG edge',
   assert(first.glowLevel > 0 && second.glowLevel > 0);
 });
 
+test('nested failover colors failed and successful provider branches independently', () => {
+  const nestedRoutes = [
+    { left: 'jev-vercel', match: 'exact', right: 'typesafe-ai/jev', upstream_model: 'typesafe-ai/jev' },
+    { left: 'typesafe-ai/jev', match: 'exact', right: 'vercel' },
+    { left: 'typesafe-ai/jev', match: 'exact', right: 'jev-typesafe', upstream_model: 'jev-latest' },
+  ];
+  const candidateEvent = (phase, activityId, routeEdges, id) => ({
+    kind: 'route_activity',
+    id,
+    detail: JSON.stringify({ phase, activity_id: activityId, route_edges: routeEdges }),
+  });
+  let state = {};
+  state = activity.applyRouteActivityEvent(state, nestedRoutes, candidateEvent('started', 'vercel-1', nestedRoutes.slice(0, 2), 1), 1000);
+  state = activity.applyRouteActivityEvent(state, nestedRoutes, candidateEvent('finished_failure', 'vercel-1', nestedRoutes.slice(0, 2), 2), 1100);
+  state = activity.applyRouteActivityEvent(state, nestedRoutes, candidateEvent('started', 'typesafe-1', [nestedRoutes[0], nestedRoutes[2]], 3), 1100);
+  state = activity.applyRouteActivityEvent(state, nestedRoutes, candidateEvent('finished_success', 'typesafe-1', [nestedRoutes[0], nestedRoutes[2]], 4), 1200);
+
+  const vercel = activity.edgeActivityVisual(state[JSON.stringify(['typesafe-ai/jev', 'exact', 'vercel', null])], 1200);
+  const typesafe = activity.edgeActivityVisual(state[JSON.stringify(['typesafe-ai/jev', 'exact', 'jev-typesafe', 'jev-latest'])], 1200);
+  const sharedEntry = activity.edgeActivityVisual(state[JSON.stringify(['jev-vercel', 'exact', 'typesafe-ai/jev', 'typesafe-ai/jev'])], 1200);
+  assert.equal(vercel.outcomeCount, 1);
+  assert.equal(vercel.successRate, 0);
+  assert.equal(typesafe.outcomeCount, 1);
+  assert.equal(typesafe.successRate, 1);
+  assert.equal(sharedEntry.outcomeCount, 2);
+  assert(sharedEntry.successRate > 0 && sharedEntry.successRate < 1);
+});
+
 test('concurrent activities remain separate and timeout is treated as failure', () => {
   let state = {};
   state = activity.applyRouteActivityEvent(state, routes, event('started', 1), 0);

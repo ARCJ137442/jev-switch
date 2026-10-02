@@ -97,8 +97,8 @@ enabled = false
 # ── 模型路由 DAG（contracts/03 §2 [[routes]]）────────────────────────
 # 示例一：对外 id "jev" 双候选（同模型可切换）——
 #   p10 优先走 Vercel（改写上游 model 为 typesafe-ai/jev）；
-#   Vercel 429/5xx/超时/网络类可重试错误自动 failover 到 p30 的 Laya
-#   （on_error=next；Laya 侧改写上游 model 为 laya-english）。
+#   Vercel retryable 错误先按 RetryPolicy 重试同一候选，耗尽后 failover；其他错误
+#   则按 on_error=next 立即切到 p30 的 Laya（上游 model 改写为 laya-english）。
 [[routes]]
 left = "jev"
 match = "exact"

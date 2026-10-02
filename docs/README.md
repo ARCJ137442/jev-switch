@@ -1,17 +1,17 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前公开版为 `v0.6.2`；Release 附 Windows Standalone/Portable、CLI、Docker 与稳定签名 Android arm64 APK。Android service/tile/通知仍按候选核验记录保留设备验收边界。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前公开版为 `v0.6.3`；Release 附 Windows Standalone/Portable、CLI、Docker，Android 资产按本次签名门禁结果提供。Android service/tile/通知仍按候选核验记录保留设备验收边界。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理，2026-09-30。
 
-> **2026-10-01 adapter 状态：**当前源码候选 `v0.6.2` 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
+> **2026-10-02 adapter 状态：**当前源码 `v0.6.3` 包含 TypeSafe 官方、TypeSafe-compatible SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **历史发布快照（截至 2026-09-27）**：当时最新正式版为 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，包含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。对应 Release gate 的 Rust、UI、Tauri 与版本检查通过；验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。用户提供的 Tauri 截图整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；这些材料不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。当前版本与能力以本文后续的 2026-09-30 产品基线、[发布手册](RELEASE.md)及对应核验记录为准。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段（2026-10-01）**：公开版为 v0.6.2；Release 已附便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、统计自适应热力图/分页、JSON 设置备份、真实路由 activity/辉光、10%–200% UI 缩放、演练场响应式 chip、Android arm64 构建和稳定签名 APK。MSI/NSIS 原生人工交互、Android 真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
+> **当前产品基线与维护阶段（2026-10-02）**：公开版为 v0.6.3；Release 已附便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、统计自适应热力图/分页、JSON 设置备份、真实路由 activity/辉光、10%–200% UI 缩放、演练场响应式 chip，并包含多跳 failover 修复。MSI/NSIS 原生人工交互、Android 真机 service、TUI、OpenRouter live、真实用户配置恢复和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
 
 ## 核心定位（一句话）
 
@@ -37,11 +37,12 @@
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线、已发布体验与路线图用户旅程 | 前六节为历史构想；v0.2 旅程标已发布能力与边界；v0.3 旅程含 CLI/性能首轮体验 |
 | **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收边界** | **当前产品边界；v0.5.0 通用代码已自动验证；原生人工边界见发布记录** |
 | [design/USER-FEEDBACK-ITERATION-PLAN.md](design/USER-FEEDBACK-ITERATION-PLAN.md) | 本轮用户反馈的实施顺序、UI 原则、数据/安全边界和验收门槛 | 当前迭代入口；各 Phase 不代表 Release 承诺 |
-| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.6.2 通用反馈已实现；平台人工项仍待推进 |
+| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 下一轮演练场、路由霓虹反馈、统计矩阵、Dashboard、状态栏、命令面板与品牌图标计划 | v0.6.3 路由 failover 修复已实现；平台人工项仍待推进 |
 | [verification/v0.6.0-release-candidate-2026-10-01.md](verification/v0.6.0-release-candidate-2026-10-01.md) | v0.6.0 功能变更、自动门禁、Android 构建和人工基线 | 历史版本记录；当前补丁版本见 v0.6.2 核验记录 |
 | [verification/v0.6.1-release-candidate-2026-10-01.md](verification/v0.6.1-release-candidate-2026-10-01.md) | v0.6.1 发布、可选 Android 签名和 Windows Standalone 保证 | 历史补丁发布记录；Windows Standalone/CLI/Docker 发布成功，Android APK 未附 |
 | [verification/v0.6.2-release-candidate-2026-10-01.md](verification/v0.6.2-release-candidate-2026-10-01.md) | Windows 品牌图标/旧托盘进程隔离与 Android keystore 识别修复 | v0.6.2 Release CI、资产哈希、签名指纹已记录 |
 | [verification/v0.6.2-ui-feedback-2026-10-01.md](verification/v0.6.2-ui-feedback-2026-10-01.md) | 统计自适应热力图、路由真实事件辉光、全平台缩放和演练场响应式修订 | 通用前端已自动/浏览器验证；原生平台待人工 |
+| [verification/v0.6.3-routing-failover-2026-10-02.md](verification/v0.6.3-routing-failover-2026-10-02.md) | 多跳 `on_error=next` failover 修复、候选活动与真实 Vercel→TypeSafe 验收 | v0.6.3 发布核验；原生平台边界仍单独记录 |
 | [verification/site-v0.6.0-2026-10-01.md](verification/site-v0.6.0-2026-10-01.md) | v0.6.0 GitHub Pages 图标、主题、语言和响应式 DOM 核验 | DOM/无溢出通过；正式控制台截图仍待维护者翻新 |
 | [verification/android-build-stability-2026-10-01.md](verification/android-build-stability-2026-10-01.md) | Jev 图标源、Android Release 签名、版本码、CI 集成与旧 debug APK 升级边界 | 本地图标与 properties 生成通过；稳定密钥 Secrets 和 Release APK 待配置/验证 |
 | [OPUS5-GOAL-REASSESSMENT.md](OPUS5-GOAL-REASSESSMENT.md) | 原会话目标恢复、源码/运行核查与缺口证据 | 评估完成；不是产品完成声明 |
@@ -75,7 +76,7 @@
 | `design/ICON-SYSTEM-DESIGN.md` | 初版图标系统方案（作者 Claude Opus 4.8） | 原稿状态为历史；当前 Lucide 应用范围和未覆盖页面见 UI 图标/性能核验 |
 | `design/ROUTING-INTERACTION-SPEC-v2.md` | **交互 DAG 精确接线规范**（磁吸、拖拽、端口、撤销） | 设计规范参考；原稿阶段状态已过期，当前实现/验收以主计划为准 |
 | `design/I18N-DESIGN.md` | **国际化与可扩展语言列表**（作者 Claude Opus 4.8；GPT-6 Luna 实施记录） | 2026-09-24 状态快照；当前已提供语言见 README，新增语言方向见 ROADMAP |
-| `RELEASE.md` | **发版手册**（版本门禁 / 流水线结构 / Windows、CLI、Docker 与 Android 产物） | `v0.6.2` 至少发布 Windows Standalone、Portable、MSI、NSIS、Linux/Windows CLI、Docker；Android 按 Secrets 配置附带 |
+| `RELEASE.md` | **发版手册**（版本门禁 / 流水线结构 / Windows、CLI、Docker 与 Android 产物） | `v0.6.3` 至少发布 Windows Standalone、Portable、MSI、NSIS、Linux/Windows CLI、Docker；Android 按 Secrets 配置附带 |
 | [screenshots.md](screenshots.md) | Dashboard 活动、Routing 入口/DAG 与 Playground 产品截图 | 用户提供的 v0.1.0 历史 UI 图册，不替代当前版截图 |
 | `I18N-GUIDE.md` | **国际化开发规范**（贡献者指南）（作者 Claude Opus 4.8） | 已完成 |
 | [verification/termux-build-deployment-2026-09-27.md](verification/termux-build-deployment-2026-09-27.md) | **Termux / Android arm64 构建与 daemon 烟测历史** | 点时源码固定到 `f1670e7`；后续 CLI 已实现，见 CLI 文档 |

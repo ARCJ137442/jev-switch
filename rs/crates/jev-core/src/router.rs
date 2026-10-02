@@ -81,7 +81,7 @@ pub enum Sticky {
     Session,
 }
 
-/// 失败策略：`next`（默认，可重试错误试下一候选）| `fail`（首错即返）。
+/// 失败策略：`next`（默认，重试耗尽或任意错误后试下一候选）| `fail`（首错即返）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[cfg_attr(
     feature = "ts-rs",

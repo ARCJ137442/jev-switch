@@ -2,8 +2,9 @@
 
 **作者：** GPT-6 Luna xhigh（OpenAI Codex）  
 **AI 披露：** 本文由 AI 协助整理；用户决策来自 2026-09-30 至 2026-10-01 反馈，技术拆分和验收建议仍需随实现核对。
-**状态：** `v0.6.2` 已实现本轮通用交互、统计矩阵、真实路由辉光、设置缩放与演练场响应式修订；Android 原生 service/tile/通知和桌面原生人工路径仍按发布核验记录单独标注。
-**Release 版本：** `v0.6.2`；失败的同名候选 tag 不构成公开版本，后续同版本 APK 重建可更新资产而不递增版本号。
+
+**状态：** `v0.6.3` 在 `v0.6.2` 基础上修复多跳 `on_error=next` 的非 retryable 错误 failover，并完成自动与真实路由证据；Android 原生 service/tile/通知和桌面原生人工路径仍按发布核验记录单独标注。
+**Release 版本：** `v0.6.3`；此前失败的同名候选 tag 不构成公开版本，后续同版本 APK 重建可更新资产而不递增版本号。
 
 > **TL;DR：** 下一轮聚焦演练场减摩擦、路由图的节点与霓虹式实时反馈、统计健康矩阵与历史筛选、Dashboard 十分钟滚动流量图、VS Code 式状态栏、F11 全屏、命令近期记录、设置构建信息/关于与更新检查，以及彩色品牌图标。所有指标必须来自真实记录；无数据就显示未知或零流量，不能伪造健康状态。
 
@@ -222,6 +223,19 @@
 
 **验收：**在桌面 Tauri、普通浏览器、Android WebView 验证 10%、100%、200% 和自定义缩放下无裁切；演练场窄宽视口均自动折行且没有水平滚动条，多选语义不变。
 
+### 2026-10-02 核心路由策略：多跳 failover 与双视角记录
+
+- [x] 修复 `on_error=next` 将 non-retryable HTTP 错误直接返回的问题。当前语义是 retryable 错误可先重试同一 provider；边为 `next` 时，同候选重试耗尽或遇到非 retryable 上游错误后继续下一个候选；边为 `fail` 时仍首错返回。
+- [x] 自动回归覆盖多跳 `jev-vercel → typesafe-ai/jev → provider` 的 Vercel 401→TypeSafe 成功、坏响应 fallback、本地类 429 不重试同 provider 但继续 fallback、同候选 retry 与 `on_error=fail`。
+- [x] 真实官方链路验收：Vercel HTTP 401 一次失败后，TypeSafe 官方 `jev-latest` 一次成功；总 upstream_calls=2，入口 HTTP 200。HTTP 401 不足以证明“Vercel 额度耗尽”，provider key/account 原因仍需单独核对。
+- [x] 真实路由活动流发送 Vercel 分支失败和 TypeSafe 分支成功事件；同一入口父边关联两次候选活动。当前配置已按维护者的演练场景保存为 Vercel priority 0、TypeSafe priority 1。
+- [ ] 入口视角与提供商视角的持久历史双视图待设计：每次公开入口请求保留一个 parent row；每次 provider attempt 作为关联 attempt row，包含 provider/model、HTTP/错误分类、耗时、计费范围、路径和序号。入口视角汇总 parent 成功/失败并展开 attempts；提供商视角按 attempt 展示 Vercel 失败与 TypeSafe 成功。共享 `request_id`，attempt 使用稳定序号/ID，不复制成两个入口请求。
+- [ ] route_activity 当前只在进程内 EventBus 中；它与持久 request 事件共用缓冲区，但 route_activity 用内存序号、request 事件用 SQLite call-log ID。设计 attempts 历史时一并分离或统一 ID/cursor，并用连续请求、重启/重连和迟到事件测试碰撞、漏事件与重复辉光。
+- [ ] Android 原生生命周期、通知、Quick Settings、设备网络与触控等兼容周边完成人工验收后，启动核心路由策略系统迭代。测试矩阵覆盖 failover/race/load-balance/shadow、全局与入口策略继承、单跳/多跳/分支/前缀、priority、每条实际候选边的 `on_error`、sticky、capability skip、provider disabled/missing、400/401/402/429/5xx、timeout/network/bad-response、重试预算、部分成功与全部失败、撤销/回滚和在途配置变更；分别核对计划候选、真实外呼次数、活动事件、父请求历史、provider attempt 历史及费用范围。
+- [ ] 多跳策略归属需明确审议：当前执行计划将最终 provider 边的 `on_error` 和 sticky 用于候选，而 priority 顺序按每层别名展开；候选 trace 的 `priority` 是入口分支 priority，末端别名 priority 目前要从 `route_edges` 还原。测试和界面应明确哪个字段表示入口分支顺序、哪个字段表示别名候选顺序，避免一个数字含糊代表整条路径。
+
+**本轮核验：**Rust workspace 默认 feature 与 `ts-rs` feature 均通过；UI 测试 47 项、lint 和 build 通过。H 盘空间为 0 时将 Rust 临时 target 放在 G 盘，未删除既有 target；失败编译遗留的 7 个 `*-working` 目录已清理。真实请求写入一条成功入口记录 `jev-147`，route trace 内含两次 provider attempt，持久配置已保持 Vercel 优先。
+
 ## 数据、交互与工程约束
 
 - 颜色和动效是数据的派生视图，不得取代请求状态、样本数和可访问文本；减少动效时仍要能读懂。
@@ -258,8 +272,8 @@
 
 ## 当前状态
 
-`v0.6.2` 候选已完成：演练场选择/重复/curl、状态栏/F11/命令历史、路由节点交互与霓虹 activity、统计矩阵/筛选/分页、Dashboard 十分钟流量、LAN opt-in、网关启停、UI 缩放、响应式 chip 和官网自动发布链已通过 UI/Rust/浏览器自动门禁。公开 Release 仍以 CI 成功为准；Android 稳定签名、原生 service/tile/通知、safe-area、launcher、后台生命周期和真实 LAN 仍待人工确认。
+`v0.6.3` 在 `v0.6.2` 基线之上完成核心路由策略补丁：`on_error=next` 对 retryable 错误先同候选重试，耗尽或任意上游调用/响应错误后继续下一候选；回归覆盖多跳 Vercel 失败→TypeSafe 成功、坏响应、本地类 429、同候选 retry 与 `on_error=fail`。Rust workspace 默认/`ts-rs`、UI 测试 47 项、lint/build 及 UI 路由活动测试通过；真实 `jev-147` 记录 Vercel HTTP 401 后 TypeSafe 官方成功、`upstream_calls=2`。Android 新名称/最近任务 J 图标 follow-up APK 与桌面原生路径仍按对应核验记录单独验收。
 
-仍保持未完成的工作包主要是：官网最终候选截图、Android 真机 service/tile/通知/网络/生命周期验收、TUI/Termux 真机与全链路性能基线。黑底白色 J 图标、路由真实生命周期辉光、设置 JSON 备份、HUD 自动隐藏、官网按钮图标化和 Android 内嵌后端自动启动已有源码与自动化门禁；这些功能仍需随新候选包做人工视觉和真实平台验收。后续实现时继续更新本文件的勾选状态、测试证据和人工边界；历史迭代计划见[本轮用户反馈迭代计划](USER-FEEDBACK-ITERATION-PLAN.md)。
+仍保持未完成的工作包主要是：官网最终候选截图、Android 真机 service/tile/通知/网络/生命周期验收、TUI/Termux 真机与全链路性能基线，以及核心路由策略完整测试矩阵和调用历史双视图。黑底白色 J 图标、路由真实生命周期辉光、设置 JSON 备份、HUD 自动隐藏、官网按钮图标化和 Android 内嵌后端自动启动已有源码与自动化门禁；这些功能仍需随新候选包做人工视觉和真实平台验收。后续实现时继续更新本文件的勾选状态、测试证据和人工边界；历史迭代计划见[本轮用户反馈迭代计划](USER-FEEDBACK-ITERATION-PLAN.md)。
 
 — GPT-6 Luna xhigh（OpenAI Codex），AI 辅助整理

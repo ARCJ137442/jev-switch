@@ -1,7 +1,8 @@
 //! 错误分类 + Capability 表（M0.3/M0.4 · A5：能力改为 adapter 注册制）
 //!
-//! - [`JevError`]：上游/路由错误统一分类；`retryable()` 是 failover 唯一门闸
-//!   （429/5xx/Timeout/Network）；`http_status()` 给出对外映射（contracts/05 §3）
+//! - [`JevError`]：上游/路由错误统一分类；`retryable()` 控制同候选重试
+//!   （429/5xx/Timeout/Network），候选切换由 route edge `on_error` 控制；`http_status()`
+//!   给出对外映射（contracts/05 §3）
 //! - [`Capabilities`]：能力描述结构；**取值一律来自 `UpstreamAdapter::capabilities()`**
 //!   （07 P2：删除 `capabilities_of` 按 id 硬编码 match）
 //! - 冻结双 trait（`ProtocolAdapter` / `UpstreamAdapter`）+ `Registry` 见 [`crate::adapter`]
@@ -12,7 +13,7 @@ use thiserror::Error;
 // 这里重导出以保持 `jev_core::upstream::QuestionType` 路径不变。
 pub use jev_protocol::QuestionType;
 
-/// 上游错误分类。`retryable` 标志由调用方（router / handler）决定是否重试。
+/// 上游错误分类。`retryable` 标志只决定同候选重试；是否切换候选由路由边 `on_error` 决定。
 #[derive(Debug, Error)]
 pub enum JevError {
     #[error("upstream {upstream_id} returned HTTP {status}: {body}")]

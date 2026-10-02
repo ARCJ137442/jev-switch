@@ -1464,36 +1464,40 @@ mod tests {
         assert_eq!(body.upstream.as_deref(), Some("vercel"));
     }
 
-    /// 不可重试错误（400）：on_error=next 也不试下一候选（仅 retryable 才 failover）。
+    /// 不可重试错误（400）：on_error=next 仍试下一候选，但不会在首候选重复调用。
     #[tokio::test]
-    async fn non_retryable_error_stops_even_with_on_error_next() {
+    async fn non_retryable_error_fails_over_when_on_error_is_next() {
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::Err400);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
         let mut reg = Registry::new(vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)]);
         reg.register(v1);
         reg.register(v2);
-        let resp = run_request(&reg, noul_request("jev"), &[]).await;
-        assert_eq!(status_of(resp).await, 400, "透传上游码");
-        assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "首候选实发一次即停");
+        let response = run_request(&reg, noul_request("jev"), &[])
+            .await
+            .expect("the second candidate should recover a non-retryable first failure");
+        assert_eq!(h1.calls.load(Ordering::SeqCst), 1, "首候选只实发一次");
         assert_eq!(
             h2.calls.load(Ordering::SeqCst),
-            0,
-            "不可重试错误不 failover"
+            1,
+            "on_error=next advances after non-retryable errors"
         );
+        assert_eq!(response.upstream_calls, Some(2));
     }
 
-    /// 上游响应形态非法 → 502 即返（不 failover；BadResponse 非 retryable）。
+    /// 上游响应形态非法也是当前候选失败；默认 on_error=next 应转到后续候选。
     #[tokio::test]
-    async fn invalid_upstream_json_is_502_no_failover() {
+    async fn invalid_upstream_json_fails_over_when_on_error_is_next() {
         let (v1, h1) = fake("vercel", &[QuestionType::Boolean], Behave::InvalidJson);
         let (v2, h2) = fake("laya", &[QuestionType::Noul], Behave::Ok200);
         let mut reg = Registry::new(vec![edge("jev", "vercel", 10), edge("jev", "laya", 30)]);
         reg.register(v1);
         reg.register(v2);
-        let resp = run_request(&reg, noul_request("jev"), &[]).await;
-        assert_eq!(status_of(resp).await, 502);
+        let response = run_request(&reg, noul_request("jev"), &[])
+            .await
+            .expect("the second candidate should recover from invalid JSON on the first");
         assert_eq!(h1.calls.load(Ordering::SeqCst), 1);
-        assert_eq!(h2.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(h2.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(response.upstream_calls, Some(2));
     }
 
     /// 旧 [router] 行为回归：单 exact 边一次成功，upstream_calls=1。
