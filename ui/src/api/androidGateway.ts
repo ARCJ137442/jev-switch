@@ -10,6 +10,12 @@ export interface AndroidKeepaliveNotificationStatus {
   enabled: boolean;
 }
 
+export type AndroidNotificationPermissionState = 'granted' | 'denied' | 'prompt' | 'unknown';
+
+function normalizeNotificationPermissionState(value: unknown): AndroidNotificationPermissionState {
+  return value === 'granted' || value === 'denied' || value === 'prompt' ? value : 'unknown';
+}
+
 export function isAndroidTauri(): boolean {
   return isTauri() && /Android/i.test(navigator.userAgent);
 }
@@ -39,12 +45,15 @@ export async function setAndroidKeepaliveNotification(enabled: boolean): Promise
   return invoke<AndroidKeepaliveNotificationStatus>('android_set_keepalive_notification', { enabled });
 }
 
-export async function getAndroidNotificationPermissionState(): Promise<string> {
+export async function getAndroidNotificationPermissionState(): Promise<AndroidNotificationPermissionState> {
   const result = await invoke<{ state: string }>('android_notification_permission_state');
-  return result.state;
+  return normalizeNotificationPermissionState(result?.state);
 }
 
-export async function requestAndroidNotificationPermission(): Promise<string> {
-  const result = await invoke<{ state: string }>('plugin:jev-android-keepalive|requestNotificationPermission');
-  return result.state;
+export async function requestAndroidNotificationPermission(): Promise<AndroidNotificationPermissionState> {
+  return normalizeNotificationPermissionState(await invoke<string>('android_request_notification_permission'));
+}
+
+export async function takePendingAndroidGatewayToggle(): Promise<boolean> {
+  return invoke<boolean>('android_take_pending_gateway_toggle');
 }

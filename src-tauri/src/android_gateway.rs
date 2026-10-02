@@ -318,6 +318,16 @@ pub fn android_notification_permission_state(app: tauri::AppHandle) -> Result<St
 }
 
 #[tauri::command]
+pub fn android_request_notification_permission(app: tauri::AppHandle) -> Result<String, String> {
+    super::android_keepalive::request_notification_permission(&app)
+}
+
+#[tauri::command]
+pub fn android_take_pending_gateway_toggle(app: tauri::AppHandle) -> Result<bool, String> {
+    super::android_keepalive::take_pending_gateway_toggle(&app)
+}
+
+#[tauri::command]
 pub fn start_gateway(app: tauri::AppHandle, state: State<'_, AndroidGatewayState>) -> Result<GatewayStatus, String> {
     let status = match state.start() {
         Ok(status) => status,
@@ -328,9 +338,10 @@ pub fn start_gateway(app: tauri::AppHandle, state: State<'_, AndroidGatewayState
         state.keepalive_notification_status().enabled,
         status.running,
     ) {
-        let _ = state.stop();
-        state.debug_event("keepalive_service_start_failed");
-        return Err(error);
+        // The daemon is the application's primary service. Notification/foreground
+        // service support is a best-effort Android integration and must not roll
+        // back a successfully bound gateway when permission or OEM policy rejects it.
+        state.debug_event(&format!("keepalive_service_start_failed: {error}"));
     }
     Ok(status)
 }
@@ -346,8 +357,7 @@ pub fn stop_gateway(app: tauri::AppHandle, state: State<'_, AndroidGatewayState>
         state.keepalive_notification_status().enabled,
         false,
     ) {
-        state.debug_event("keepalive_service_stop_failed");
-        return Err(error);
+        state.debug_event(&format!("keepalive_service_stop_failed: {error}"));
     }
     Ok(status)
 }

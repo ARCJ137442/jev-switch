@@ -60,6 +60,8 @@ pub fn main() {
             android_gateway::android_keepalive_notification_status,
             android_gateway::android_set_keepalive_notification,
             android_gateway::android_notification_permission_state,
+            android_gateway::android_request_notification_permission,
+            android_gateway::android_take_pending_gateway_toggle,
         ]);
     }
     #[cfg(not(target_os = "android"))]
@@ -98,7 +100,6 @@ pub fn main() {
                     running,
                 ) {
                     eprintln!("Android keepalive service restore failed: {error}");
-                    if running { let _ = android_state.stop(); }
                 }
                 app.manage(android_state);
                 return Ok(());

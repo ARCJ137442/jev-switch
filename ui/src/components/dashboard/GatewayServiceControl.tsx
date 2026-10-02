@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle, Power } from 'lucide-react';
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getGatewayServiceStatus, setGatewayServiceRunning } from '../../api/gatewayControl';
-import { getAndroidNotificationPermissionState, isAndroidTauri, requestAndroidNotificationPermission } from '../../api/androidGateway';
+import { getAndroidNotificationPermissionState, isAndroidTauri, requestAndroidNotificationPermission, takePendingAndroidGatewayToggle } from '../../api/androidGateway';
 import { useI18n, type MessageKey } from '../../i18n';
 
 interface Props {
@@ -50,14 +50,20 @@ export function GatewayServiceControl({ onStateChange }: Props) {
         currentRunning = status?.running ?? null;
       }
       if (currentRunning === null) throw new Error('Gateway state is unavailable.');
-      if (isAndroidTauri() && !currentRunning) {
-        const permission = await getAndroidNotificationPermissionState();
-        if (permission !== 'granted') await requestAndroidNotificationPermission();
-      }
       const next = !currentRunning;
       const status = await setGatewayServiceRunning(next);
       setRunning(status.running);
       onStateChangeRef.current(status.running);
+      // Notification permission is optional. Ask after the daemon is running so
+      // an Android ACL/OEM permission failure cannot block the gateway itself.
+      if (isAndroidTauri() && next) {
+        try {
+          const permission = await getAndroidNotificationPermissionState();
+          if (permission !== 'granted') await requestAndroidNotificationPermission();
+        } catch {
+          // Settings keeps the permission state and retry action visible.
+        }
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -71,8 +77,8 @@ export function GatewayServiceControl({ onStateChange }: Props) {
     let unlisten: (() => void) | null = null;
     const consume = async () => {
       try {
-        const result = await invoke<{ pending: boolean }>('plugin:jev-android-keepalive|takePendingGatewayToggle');
-        if (active && result.pending) await quickToggleRef.current();
+        const pending = await takePendingAndroidGatewayToggle();
+        if (active && pending) await quickToggleRef.current();
       } catch {
         // The notification and Dashboard controls remain available if tile startup fails.
       }

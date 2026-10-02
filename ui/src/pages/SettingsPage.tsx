@@ -14,7 +14,7 @@ import { applyThemePreference, readThemePreference, type ThemePreference } from 
 import { readAutoProviderProbe, readRoutingHudAutoHide, readShowStatusBar, readUiScale, SETTINGS_CHANGE_EVENT, UI_SCALE_MAX_PERCENT, UI_SCALE_MIN_PERCENT, UI_SCALE_STEP_PERCENT, writeAutoProviderProbe, writeRoutingHudAutoHide, writeShowStatusBar, writeUiScale } from '../settings/preferences';
 import { createSettingsBackup, parseSettingsBackup } from '../settings/backup';
 import { getAndroidDebugLogStatus, isAndroidTauriRuntime, setAndroidDebugLog, type AndroidDebugLogStatus } from '../api/androidDebug';
-import { getAndroidKeepaliveNotificationStatus, getAndroidNotificationPermissionState, requestAndroidNotificationPermission, setAndroidKeepaliveNotification } from '../api/androidGateway';
+import { getAndroidKeepaliveNotificationStatus, getAndroidNotificationPermissionState, requestAndroidNotificationPermission, setAndroidKeepaliveNotification, type AndroidNotificationPermissionState } from '../api/androidGateway';
 import { getGatewayServiceStatus } from '../api/gatewayControl';
 import pkg from '../../package.json';
 
@@ -38,7 +38,7 @@ export function SettingsPage() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [debugLog, setDebugLog] = useState<AndroidDebugLogStatus | null>(null);
   const [keepaliveNotificationEnabled, setKeepaliveNotificationEnabled] = useState(true);
-  const [notificationPermission, setNotificationPermission] = useState('unknown');
+  const [notificationPermission, setNotificationPermission] = useState<AndroidNotificationPermissionState>('unknown');
   const [releaseCheck, setReleaseCheck] = useState<ReleaseCheckResult | null>(null);
   const [releaseCheckError, setReleaseCheckError] = useState<string | null>(null);
   const [checkingRelease, setCheckingRelease] = useState(false);
