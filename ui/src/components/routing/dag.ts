@@ -12,6 +12,11 @@ export interface DagNode extends Point {
   enabled: boolean; label: string; detail?: string; models: Array<string | null>; strategy?: string; inCount: number; outCount: number;
 }
 export interface DagPort extends Point { id: string; direction: 'input' | 'output'; model?: string | null }
+export interface DagLayout { nodes: DagNode[]; corridors: Map<string, Point[]> }
+
+export function corridorKey(left: string, right: string): string {
+  return JSON.stringify([left, right]);
+}
 
 export function routeIdentity(route: Route): string {
   return JSON.stringify([route.left, route.match, route.right, route.upstream_model ?? null]);
@@ -25,8 +30,8 @@ export function routeDocumentSignature(routes: Route[]): string {
   ])).sort());
 }
 
-/** Dagre's Sugiyama layout inserts virtual nodes for long edges and respects each card's dimensions. */
-export function buildDag(routes: Route[], entries: DagEntry[], providers: DagProvider[], positions: Record<string, Point> = {}): DagNode[] {
+/** Dagre inserts virtual nodes for long edges and respects each card's dimensions. */
+export function buildDagLayout(routes: Route[], entries: DagEntry[], providers: DagProvider[], positions: Record<string, Point> = {}): DagLayout {
   const providerIds = new Set(providers.map(p => p.id));
   const entryIds = new Set(entries.map(e => e.id));
   // Stable IDs and sorted edges prevent storage row order from changing layout.
@@ -62,17 +67,19 @@ export function buildDag(routes: Route[], entries: DagEntry[], providers: DagPro
   const uniqueEdges = new Set<string>();
   for (const route of [...routes].sort((a, b) => routeIdentity(a).localeCompare(routeIdentity(b)))) {
     if (!metadata.has(route.left) || !metadata.has(route.right) || route.left === route.right) continue;
-    const key = JSON.stringify([route.left, route.right]);
+    const key = corridorKey(route.left, route.right);
     if (uniqueEdges.has(key)) continue;
     uniqueEdges.add(key);
     graph.setEdge(route.left, route.right);
   }
   dagre.layout(graph);
   // Provider accounts share the terminal rank, but retain Dagre's crossing-reduced order.
-  const providerColumn = Math.max(30, ...allIds.filter(id => !providerIds.has(id)).map(id => {
+  const providerColumn = Math.max(30,
+    ...allIds.filter(id => !providerIds.has(id)).map(id => {
     const item = graph.node(id);
     return item.x + metadata.get(id)!.width / 2 + 96;
-  }));
+    }),
+    ...allIds.filter(id => providerIds.has(id)).map(id => graph.node(id).x - metadata.get(id)!.width / 2));
   const providerOrder = [...providerIds].sort((a, b) => graph.node(a).y - graph.node(b).y || a.localeCompare(b));
   let providerBottom = 56;
   const providerYs = new Map<string, number>();
@@ -82,7 +89,7 @@ export function buildDag(routes: Route[], entries: DagEntry[], providers: DagPro
     providerYs.set(id, y);
     providerBottom = y + node.height + 38;
   }
-  return allIds.map(id => {
+  const nodes = allIds.map(id => {
     const layout = graph.node(id);
     const node = metadata.get(id)!;
     return {
@@ -91,6 +98,18 @@ export function buildDag(routes: Route[], entries: DagEntry[], providers: DagPro
       y: positions[id]?.y ?? (providerIds.has(id) ? providerYs.get(id)! : layout.y - node.height / 2),
     };
   });
+  const corridors = new Map<string, Point[]>();
+  for (const edge of graph.edges()) {
+    const points = graph.edge(edge)?.points;
+    if (Array.isArray(points) && points.length > 2) {
+      corridors.set(corridorKey(edge.v, edge.w), points.slice(1, -1).map(point => ({ x: point.x, y: point.y })));
+    }
+  }
+  return { nodes, corridors };
+}
+
+export function buildDag(routes: Route[], entries: DagEntry[], providers: DagProvider[], positions: Record<string, Point> = {}): DagNode[] {
+  return buildDagLayout(routes, entries, providers, positions).nodes;
 }
 
 export function nodePorts(node: DagNode): DagPort[] {
@@ -114,7 +133,15 @@ export function nearestPort(ports: DagPort[], point: Point, direction: DagPort['
   return nearest;
 }
 
-export function wirePath(from: Point, to: Point): string {
+export function wirePath(from: Point, to: Point, corridor: readonly Point[] = []): string {
+  if (corridor.length) {
+    const points = [from, ...corridor.filter(point => point.x > from.x && point.x < to.x), to];
+    if (points.length > 2) return points.slice(1).reduce((path, end, index) => {
+      const start = points[index];
+      const bend = Math.max(0, (end.x - start.x) * .42);
+      return `${path} C ${start.x + bend} ${start.y}, ${end.x - bend} ${end.y}, ${end.x} ${end.y}`;
+    }, `M ${from.x} ${from.y}`);
+  }
   const bend = Math.max(70, Math.abs(to.x - from.x) * .45);
   return `M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${to.x - bend} ${to.y}, ${to.x} ${to.y}`;
 }

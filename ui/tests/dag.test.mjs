@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadTs } from './load-ts.mjs';
-const { buildDag, nodePorts, nearestPort, routeIdentity, routeDocumentSignature } = await loadTs('../src/components/routing/dag.ts');
+const { buildDag, buildDagLayout, corridorKey, nodePorts, nearestPort, routeIdentity, routeDocumentSignature, wirePath } = await loadTs('../src/components/routing/dag.ts');
 const { DocumentHistory } = await loadTs('../src/components/routing/documentHistory.ts');
 const route = (left, right, model) => ({ left, right, upstream_model: model, match: 'exact', priority: 10, sticky: 'session', on_error: 'next' });
 
@@ -54,6 +54,18 @@ test('Sugiyama layout separates variable-height cards and leaves room for long-h
       `${a.id} and ${b.id} must not overlap`);
   }
   assert(byId.account.height > byId.entry.height);
+});
+
+test('long-hop wire uses Dagre corridor above an intervening card', () => {
+  const routes = [route('entry', 'middle'), route('middle', 'provider'), route('entry', 'provider')];
+  const layout = buildDagLayout(routes, [{ id: 'entry', enabled: true }], [{ id: 'provider', enabled: true, models: ['M1', 'M2', 'M3'] }]);
+  const middle = layout.nodes.find(node => node.id === 'middle');
+  const corridor = layout.corridors.get(corridorKey('entry', 'provider'));
+  assert(corridor?.length > 0, 'a skipped rank must provide a routing corridor');
+  assert(corridor.every(point => point.y < middle.y || point.y > middle.y + middle.height), 'long-hop corridor avoids the intervening card');
+  const from = nodePorts(layout.nodes.find(node => node.id === 'entry')).find(port => port.direction === 'output');
+  const to = nodePorts(layout.nodes.find(node => node.id === 'provider')).find(port => port.model === null);
+  assert.notEqual(wirePath(from, to, corridor), wirePath(from, to), 'the rendered wire must use the corridor');
 });
 
 test('history restores every edge attribute and card position after reconnect/delete', () => {

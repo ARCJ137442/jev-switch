@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-03，最新公开发行版为 [`v0.6.3`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.6.3)，`v0.7.0` 正在核验与发布。前者修复多跳 `on_error=next` 的 failover 和 Android 本机网关连接；维护者已确认新版 APK 的网关启停及 UI 连接。新候选增加持久 provider attempt 双视图、Android 原生 JSON/剪贴板桥与 service 状态、移动端样例选择、设置搜索/局域网开关和 Dagre 路由排布。自动门禁、Release 资产与未完成人工验收项见[本轮核验](verification/v0.7.0-release-candidate-2026-10-03.md)。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名，不再标“实验性”。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-03，最新公开发行版为 [`v0.7.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.7.0)，整条 Release CI 已通过，包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。该版增加持久 provider attempt 双视图、Android 原生 JSON/剪贴板桥与 service 状态、移动端样例选择、设置搜索/局域网开关和 Dagre 节点排布。当前源码 `v0.7.1` fix 候选补跨层边的 Dagre 避让走廊；其状态见[交接核验](verification/v0.7.1-handoff-2026-10-03.md)。维护者确认的 Android 网关启停/UI 连接属于 v0.6.3；v0.7.0 新原生路径仍需设备验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 
@@ -21,7 +21,7 @@
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
 ```bash
-# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.7.0；统一修改上述五处版本字段
+# 把 <VERSION> 替换为本次已确认的 SemVer，例如 0.7.1；统一修改上述五处版本字段
 cargo check --manifest-path rs/Cargo.toml --workspace
 cargo check --manifest-path src-tauri/Cargo.toml
 npm install --package-lock-only --prefix ui

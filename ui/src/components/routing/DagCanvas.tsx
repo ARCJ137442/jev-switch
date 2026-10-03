@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, CornerUpLeft, CornerUpRight, Minus, Plus, Rotat
 import { edgeKey, type Route } from '../../api/admin';
 import { useI18n } from '../../i18n';
 import { EdgeInspector } from './EdgeInspector';
-import { buildDag, nearestPort, nodePorts, routeIdentity, wirePath, type DagEntry, type DagPort, type DagProvider, type Point } from './dag';
+import { buildDagLayout, corridorKey, nearestPort, nodePorts, routeIdentity, wirePath, type DagEntry, type DagPort, type DagProvider, type Point } from './dag';
 import './dag.css';
 import { readRoutingHudAutoHide, SETTINGS_CHANGE_EVENT } from '../../settings/preferences';
 import { edgeActivityVisual, type RouteActivityState } from '../../pages/routingActivity';
@@ -63,7 +63,8 @@ export function DagCanvas(props: Props) {
   }, []);
   const setDrag = (next: Drag | null) => { dragRef.current = next; setDragState(next); };
   const positions = drag?.type === 'node' ? { ...props.positions, [drag.id]: drag.point } : props.positions;
-  const nodes = useMemo(() => buildDag(props.routes, props.entries, props.providers, positions), [props.routes, props.entries, props.providers, positions]);
+  const layout = useMemo(() => buildDagLayout(props.routes, props.entries, props.providers, positions), [props.routes, props.entries, props.providers, positions]);
+  const nodes = layout.nodes;
   const ports = nodes.flatMap(nodePorts);
   const width = Math.max(1000, ...nodes.map(n => n.x + n.width + 80));
   const height = Math.max(460, ...nodes.map(n => n.y + n.height + 80));
@@ -194,6 +195,9 @@ export function DagCanvas(props: Props) {
                const key = routeIdentity(route); const selected = key === props.selected;
                const activity = edgeActivityVisual(props.routeActivities?.[key], props.activityNow);
                const invalid = props.errors.has(edgeKey(route.left, route.right));
+               const corridor = positions[route.left] || positions[route.right] ? [] : layout.corridors.get(corridorKey(route.left, route.right)) ?? [];
+               const path = wirePath(from, to, corridor);
+               const middle = corridor[Math.floor(corridor.length / 2)] ?? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
                const activityStyle: CSSProperties | undefined = activity.lineLevel > 0 || activity.outcomeCount > 0 ? {
                  '--dag-edge-color': `hsl(${activity.hue} ${activity.saturation}% 72%)`,
                  '--dag-edge-opacity': String(Math.max(0.42, activity.lineLevel)),
@@ -207,10 +211,10 @@ export function DagCanvas(props: Props) {
                 style={activityStyle}
                 role="button" tabIndex={0} aria-pressed={selected} aria-label={`${route.left} → ${route.right}${route.upstream_model ? ` / ${route.upstream_model}` : ''}${activitySummary ? ` · ${activitySummary}` : ''}`}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); props.onSelect(key); } }}>
-                <path className="dag-glow" d={wirePath(from, to)} />
-                <path className="dag-wire" d={wirePath(from, to)} markerEnd={`url(#${marker})`} />
-                <path className="dag-hit" d={wirePath(from, to)} onClick={e => { e.stopPropagation(); props.onSelect(key); }} onContextMenu={e => { e.preventDefault(); props.onSelect(key); setContext({ ...point(e), edge: key }); }} />
-                <text className="dag-priority" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 7}>{route.priority}</text>
+                <path className="dag-glow" d={path} />
+                <path className="dag-wire" d={path} markerEnd={`url(#${marker})`} />
+                <path className="dag-hit" d={path} onClick={e => { e.stopPropagation(); props.onSelect(key); }} onContextMenu={e => { e.preventDefault(); props.onSelect(key); setContext({ ...point(e), edge: key }); }} />
+                <text className="dag-priority" x={middle.x} y={middle.y - 7}>{route.priority}</text>
               </g>;
             })}
             {drag?.type === 'wire' && <path className={`dag-preview${snap ? ' snapped' : ''}`} d={drag.end === 'right' ? wirePath(drag.fixed, snap ?? drag.moving) : wirePath(snap ?? drag.moving, drag.fixed)} />}

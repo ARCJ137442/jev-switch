@@ -1,6 +1,6 @@
 # Android 权限与平台能力审查（2026-10-03）
 
-> 范围：`v0.6.3` 已发布 APK、`v0.7.0` 候选的 Tauri/Android 生成脚本、Kotlin 桥、React 调用点和官方 Android 平台规则。维护者已在设备上确认 v0.6.3 的本机网关启停与 UI 连接正常；下列新能力不能由这一项验收外推。
+> 范围：`v0.6.3` 的设备证据、`v0.7.0` 已发布的 Tauri/Android 生成脚本、Kotlin 桥、React 调用点和官方 Android 平台规则。维护者已在设备上确认 v0.6.3 的本机网关启停与 UI 连接正常；下列新能力不能由这一项验收外推。
 
 ## 已证实与本轮修复
 
@@ -12,7 +12,7 @@
 | Quick Settings | tile service 以 `BIND_QUICK_SETTINGS_TILE` 保护，导出的组件只供系统绑定 | 清单门禁检查；点击 tile 当前先打开 Activity 再处理切换，不是后台直接启动前台服务。实际系统面板添加、点击、锁屏和状态同步尚未设备验收。 |
 | Android 10+ 日志导出 | 应用自己创建的 `MediaStore.Downloads` 项不需申请广泛存储权限 | 源码使用 `IS_PENDING` 写入后公开；Kotlin 编译通过，导出后能否在不同文件管理器中打开仍须真机验收。 |
 | Android 7–9 日志导出 | 私有缓存文件只能通过受限 `FileProvider` URI 与临时读取授权分享 | **发现已发布源码缺少 provider 注册**，`getUriForFile` 会失败。本轮增加专用 `shared_debug_logs/` 路径、非导出 provider、分享授权与失败回传；本机生成工程、合并清单和 Kotlin/Gradle 构建已通过，API 24–28 设备行为待测。 |
-| JSON 导出与剪贴板 | Android 10+ 将应用生成的 JSON 写入 Downloads；Android 7–9 经受限 `FileProvider` 分享；文本复制走原生 `ClipboardManager` | `v0.7.0` 候选已接入设置备份、演练场样例及常用复制按钮，并限制文件名与大小；本机 Rust/Gradle/UI 编译通过，含 API key 的导出和系统文件/剪贴板结果仍须真机验收。 |
+| JSON 导出与剪贴板 | Android 10+ 将应用生成的 JSON 写入 Downloads；Android 7–9 经受限 `FileProvider` 分享；文本复制走原生 `ClipboardManager` | `v0.7.0` 已发布并接入设置备份、演练场样例及常用复制按钮，并限制文件名与大小；CI 构建/签名通过，含 API key 的导出和系统文件/剪贴板结果仍须真机验收。 |
 | 网关与前台服务区分 | Rust listener 状态不能由通知授权或 service 启动结果代替 | 设置页增加独立的前台服务实际状态观测；同一进程不保证系统回收后自动恢复，仍须真机比对首页监听和通知。 |
 | Activity 退后台 | Android 12+ 禁止多数后台前台服务启动 | 移除 `Activity.onStop` 中重复的 `startForegroundService`；显式网关状态变更仍是 service 启停入口。该调整已通过编译，后台场景待设备验收。 |
 

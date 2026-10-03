@@ -283,6 +283,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -313,14 +314,12 @@ jobs:
           body: |
             ## 版本说明
 
-            本次为 `0.7.0` minor 版本。Android APK 继续使用同一稳定签名，可覆盖安装 v0.6.3；请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
+            本次为 `0.7.1` fix 版本。Android APK 继续使用同一稳定签名，可覆盖安装 v0.7.0；请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
 
-            ## 本版变化
+            ## 本版修复
 
-            - 统计页增加入口/提供商两种历史视角：一个入口请求仍只有一条父记录，提供商视角从持久 route trace 展开每次真实上游尝试及状态、耗时；路由策略补充 400/401/402/429/503 × `next/fail` 回归。
-            - 路由图改用 Dagre/Sugiyama 自动排布不同尺寸节点和跨层连线；已保存的手动坐标仍优先。
-            - 演练场样例轻点/左键切换多选、右键/长按快速单选，手机无需 Shift；设置搜索匹配说明并在聚焦时高亮，局域网开关固定文案并用主题色表示开启。
-            - Android 增加受控原生 JSON 导出/分享、原生剪贴板和前台服务状态显示；补 Android 7–9 FileProvider 日志分享及退后台前台服务启动边界。构建/权限检查不等于新功能的真机验收。
+            - 路由图在 v0.7.0 已用 Dagre 排布节点，但跨层连线仍沿旧单段曲线，可能穿过中间卡片。现在使用 Dagre 的虚拟节点走廊绘制长边，并保留端口位置与手动拖动后的直接连线行为。
+            - 补充跨层边绕过中间卡片的布局回归测试；v0.7.0 的 provider attempt 双视图、Android 原生 JSON/剪贴板桥、移动端样例选择与设置交互继续保留。新 Android 原生路径和桌面视觉效果仍待设备人工验收。
 
             ## 安装
 
@@ -348,3 +347,10 @@ jobs:
             打开 `http://127.0.0.1:11435`，用管理员密码登录，再到 Token 管理创建调用 Token。
             远程部署、反向代理和配置导入见 `docs/deployment.md`。
             发版流程与排查见 `docs/RELEASE.md`。
+
+      # A release created with GITHUB_TOKEN does not emit a follow-up release
+      # workflow run. workflow_dispatch is the supported non-recursive exception.
+      - name: Refresh GitHub Pages release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "${{ github.repository }}" --ref main
