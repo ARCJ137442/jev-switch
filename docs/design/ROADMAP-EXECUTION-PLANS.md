@@ -1,13 +1,13 @@
 # Roadmap Execution Plans
 
-> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.7.0` 已包含 provider attempt 双视图、Dagre 节点排布和 Android 原生 JSON/剪贴板；`v0.7.1` 候选补跨层连线走廊。维护者只确认过 v0.6.3 Android 本机启停与 UI 连接，service/tile/通知、新文件/剪贴板和全链路性能仍有独立验收边界。
+> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.7.1` 已包含 provider attempt 双视图、Dagre 节点及跨层边走廊、Android 原生 JSON/剪贴板。维护者只确认过 v0.6.3 Android 本机启停与 UI 连接，service/tile/通知、新文件/剪贴板和全链路性能仍有独立验收边界。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 > **AI 披露**：本文由 AI 协助整理，执行顺序和最终范围由项目维护者确认。
 
 ## 现状判断
 
-当前代码和 v0.7.0 Release 已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测、headless CLI、JSON 设置备份、真实 route activity 辉光、HUD 自动隐藏、provider attempt 双视图和 Android keepalive/tile 源码。维护者已确认桌面核心路径、官方 TypeSafe 调用、Android 初步调用及 v0.6.3 本机网关启停/连接；MSI/NSIS 原生交互、Android 真机 service/tile/通知、全链路性能和真实用户配置恢复仍须单独验收。
+当前代码和 v0.7.1 Release 已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测、headless CLI、JSON 设置备份、真实 route activity 辉光、HUD 自动隐藏、provider attempt 双视图和 Android keepalive/tile 源码。维护者已确认桌面核心路径、官方 TypeSafe 调用、Android 初步调用及 v0.6.3 本机网关启停/连接；MSI/NSIS 原生交互、Android 真机 service/tile/通知、全链路性能和真实用户配置恢复仍须单独验收。
 
 `abc793f` 已把 upstream attempt timing 合入主线：`TimedUpstream` 在 daemon 组合边界记录每次真实 adapter attempt（包括失败与重试），并提供会话级 `avg_upstream_latency_ms` 与 `upstream_attempts`。它是 transport + parsing 的 adapter processing time，不是纯网络耗时；不写 SQLite，也不与 gateway latency 相加。性能计划应直接复用这组数据，再补固定场景的 p50/p95/p99。
 

@@ -3,8 +3,8 @@
 **作者：** GPT-6 Luna xhigh（OpenAI Codex）  
 **AI 披露：** 本文由 AI 协助整理；用户决策来自 2026-09-30 至 2026-10-01 反馈，技术拆分和验收建议仍需随实现核对。
 
-**状态：** `v0.7.0` 已发布移动端样例多选、设置内容搜索与局域网固定文案开关、Dagre/Sugiyama 节点排布、provider attempt 双视图以及 Android 文件/剪贴板原生桥和前台服务状态观测。`v0.7.1` fix 候选补跨层边的 Dagre 避让走廊和发版后 Pages 派发。自动验证及发行资产见[发布核验](../verification/v0.7.0-release-candidate-2026-10-03.md)与[交接核验](../verification/v0.7.1-handoff-2026-10-03.md)；Android 原生 service/tile/通知与新交互仍待真机人工验收。
-**Release 版本：** `v0.7.0` 已发布；`v0.7.1` 待 CI/资产核对。
+**状态：** `v0.7.0` 已发布移动端样例多选、设置内容搜索与局域网固定文案开关、Dagre/Sugiyama 节点排布、provider attempt 双视图以及 Android 文件/剪贴板原生桥和前台服务状态观测。`v0.7.1` 已修复跨层边的 Dagre 避让走廊和发版后 Pages 派发。自动验证及发行资产见[发布核验](../verification/v0.7.0-release-candidate-2026-10-03.md)与[交接核验](../verification/v0.7.1-handoff-2026-10-03.md)；Android 原生 service/tile/通知与新交互仍待真机人工验收。
+**Release 版本：** `v0.7.1` 已发布；新原生路径和视觉效果仍待人工验收。
 
 > **TL;DR：** 下一轮聚焦演练场减摩擦、路由图的节点与霓虹式实时反馈、统计健康矩阵与历史筛选、Dashboard 十分钟滚动流量图、VS Code 式状态栏、F11 全屏、命令近期记录、设置构建信息/关于与更新检查，以及彩色品牌图标。所有指标必须来自真实记录；无数据就显示未知或零流量，不能伪造健康状态。
 
@@ -272,7 +272,7 @@
 
 ## 当前状态
 
-`v0.6.3` 修复多跳 failover；`v0.7.0` 已把父请求的持久 attempt trace 展示为入口/提供商双视图，并为真实上游 attempt 计时，同时发布移动端样例选择、设置内容搜索与固定文案 LAN 开关、Dagre/Sugiyama 节点排布、Android 文件/剪贴板桥与 service 状态。`v0.7.1` 将补长边走廊和 Release 后 Pages 更新触发。自动门禁和已发资产见发布核验；新 Android 原生路径与桌面视觉交互仍待设备人工验收。
+`v0.6.3` 修复多跳 failover；`v0.7.0` 已把父请求的持久 attempt trace 展示为入口/提供商双视图，并为真实上游 attempt 计时，同时发布移动端样例选择、设置内容搜索与固定文案 LAN 开关、Dagre/Sugiyama 节点排布、Android 文件/剪贴板桥与 service 状态。`v0.7.1` 已补长边走廊和 Release 后 Pages 更新触发，CI 与资产核验通过。新 Android 原生路径与桌面视觉交互仍待设备人工验收。
 
 仍保持未完成的工作包主要是：官网最终候选截图、Android 真机 service/tile/通知/网络/生命周期与新原生文件/剪贴板验收、TUI/Termux 真机与全链路性能基线，以及核心路由策略剩余测试矩阵。黑底白色 J 图标、路由真实生命周期辉光、设置 JSON 备份、HUD 自动隐藏、官网按钮图标化和 Android 内嵌后端自动启动已有源码与自动化门禁；这些功能仍需随新候选包做人工视觉和真实平台验收。后续实现时继续更新本文件的勾选状态、测试证据和人工边界；历史迭代计划见[本轮用户反馈迭代计划](USER-FEEDBACK-ITERATION-PLAN.md)。
 

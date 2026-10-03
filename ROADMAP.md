@@ -1,6 +1,6 @@
 # Jev-Switch Roadmap
 
-> **TL;DR**：`v0.7.0` 已正式发布，包含 Android 原生 JSON/剪贴板、provider attempt 双视图与 Dagre 排布；`v0.7.1` 补跨层连线避让走廊，正在核验。维护者确认的 Android 本机网关启停和 UI 连接证据属于 v0.6.3；新原生文件/剪贴板、service/tile/通知、后台生命周期、安装器、全链路性能和 TUI 仍按各自证据验收。详见[交接核验](docs/verification/v0.7.1-handoff-2026-10-03.md)与[权限审查](docs/verification/android-permission-audit-2026-10-03.md)。
+> **TL;DR**：`v0.7.1` 已正式发布，修复跨层连线避让走廊与 Release 后官网自动刷新；v0.7.0 引入的 Android 原生 JSON/剪贴板、provider attempt 双视图与 Dagre 排布继续保留。维护者确认的 Android 本机网关启停和 UI 连接证据属于 v0.6.3；新原生文件/剪贴板、service/tile/通知、后台生命周期、安装器、全链路性能和 TUI 仍按各自证据验收。详见[交接核验](docs/verification/v0.7.1-handoff-2026-10-03.md)与[权限审查](docs/verification/android-permission-audit-2026-10-03.md)。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）<br>
 > **AI 披露**：本文由 AI 协助整理；范围与优先顺序以项目维护者后续确认为准。<br>
@@ -10,7 +10,7 @@
 
 Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的路由过程。后续体验改进应服务这些目标：减少开发者重复操作，让每次调用的真实路径容易理解；不以装饰动效或未验证的性能宣传代替可测结果。
 
-当前公开版本为 `v0.7.0`，`v0.7.1` fix 候选正在核验。桌面核心路径、Android 初步官方 Jev 调用，以及 v0.6.3 APK 本机网关启停/连接的人工证据分别来自维护者报告；下述规划不属于已完成人工验收的能力承诺。
+当前公开版本为 `v0.7.1`。桌面核心路径、Android 初步官方 Jev 调用，以及 v0.6.3 APK 本机网关启停/连接的人工证据分别来自维护者报告；下述规划不属于已完成人工验收的能力承诺。
 
 配套的前后变化与用户场景见[用户旅程文档第七、八节](docs/USER-JOURNEYS.md)，作为本路线图方向的体验叙事；两处内容均属未来提案，优先级与验收边界以本文件为准。
 
@@ -79,7 +79,7 @@ Jev-Switch 的差异重点是轻量、响应快、本地快速调试和清楚的
 ## 决策边界
 
 - 本文描述方向，不指定发布日期、版本号或保证实现顺序；开始每项前仍需结合用户反馈、依赖和实测调整。
-- v0.6.3 正式 Release 内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter adapters，并包含 Windows Standalone、Linux/Windows CLI、Docker 与稳定签名 Android arm64 APK。维护者已人工确认便携/Standalone 桌面核心路径、官方 TypeSafe 调用、Android 初步调用及新版 APK 本机启停/连接；原生 service/tile/通知、OpenRouter live-key、TUI 和全链路性能仍按实际证据边界说明。普通 OpenAI/Anthropic chat API 不属于产品兼容范围。
+- v0.7.1 正式 Release 内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter adapters，并包含 Windows Standalone、Linux/Windows CLI、Docker 与稳定签名 Android arm64 APK。维护者此前已人工确认便携/Standalone 桌面核心路径、官方 TypeSafe 调用、Android 初步调用及 v0.6.3 APK 本机启停/连接；v0.7.1 新路径、原生 service/tile/通知、OpenRouter live-key、TUI 和全链路性能仍按实际证据边界说明。普通 OpenAI/Anthropic chat API 不属于产品兼容范围。
 - 服务发现仅扫描用户明确提供/选择的目标范围；探查和模型推理分开授权，快速添加必须经过结果确认和凭据设置。
 - 路由顾问先作为建议系统；任何扩大自治程度的变更都需要单独的用户授权、可回放评估、版本化和回滚路径。用户标注不能默认等同于可用于训练或自动改配置的授权。
 - standalone 是交付形态目标，不得省略可验证的 sidecar 身份、资源校验和故障恢复；应用数据与可执行文件分离。默认 exe 邻近目录不可写时必须明确交给用户选择，不得静默改写目录策略。
