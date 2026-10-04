@@ -13,6 +13,8 @@ pub mod schema;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeConfigSnapshot {
     pub providers: HashMap<String, ProviderConfig>,
+    #[serde(default)]
+    pub nodes: Vec<jev_core::graph::GraphNode>,
     pub routes: Vec<RouteEdge>,
     pub source_toml_fingerprint: String,
 }
@@ -62,6 +64,42 @@ pub fn config_fingerprint(path: &Path) -> String {
     format!("{:016x}", hasher.finish())
 }
 
+/// Build a compatibility node view from the current route/provider snapshot.
+/// Metadata is intentionally derived here until the versioned graph document is
+/// edited through its own API. Provider credentials never enter this projection.
+pub fn derive_runtime_nodes(
+    conn: &Connection,
+    routes: &[RouteEdge],
+    providers: &HashMap<String, ProviderConfig>,
+) -> Result<Vec<GraphNode>> {
+    let endpoints = endpoints::load_all(conn)?;
+    let public_ids: Vec<&str> = endpoints.iter().map(|endpoint| endpoint.id.as_str()).collect();
+    let mut nodes = jev_core::graph::GraphDocument::derive_nodes(
+        routes,
+        providers.keys().cloned(),
+        public_ids.iter().map(|id| (*id).to_string()),
+    );
+    for node in &mut nodes {
+        match node.kind {
+            jev_core::graph::GraphNodeKind::Provider => {
+                node.enabled = providers
+                    .get(node.id.as_str())
+                    .map(|provider| provider.enabled)
+                    .unwrap_or(false);
+            }
+            jev_core::graph::GraphNodeKind::Public => {
+                node.enabled = endpoints
+                    .iter()
+                    .find(|endpoint| endpoint.id == node.id)
+                    .map(|endpoint| endpoint.enabled)
+                    .unwrap_or(true);
+            }
+            jev_core::graph::GraphNodeKind::Internal => {}
+        }
+    }
+    Ok(nodes)
+}
+
 /// Load the SQLite snapshot as the provider/route runtime authority, seeding it from
 /// TOML only once when no snapshot exists. Returns whether TOML has drifted since the
 /// snapshot's last explicit import/export/API update.
@@ -102,13 +140,14 @@ pub fn restore_or_seed_runtime_config(
             }
         }
     }
+    migrate_legacy_public_endpoints(conn, &routes, &config.providers)?;
     let snapshot = RuntimeConfigSnapshot {
         providers: config.providers.clone(),
+        nodes: derive_runtime_nodes(conn, &routes, &config.providers)?,
         routes,
         source_toml_fingerprint: current_fingerprint,
     };
     save_runtime_snapshot(conn, &snapshot)?;
-    migrate_legacy_public_endpoints(conn, &snapshot.routes, &snapshot.providers)?;
     config.providers = snapshot.providers;
     config.router.clear();
     config.routes = snapshot.routes;
@@ -179,6 +218,7 @@ fn migrate_legacy_public_endpoints(
 pub fn replace_snapshot_routes(conn: &Connection, routes: Vec<RouteEdge>) -> Result<()> {
     let mut snapshot =
         load_runtime_snapshot(conn)?.ok_or_else(|| rusqlite::Error::QueryReturnedNoRows)?;
+    snapshot.nodes = derive_runtime_nodes(conn, &routes, &snapshot.providers)?;
     snapshot.routes = routes;
     save_runtime_snapshot(conn, &snapshot)
 }
@@ -195,6 +235,7 @@ pub fn persist_runtime_config(
         conn,
         &RuntimeConfigSnapshot {
             providers: config.providers.clone(),
+            nodes: derive_runtime_nodes(conn, &config.route_edges(), &config.providers)?,
             routes: config.route_edges(),
             source_toml_fingerprint: source_fingerprint,
         },
@@ -211,6 +252,7 @@ pub fn accept_toml_baseline(
         conn,
         &RuntimeConfigSnapshot {
             providers: config.providers.clone(),
+            nodes: derive_runtime_nodes(conn, &config.route_edges(), &config.providers)?,
             routes: config.route_edges(),
             source_toml_fingerprint: config_fingerprint(config_path),
         },
@@ -219,7 +261,7 @@ pub fn accept_toml_baseline(
 
 use crate::config::ProviderConfig;
 use anyhow::Context;
-use jev_core::router::RouteEdge;
+use jev_core::{graph::GraphNode, router::RouteEdge};
 use rusqlite::{Connection, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

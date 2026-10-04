@@ -25,6 +25,7 @@ import pkg from '../../package.json';
 const fieldClass = 'min-h-10 border px-3 text-sm';
 const fieldStyle: React.CSSProperties = { borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--text)' };
 const groupSearchKeys: Record<string, MessageKey[]> = {
+  personalization: ['settings.personalization', 'settings.dashboardLayout', 'settings.dashboardLayoutHint'],
   appearance: ['settings.theme', 'settings.themeSystem', 'settings.themeLight', 'settings.themeDark', 'settings.language', 'settings.showStatusBar', 'settings.showStatusBarHint', 'settings.uiScale', 'settings.uiScaleHint', 'settings.autoHideRoutingHud', 'settings.autoHideRoutingHudHint'],
   providers: ['settings.autoProbe', 'settings.autoProbeHint'],
   connection: ['settings.apiAddress', 'settings.apiAddressHint', 'settings.androidApiAddressHint', 'settings.saveAddress', 'settings.resetAddress'],
@@ -201,6 +202,12 @@ export function SettingsPage() {
   };
 
   const groups = [
+    { id: 'personalization', label: t('settings.personalization' as MessageKey), terms: 'personalization dashboard layout home 个性化 首页 布局 仪表盘', content: (
+      matchesSetting('personalization dashboard layout home 个性化 首页 布局 仪表盘', 'settings.personalization', 'settings.dashboardLayout', 'settings.dashboardLayoutHint') && <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div className="grid gap-1"><strong>{mark(t('settings.dashboardLayout' as MessageKey))}</strong><span style={{ color: 'var(--text-muted)' }}>{mark(t('settings.dashboardLayoutHint' as MessageKey))}</span></div>
+        <a href="#/dashboard?edit=1" className={fieldClass + ' inline-flex items-center'} style={{ ...fieldStyle, color: 'var(--accent)' }}>{t('settings.openDashboardLayout' as MessageKey)}</a>
+      </div>
+    ) },
     { id: 'appearance', label: t('settings.appearance' as MessageKey), terms: 'appearance theme language status bar ui scale zoom 外观 主题 语言 状态栏 界面缩放 倍率', content: (
       <div className="grid gap-4 sm:grid-cols-2">
         {matchesSetting('theme 主题 appearance 外观', 'settings.theme', 'settings.themeSystem', 'settings.themeLight', 'settings.themeDark') && <label className="grid gap-2 text-sm">

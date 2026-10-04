@@ -912,6 +912,7 @@ async fn endpoint_and_global_strategy_settings_drive_real_scheduler_paths() {
             providers: jev_switch_daemon::config::Config::load(&config_path)
                 .unwrap()
                 .providers,
+            nodes: vec![],
             routes: vec![],
             source_toml_fingerprint: "test".into(),
         },
@@ -1058,6 +1059,7 @@ async fn managed_tokens_enforce_roles_and_isolate_stats_and_events() {
             providers: jev_switch_daemon::config::Config::load(&config_path)
                 .unwrap()
                 .providers,
+            nodes: vec![],
             routes: vec![],
             source_toml_fingerprint: "test".into(),
         },

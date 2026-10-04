@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-04，最新公开发行版候选为 [`v0.7.2`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.7.2)，本轮包含提供商删除级联一致性、统一表单键盘快捷键和此前已完成的 UI 收口；`v0.7.0`、`v0.7.1` 的功能与修复保持不变。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。完整 CI、资产摘要、签名和人工边界以本次 Release 记录为准；维护者确认的 Android 网关启停/UI 连接属于 v0.6.3，后续原生路径仍需设备验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-04，最新公开发行版候选为 [`v0.8.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.8.0)。本 minor 版本增加 DAG 节点领域模型、只读 Graph API、runtime snapshot 节点投影和 Dashboard 第一阶段布局编辑；同时保留 v0.7.2 的提供商删除级联、统一表单键盘和 ARC UI 收口。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。Graph API 写入、节点页面、自由拖拽和 Routing/Settings/Statistics 布局编辑尚未包含。Android 后续原生路径仍按设备证据验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
 

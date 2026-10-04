@@ -14,6 +14,7 @@
 | `PUT` | `/v1/admin/providers` | 写入提供商（含新密钥） |
 | `GET` | `/v1/admin/routes` | 模型路由 DAG |
 | `PUT` | `/v1/admin/routes` | 写回 DAG（整表替换） |
+| `GET` | `/v1/admin/graph` | 统一 DAG 节点只读投影（Phase 1） |
 | `POST` | `/v1/admin/providers/{id}/probe` | 健康探测 |
 | `POST` | `/v1/admin/providers/{id}/invoke` | 在 daemon 内用指定 provider 直接调用 Jev 请求（供演练场直连上游） |
 | `POST` | `/v1/admin/providers/{id}/models` | 从已保存 provider 的同源 `/v1/models` 获取模型 ID |
@@ -130,6 +131,8 @@ Authorization: Bearer <admin-token>
 ```
 
 `PUT` = **整表替换**；写入 toml；DAG 含环则 `400`。
+
+`GET /v1/admin/graph` 返回当前运行时快照的 typed node projection：`public`（入口）、`internal`（中间节点）和 `provider`（出口）。它与 `/v1/admin/routes` 共享同一运行时快照；当前只读，provider 凭据不出现在节点文档中。
 
 ### `POST /v1/admin/providers/{id}/probe`
 

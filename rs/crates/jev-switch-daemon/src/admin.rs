@@ -529,6 +529,49 @@ pub async fn get_routes(State(state): State<AppState>) -> Response {
     }
 }
 
+/// Read-only canonical graph projection for the node-engine migration phase.
+/// Existing `/v1/admin/routes` remains the compatibility edge view.
+pub async fn get_graph(State(state): State<AppState>) -> Response {
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {error}"),
+            )
+        }
+    };
+    let mut snapshot = match crate::db::load_runtime_snapshot(&conn) {
+        Ok(Some(snapshot)) => snapshot,
+        Ok(None) => return err(&state, StatusCode::CONFLICT, "runtime config snapshot is missing"),
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("load graph snapshot failed: {error}"),
+            )
+        }
+    };
+    if snapshot.nodes.is_empty() {
+        snapshot.nodes = match crate::db::derive_runtime_nodes(&conn, &snapshot.routes, &snapshot.providers) {
+            Ok(nodes) => nodes,
+            Err(error) => {
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("derive graph nodes failed: {error}"),
+                )
+            }
+        };
+    }
+    Json(jev_core::graph::GraphDocument {
+        nodes: snapshot.nodes,
+        edges: snapshot.routes,
+    })
+    .into_response()
+}
+
 /// Every route write validates the complete resulting graph before committing it.
 /// Disabled providers remain valid configuration references; execution checks their state.
 /// Validation order: fields, cycles, then references.
@@ -811,6 +854,10 @@ pub async fn import_runtime_config(State(state): State<AppState>, body: Bytes) -
         .collect();
     let snapshot = crate::db::RuntimeConfigSnapshot {
         providers: config.providers.clone(),
+        nodes: match crate::db::derive_runtime_nodes(&conn, &routes, &config.providers) {
+            Ok(nodes) => nodes,
+            Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("derive graph nodes failed: {error}")),
+        },
         routes,
         source_toml_fingerprint: crate::db::config_fingerprint(&state.config_path),
     };
@@ -958,6 +1005,10 @@ pub async fn import_runtime_config_json(
     let runtime_edges = routes.iter().filter(|edge| !endpoint_ids.contains(&edge.left) || enabled.contains(&edge.left)).cloned().collect();
     let snapshot = crate::db::RuntimeConfigSnapshot {
         providers: config.providers.clone(),
+        nodes: match crate::db::derive_runtime_nodes(&conn, &routes, &config.providers) {
+            Ok(nodes) => nodes,
+            Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("derive graph nodes failed: {error}")),
+        },
         routes,
         source_toml_fingerprint: crate::db::config_fingerprint(&state.config_path),
     };
@@ -3010,6 +3061,20 @@ enabled = true
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].candidate.upstream_id, "laya");
 
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn get_graph_projects_compatible_snapshot_as_typed_nodes() {
+        let path = temp_config("get-graph", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let (status, body) = send(app, "GET", "/v1/admin/graph", None).await;
+        assert_eq!(status, 200, "{body}");
+        let graph: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let nodes = graph["nodes"].as_array().unwrap();
+        assert!(nodes.iter().any(|node| node["id"] == "jev" && node["kind"] == "public"));
+        assert!(nodes.iter().any(|node| node["id"] == "vercel" && node["kind"] == "provider"));
+        assert!(nodes.iter().all(|node| node.get("api_key").is_none()));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

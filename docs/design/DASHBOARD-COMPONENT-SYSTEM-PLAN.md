@@ -1,6 +1,6 @@
 # Jev Switch 仪表盘组件系统与页面布局编辑计划
 
-**状态：** 架构提案，未进入实现或 Release 承诺
+**状态：** Phase 1 Dashboard 工作树原型已实现；专用页面布局和 Release 集成尚未开始
 **日期：** 2026-10-04
 **参考：** `obsidian-life-series-tools` 的 Dashboard 组件、布局编辑、预设和迁移设计
 

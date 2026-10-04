@@ -20,7 +20,9 @@ import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
 import { probeProvidersConcurrently, type ProviderHealth } from './dashboardHealth';
 import { readAutoProviderProbe, SETTINGS_CHANGE_EVENT, toggleFromStorage } from '../settings/preferences';
 import { GatewayServiceControl } from '../components/dashboard/GatewayServiceControl';
-import { MetricStrip, SectionHeader } from '../components/ui/SectionHeader';
+import { DashboardLayoutEditor } from '../components/dashboard/DashboardLayoutEditor';
+import { readDashboardLayout, type DashboardLayoutDocument } from '../components/dashboard/layout';
+import { SectionHeader } from '../components/ui/SectionHeader';
 
 /**
  * Dashboard（v2.0 · 设计稿 docs/design/UI-REDESIGN-v2.md §2）
@@ -75,6 +77,7 @@ export function DashboardPage() {
   const [refresh, setRefresh] = useState(0);
   const [activeRequests, setActiveRequests] = useState<number | null>(null);
   const [gatewayRunning, setGatewayRunning] = useState<boolean | null>(null);
+  const [dashboardLayout, setDashboardLayout] = useState<DashboardLayoutDocument>(readDashboardLayout);
   const previousGatewayState = useRef<boolean | null>(null);
   const handleGatewayStateChange = useCallback((running: boolean | null) => {
     if (running === true && previousGatewayState.current !== true) setRefresh((value) => value + 1);
@@ -82,6 +85,12 @@ export function DashboardPage() {
     setGatewayRunning(running);
   }, []);
   const copy = (key: string, vars?: Record<string, string | number>) => t(key as MessageKey, vars);
+  const layoutItem = (componentId: string) => dashboardLayout.items.find((item) => item.componentId === componentId);
+  const layoutStyle = (componentId: string): React.CSSProperties => {
+    const item = layoutItem(componentId);
+    const gridColumn = item?.width === 'full' ? '1 / -1' : item?.width === 'wide' || item?.width === 'half' ? 'span 2' : 'span 1';
+    return { order: item?.order ?? 0, display: item?.visible === false ? 'none' : undefined, gridColumn };
+  };
 
   useEffect(() => {
     const update = () => setAutoProbe(readAutoProviderProbe());
@@ -201,7 +210,7 @@ export function DashboardPage() {
 
   return (
     <div className="page-container dashboard-container mx-auto">
-      <SectionHeader title={t('shell.navDashboard')} />
+      <SectionHeader title={t('shell.navDashboard')} aside={<DashboardLayoutEditor layout={dashboardLayout} onChange={setDashboardLayout} />} />
 
       {loadError && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3" style={{ ...card, color: 'var(--text-muted)' }}>
@@ -211,9 +220,9 @@ export function DashboardPage() {
       )}
 
       {/* ① 状态速览 */}
-      <MetricStrip className="mb-5 sm:mb-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="dashboard-layout-grid mb-5 sm:mb-6 md:mb-6">
         {/* runtime + address */}
-        <section className="fade-in p-4 sm:p-5" style={card}>
+        <section className="fade-in p-4 sm:p-5" style={{ ...card, ...layoutStyle('runtime') }}>
           <div className="mb-2 flex items-center gap-2.5">
             <SummaryMark icon={Server} />
             <span
@@ -238,7 +247,7 @@ export function DashboardPage() {
           <div className="mt-2 min-w-0 truncate text-xs" style={{ color: 'var(--text-muted)' }} title={apiAddress}>{t('dash.apiAddress')}: <code className="font-mono">{apiAddress}</code></div>
         </section>
 
-        <a href="#/stats" className="fade-in card-hover block p-4 sm:p-5" style={card} title={t('dash.openActiveRequests')}>
+        <a href="#/stats" className="fade-in card-hover block p-4 sm:p-5" style={{ ...card, ...layoutStyle('active-requests') }} title={t('dash.openActiveRequests')}>
           <div className="mb-2 flex items-center gap-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
             <SummaryMark icon={Activity} />{t('telemetry.active')}
           </div>
@@ -247,7 +256,7 @@ export function DashboardPage() {
         </a>
 
         {/* provider 连通性探测（不是推理健康检查） */}
-        <a href="#/providers" className="fade-in card-hover block p-4 sm:p-5" style={card}>
+        <a href="#/providers" className="fade-in card-hover block p-4 sm:p-5" style={{ ...card, ...layoutStyle('providers') }}>
           <div className="mb-2 flex items-center gap-2">
             <span className="flex items-center gap-1" aria-hidden>
               {(providers ?? []).slice(0, 4).map((p) => {
@@ -304,7 +313,7 @@ export function DashboardPage() {
         </a>
 
         {/* routes 摘要 */}
-        <a href="#/routing" className="fade-in card-hover block p-4 sm:p-5" style={card}>
+        <a href="#/routing" className="fade-in card-hover block p-4 sm:p-5" style={{ ...card, ...layoutStyle('routes') }}>
           <div className="mb-2 flex items-center gap-2 font-semibold" style={{ fontSize: 'var(--text-lg)' }}>
             <SummaryMark icon={GitBranch} />
             {routes === null ? '—' : t('dash.routes', { n: routes.length })}
@@ -316,12 +325,10 @@ export function DashboardPage() {
             {t('dash.editRoutes')}<ArrowRight size={14} aria-hidden="true" />
           </div>
         </a>
-      </MetricStrip>
-
-      <RuntimeTelemetry onActiveRequestsChange={setActiveRequests} />
+      <div className="dashboard-layout-slot dashboard-layout-slot--telemetry" style={layoutStyle('telemetry')}><RuntimeTelemetry onActiveRequestsChange={setActiveRequests} /></div>
 
       {/* ③ 快捷操作 */}
-      <div className="fade-in flex flex-wrap gap-3">
+      <div className="fade-in flex flex-wrap gap-3 dashboard-layout-slot dashboard-layout-slot--actions" style={layoutStyle('quick-actions')}>
         <a
           href="#/playground"
           className="inline-flex items-center gap-2"
@@ -344,6 +351,7 @@ export function DashboardPage() {
           <GitBranch size={16} aria-hidden="true" />
           {t('dash.editRoutesAction')}
         </a>
+      </div>
       </div>
     </div>
   );

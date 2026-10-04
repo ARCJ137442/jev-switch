@@ -8,6 +8,7 @@
 //!   全部迁往 jev-adapters）
 
 pub mod adapter;
+pub mod graph;
 pub mod redact;
 pub mod router;
 pub mod upstream;

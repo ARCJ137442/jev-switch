@@ -1,21 +1,21 @@
 # Roadmap Execution Plans
 
-> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.7.2` 候选保留 provider attempt 双视图、Dagre 节点及跨层边走廊、Android 原生 JSON/剪贴板，并修复 provider 删除级联和表单键盘交互。维护者只确认过 v0.6.3 Android 本机启停与 UI 连接，service/tile/通知、新文件/剪贴板和全链路性能仍有独立验收边界。
+> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。`v0.8.0` 候选已保留 provider attempt 双视图、Dagre 节点及跨层边走廊、Android 原生 JSON/剪贴板，并增加只读 Graph API、DAG 节点模型和 Dashboard Phase 1 布局编辑。维护者已确认 v0.7.1 Android 真机主要能力；后续 APK 回归、OEM 差异和全链路性能仍按版本独立记录。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 > **AI 披露**：本文由 AI 协助整理，执行顺序和最终范围由项目维护者确认。
 
 ## 现状判断
 
-当前代码和 v0.7.1 Release 已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测、headless CLI、JSON 设置备份、真实 route activity 辉光、HUD 自动隐藏、provider attempt 双视图和 Android keepalive/tile 源码。维护者已确认桌面核心路径、官方 TypeSafe 调用、Android 初步调用及 v0.6.3 本机网关启停/连接；MSI/NSIS 原生交互、Android 真机 service/tile/通知、全链路性能和真实用户配置恢复仍须单独验收。
+当前代码和 v0.8.0 候选已提供 TypeSafe 官方/兼容服务、OpenRouter 上游适配器、Provider 模型发现、Standalone、七页控制台、Dashboard 运行遥测、headless CLI、JSON 设置备份、真实 route activity 辉光、HUD 自动隐藏、provider attempt 双视图、DAG 节点只读投影和 Dashboard Phase 1 布局编辑。维护者已确认桌面核心路径和 v0.7.1 Android 真机主要路径；Graph API 写入、专用页面布局、全链路性能和跨设备差异仍须单独验收。
 
 `abc793f` 已把 upstream attempt timing 合入主线：`TimedUpstream` 在 daemon 组合边界记录每次真实 adapter attempt（包括失败与重试），并提供会话级 `avg_upstream_latency_ms` 与 `upstream_attempts`。它是 transport + parsing 的 adapter processing time，不是纯网络耗时；不写 SQLite，也不与 gateway latency 相加。性能计划应直接复用这组数据，再补固定场景的 p50/p95/p99。
 
 路线图与维护项按当前状态分为三组：
 
 1. **已进入 Release**：Standalone、系统主题、命令面板 Phase 1、路由动画 Phase 1、GitHub Pages、OpenRouter 上游 adapter、CLI Phase 1。
-2. **当前工作树小步改进**：高频 UI 图标化、Dashboard provider probes 并发和状态合并、共享 health poll、隐藏页 telemetry 调度。
-3. **未完成的跨层基线/独立方向**：全链路性能 p50/p95/p99、TUI、Android 设备验收、服务发现、数据目录迁移和路由顾问。
+2. **当前工作树并行主线**：DAG GraphDocument/策略历史闭环，以及 Dashboard 第一阶段组件布局编辑器。
+3. **后续收口/独立方向**：Windows 证据与性能基线、Android 跨设备回归、服务发现、数据目录迁移、TUI、全链路性能 p50/p95/p99 和路由顾问。
 
 Android 方向已从“可行性调研”进入“完整网关应用实现”：先在 GitHub Actions 准备 Android 工具链、编译 daemon library 并产出可下载 APK artifact，再安排模拟器/真机启停与生命周期验收。没有本机 Android SDK 不阻塞 Phase A；没有真机证据不扩大为稳定 Android 支持。远程/局域网控制台只能作为可选模式，不能替代本机内核。
 
@@ -30,9 +30,9 @@ Android 方向已从“可行性调研”进入“完整网关应用实现”：
 | [GitHub Pages 首页](ROADMAP-PLAN-GITHUB-PAGES.md) | v0.2.0 页面已部署；v0.5.0 网站文案、Release metadata 和主题/语言切换已同步 | 推送/部署更新及移动端正式截图 |
 | [OpenRouter adapter](ROADMAP-PLAN-OPENROUTER.md) | adapter 已随 v0.2.0 发布并通过离线/WireMock 门禁 | 未使用 live key 验证账户能力/费用 |
 | 图标/性能首轮 | v0.5.0 已实现高频 UI 图标、健康探测并发/共享状态和隐藏页遥测暂停，并通过 UI tests/build、Windows 原生隔离和桌面自动门禁；品牌图标和跨硬件基线仍未完成 | 安装器、跨硬件和全链路 daemon/SQLite/UI 性能基线仍在本轮之后 |
-| [Android APP 正式发布与验收计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用已稳定签名随 v0.7.0 发布；内置后端本机启停和 UI 连接仅有 v0.6.3 维护者设备证据；v0.7.0 补 Android 7–9 分享、原生 JSON/剪贴板与权限清单门禁，详见[权限审查](../verification/android-permission-audit-2026-10-03.md) | 原生 service/tile/通知、后台/OEM 回收、文件导出/剪贴板、热点 LAN 和跨 Android 版本行为仍需人工证据 |
-| [DAG 节点引擎与三类用户视图](DAG-NODE-ENGINE-ARCHITECTURE-PLAN.md) | 架构提案：入口/节点/提供商作为统一 DAG 的公开、内部、终端视图；当前只完成源码调研与分阶段计划 | Phase 0 术语、ID 兼容、迁移冲突和策略归属尚未冻结；不是当前 Release 承诺 |
-| [Dashboard 组件系统与布局编辑](DASHBOARD-COMPONENT-SYSTEM-PLAN.md) | 参考已验证的组件 registry、布局规范化、预设和编辑事务，为首页个性化及路由/设置等专用页面建立受限布局模型 | Phase 0 组件清单尚未冻结；不是当前 Release 承诺 |
+| [Android APP 正式发布与验收计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用已稳定签名随 v0.7.0 发布；维护者已确认 v0.7.1 真机启停、通知、tile、后台生命周期、局域网、文件/剪贴板和图标/签名主要路径 | 后续 APK 回归、OEM/Android 版本差异和跨设备性能仍需按设备记录；不把单设备证据泛化为所有设备 |
+| [DAG 节点引擎与三类用户视图](DAG-NODE-ENGINE-ARCHITECTURE-PLAN.md) | GraphDocument/GraphNode 纯领域模型与校验已在工作树实现，入口/内部/提供商映射测试通过 | 尚未接入 daemon snapshot、HTTP API 或现有 Router；不是当前 Release 承诺 |
+| [Dashboard 组件系统与布局编辑](DASHBOARD-COMPONENT-SYSTEM-PLAN.md) | Dashboard registry、布局 normalize、本地存储、编辑草稿、排序/显隐/宽度、撤销重做和设置入口已在工作树实现 | 尚未做自由拖拽、跨页面布局和 Release 集成；不是当前 Release 承诺 |
 
 ## 共用交付门槛
 

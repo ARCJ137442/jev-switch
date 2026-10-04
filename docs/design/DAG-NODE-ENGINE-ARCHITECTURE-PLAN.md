@@ -1,6 +1,6 @@
 # Jev Switch DAG 节点引擎与三类用户视图计划
 
-**状态：** 架构提案，未进入实现或 Release 承诺
+**状态：** Phase 1 领域模型、runtime snapshot 节点投影和只读 Graph API 已在工作树实现；尚未开放图写入，也未进入 Release 承诺
 **日期：** 2026-10-04
 **范围：** 路由内核、运行时配置、管理 API、控制台信息架构与 Agent 操作契约
 
@@ -239,8 +239,8 @@ DELETE /v1/admin/nodes/{id}
 
 ### Phase 2：持久化 v2 与只读管理 API
 
-- `RuntimeConfigSnapshot` 增加版本和 nodes；实现旧快照/TOML 到 v2 的幂等迁移。
-- 增加 `GET /v1/admin/graph` 和 `GET /v1/admin/nodes`，不开放写入。
+- `RuntimeConfigSnapshot` 已增加兼容 `nodes` 字段；旧快照读取时按入口/provider/alias 派生并回写节点投影。
+- `GET /v1/admin/graph` 已提供 typed node projection；`GET /v1/admin/nodes` 与 GraphDocument 写入仍待后续切片。
 - 入口/路由/provider 兼容 API 与 GraphDocument 做一致性对照测试。
 
 **门槛：**重启、TOML 漂移、导入/导出、删除历史和旧客户端都能保持可解释行为。

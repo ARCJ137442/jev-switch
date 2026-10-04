@@ -468,6 +468,7 @@ pub fn build_app(state: AppState) -> Router {
             "/v1/admin/routes",
             get(admin::get_routes).put(admin::put_routes),
         )
+        .route("/v1/admin/graph", get(admin::get_graph))
         .route(
             "/v1/admin/config/storage",
             get(admin::runtime_config_status),
