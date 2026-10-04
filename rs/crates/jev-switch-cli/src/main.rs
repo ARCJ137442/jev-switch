@@ -49,8 +49,25 @@ enum Command {
     Events {
         #[arg(long, default_value_t = 0)]
         since: u64,
+        #[arg(long)]
+        before: Option<u64>,
         #[arg(long, default_value_t = 100)]
         limit: usize,
+        /// Parent-request or provider-attempt filtering view.
+        #[arg(long, default_value = "entry", value_parser = ["entry", "provider"])]
+        view: String,
+        #[arg(long)]
+        endpoint_id: Option<String>,
+        #[arg(long)]
+        provider_id: Option<String>,
+        #[arg(long)]
+        from_ms: Option<i64>,
+        #[arg(long)]
+        to_ms: Option<i64>,
+        #[arg(long)]
+        success: Option<bool>,
+        #[arg(long)]
+        request_id: Option<String>,
     },
 }
 
@@ -139,7 +156,12 @@ impl ApiClient {
             Some(AuthScope::Admin) => self.admin_token.as_deref(),
             None => None,
         };
-        let mut request = self.http.request(method, self.url(path));
+        let target = if path.starts_with("http://") || path.starts_with("https://") {
+            path.to_string()
+        } else {
+            self.url(path)
+        };
+        let mut request = self.http.request(method, target);
         if let Some(token) = token {
             request = request.header(AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -329,11 +351,25 @@ async fn main() -> Result<()> {
             format,
             None,
         )?,
-        Command::Events { since, limit } => {
+        Command::Events { since, before, limit, view, endpoint_id, provider_id, from_ms, to_ms, success, request_id } => {
             if limit == 0 || limit > MAX_EVENT_LIMIT {
                 bail!("event limit must be between 1 and {MAX_EVENT_LIMIT}");
             }
-            let path = format!("/v1/admin/events?since={since}&limit={limit}");
+            let mut url = reqwest::Url::parse(&client.url("/v1/admin/events"))?;
+            {
+                let mut query = url.query_pairs_mut();
+                query.append_pair("since", &since.to_string());
+                query.append_pair("limit", &limit.to_string());
+                query.append_pair("view", &view);
+                if let Some(value) = before { query.append_pair("before", &value.to_string()); }
+                if let Some(value) = endpoint_id { query.append_pair("endpoint_id", &value); }
+                if let Some(value) = provider_id { query.append_pair("provider_id", &value); }
+                if let Some(value) = from_ms { query.append_pair("from_ms", &value.to_string()); }
+                if let Some(value) = to_ms { query.append_pair("to_ms", &value.to_string()); }
+                if let Some(value) = success { query.append_pair("success", &value.to_string()); }
+                if let Some(value) = request_id { query.append_pair("request_id", &value); }
+            }
+            let path = url.to_string();
             print_value(
                 &client.get(&path, Some(AuthScope::Admin)).await?,
                 format,

@@ -82,6 +82,12 @@ test('ignores incorrectly typed fields instead of rendering misleading values', 
   });
 });
 
+test('route lifecycle telemetry stays out of user call history', async () => {
+  const { isUserHistoryEvent } = await loadTs('../src/components/access/activityDetail.ts');
+  assert.equal(isUserHistoryEvent({ kind: 'request' }), true);
+  assert.equal(isUserHistoryEvent({ kind: 'route_activity' }), false);
+});
+
 test('one durable entry call yields its two dispatched provider attempts', async () => {
   const { activityRows, matchesActivityProvider } = await loadTs('../src/components/access/activityDetail.ts');
   const event = {

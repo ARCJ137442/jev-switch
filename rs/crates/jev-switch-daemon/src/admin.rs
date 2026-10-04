@@ -3,7 +3,8 @@
 //! 端点：
 //! - `GET  /v1/admin/providers` → `{providers:[{id,kind,base,enabled,api_key_masked,api_key_set}]}`
 //!   **只出掩码**（`sk-****a1b2` 形态），无任何读回明文的字段/路径（红线 2/3）
-//! - `PUT  /v1/admin/providers` → 整表替换 + 落盘（0600）；响应回 masked（红线 7）。
+//! - `PUT  /v1/admin/providers` → 整表替换 + 落盘（0600）；删除 provider 时级联移除
+//!   已失去上游终点的路由分支；响应回 masked（红线 7）。
 //!   `api_key` 省略 = 保留原 key；显式空串 = 清除（回退 `api_key_env`）
 //! - `GET  /v1/admin/routes` → `{routes:[RouteEdge]}`（运行时边表 —— 含旧 `[router]`
 //!   合并结果，config 载入边集合作为真值）
@@ -36,7 +37,7 @@
 //! - **密码永不回传**：mode/password 响应只出布尔警示字段，无 password 键
 //!
 //! 落盘策略（Q5=a 读改写同一文件，其余段不动 —— toml::Value 往返）：
-//! - providers PUT：仅替换 `providers` 表；`routes`/`router` 及其它段原样保留
+//! - providers PUT：替换 `providers` 表；删除 provider 时同步收缩 `routes`，其余段原样保留
 //! - routes PUT：写 `[[routes]]` 并**移除整个旧 `[router]` 表** —— 整表替换语义下
 //!   旧扁平映射全部视为已被新表覆盖（payload 若来自 GET 即合并真值；残留任一条
 //!   都会在下次加载时重复合并出多余边 / 复活已删边）。**注释不随 toml 往返保留**
@@ -448,11 +449,18 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
             },
         );
     }
+    let removed_providers: BTreeSet<String> = existing
+        .providers
+        .keys()
+        .filter(|id| !providers.contains_key(*id))
+        .cloned()
+        .collect();
     cfg.providers = providers;
     cfg.router.clear();
     cfg.routes = existing.route_edges();
+    prune_routes_for_removed_providers(&mut cfg.routes, &cfg.providers, &removed_providers);
     if let Err(message) = validate_route_graph(&cfg.routes, &cfg.providers) {
-        return err(&state, StatusCode::BAD_REQUEST, format!("provider update rejected: {message}; update the referencing routes before removing this provider"));
+        return err(&state, StatusCode::BAD_REQUEST, format!("provider update rejected: {message}"));
     }
     let conn = match state.db_conn.lock() {
         Ok(conn) => conn,
@@ -476,6 +484,13 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
     state
         .registry
         .replace_upstreams(crate::build_runtime_upstreams(&cfg, &state.telemetry));
+    if let Err(message) = crate::admin::endpoints::refresh_endpoint_routes(&state, &[]) {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("refresh merged route graph after provider update failed: {message}"),
+        );
+    }
     let keys = known_keys_snapshot(&state);
     Json(providers_doc(&cfg, &keys)).into_response()
 }
@@ -547,6 +562,64 @@ pub(crate) fn validate_route_graph(
         ));
     }
     Ok(())
+}
+
+/// Remove provider-owned route branches after an all-table provider replacement.
+///
+/// A route can point at an alias rather than directly at a provider. When the last
+/// provider below such an alias is removed, retaining the parent edge would leave a
+/// dangling branch that only fails later during request routing. Compute the nodes
+/// that still resolve to a current provider, then keep only edges whose right side is
+/// resolvable. The snapshot write and this pruning happen before the in-memory router
+/// is refreshed, so a failed validation leaves both authorities unchanged.
+fn prune_routes_for_removed_providers(
+    routes: &mut Vec<RouteEdge>,
+    providers: &HashMap<String, ProviderConfig>,
+    removed_providers: &BTreeSet<String>,
+) -> usize {
+    if removed_providers.is_empty() {
+        return 0;
+    }
+
+    let original_count = routes.len();
+    let mut resolvable: BTreeSet<String> = providers.keys().cloned().collect();
+    loop {
+        let additions: Vec<String> = routes
+            .iter()
+            .filter(|edge| {
+                edge.r#match == MatchMode::Exact && resolvable.contains(&edge.right)
+            })
+            .map(|edge| edge.left.clone())
+            .filter(|left| {
+                !resolvable.contains(left) && !removed_providers.contains(left)
+            })
+            .collect();
+        if additions.is_empty() {
+            break;
+        }
+        resolvable.extend(additions);
+    }
+
+    let mut affected = removed_providers.clone();
+    loop {
+        let additions: Vec<String> = routes
+            .iter()
+            .filter(|edge| edge.r#match == MatchMode::Exact && affected.contains(&edge.right))
+            .map(|edge| edge.left.clone())
+            .filter(|left| !affected.contains(left))
+            .collect();
+        if additions.is_empty() {
+            break;
+        }
+        affected.extend(additions);
+    }
+
+    routes.retain(|edge| {
+        !removed_providers.contains(&edge.left)
+            && !removed_providers.contains(&edge.right)
+            && !(affected.contains(&edge.right) && !resolvable.contains(&edge.right))
+    });
+    original_count.saturating_sub(routes.len())
 }
 
 /// 整表替换（contracts/05 §2）：校验 → 落盘 → 热替换（无重启）。
@@ -2873,6 +2946,70 @@ enabled = true
         let vercel_cfg = snapshot.providers.get("vercel").unwrap();
         assert_eq!(vercel_cfg.api_key.as_deref(), Some(FAKE_KEY));
         assert!(!vercel_cfg.enabled);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn put_providers_deleting_provider_cascades_routes_and_refreshes_router() {
+        let path = temp_config("put-delete-provider", CFG_WITH_KEY);
+        let (app, state) = app_at(path.clone());
+
+        let graph = r#"{"routes":[
+            {"left":"jev","right":"fallback","match":"exact","priority":10},
+            {"left":"fallback","right":"vercel","match":"exact","priority":10},
+            {"left":"fallback","right":"laya","match":"exact","priority":20},
+            {"left":"unrelated","right":"laya","match":"exact","priority":10},
+            {"left":"vercel","right":"laya","match":"exact","priority":5},
+            {"left":"jev2","right":"vercel","match":"exact","priority":5}
+        ]}"#;
+        let (route_status, route_response) =
+            send(app.clone(), "PUT", "/v1/admin/routes", Some(graph.into())).await;
+        assert_eq!(route_status, 200, "{route_response}");
+
+        let body = r#"{"providers":[
+            {"id":"laya","kind":"laya","base":"http://127.0.0.1:18765/v1/systemone","enabled":true}
+        ]}"#;
+        let (status, response) = send(
+            app.clone(),
+            "PUT",
+            "/v1/admin/providers",
+            Some(body.into()),
+        )
+        .await;
+        assert_eq!(status, 200, "{response}");
+
+        let (routes_status, routes_body) =
+            send(app.clone(), "GET", "/v1/admin/routes", None).await;
+        assert_eq!(routes_status, 200, "{routes_body}");
+        let routes: serde_json::Value = serde_json::from_str(&routes_body).unwrap();
+        let route_list = routes["routes"].as_array().unwrap();
+        assert_eq!(route_list.len(), 3);
+        assert!(route_list
+            .iter()
+            .any(|edge| edge["left"] == "jev" && edge["right"] == "fallback"));
+        assert!(route_list
+            .iter()
+            .any(|edge| edge["left"] == "fallback" && edge["right"] == "laya"));
+        assert!(route_list
+            .iter()
+            .any(|edge| edge["left"] == "unrelated" && edge["right"] == "laya"));
+        assert!(!route_list.iter().any(|edge| edge["right"] == "vercel"));
+        assert!(!route_list.iter().any(|edge| edge["left"] == "vercel" || edge["left"] == "jev2"));
+
+        let snapshot = crate::db::load_runtime_snapshot(&state.db_conn.lock().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(!snapshot.providers.contains_key("vercel"));
+        assert_eq!(snapshot.routes.len(), 3);
+        assert_eq!(state.registry.router().edges().len(), 3);
+        let plan = state
+            .registry
+            .router()
+            .plan("jev", &jev_core::router::RouteCtx::default())
+            .unwrap();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].candidate.upstream_id, "laya");
+
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

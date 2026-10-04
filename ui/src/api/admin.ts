@@ -21,7 +21,7 @@ import { isProviderKind } from './providerKinds';
  * - 回退 mock：构建期 `VITE_ADMIN_MODE=mock`，或运行时 `setAdminMode('mock')`（调试用，fixtures 保留）
  * - 响应永远只有 api_key_masked，UI 无读回明文（契约 04 §2 红线）
  * - A7 接口备注（已核对）：
- *   1. PUT providers 省略/null `api_key` = 保留；空串 = 清除；**整表替换**（未列出者删除）
+ *   1. PUT providers 省略/null `api_key` = 保留；空串 = 清除；**整表替换**（未列出者删除）。删除 provider 会同步清理失效路由分支
  *   2. PUT 响应：providers/routes 均 200 回显 masked 全表（与 GET 同形）
  *   3. 环 400 文案 = `路由配置存在环 (cycle): …`（含「环」，下方 catch 已命中）
  */

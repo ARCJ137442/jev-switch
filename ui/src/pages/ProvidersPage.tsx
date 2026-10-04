@@ -238,39 +238,33 @@ export function ProvidersPage() {
 
   return (
     <div className="page-container">
-      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
-          {t('prov.title')}
-        </h1>
-        <span
-          className="tabular"
-          style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}
-          title={mode === 'mock' ? t('prov.mockMode') : t('prov.liveMode')}
-        >
-          {t('prov.enabledCount', { n: enabledCount, total: providers.length })}
-        </span>
+      <div className="ui-page-title providers-toolbar">
+        <div className="min-w-0">
+          <h1>{t('prov.title')}</h1>
+          <p className="tabular" title={mode === 'mock' ? t('prov.mockMode') : t('prov.liveMode')}>
+            {t('prov.enabledCount', { n: enabledCount, total: providers.length })}
+          </p>
+        </div>
+        <div className="providers-toolbar__tools">
+          <button type="button" onClick={() => openAdd('form')} style={btnPrimary}>
+            {t('prov.add')}
+          </button>
+          <button
+            type="button"
+            onClick={() => openAdd('toml')}
+            style={btn}
+            title={t('add.pasteHint')}
+          >
+            {t('prov.pasteToml')}
+          </button>
+          {!loading && !error && providers.length > 0 && <label className="providers-toolbar__search ui-surface flex min-h-10 items-center gap-2 px-3">
+            <Search size={16} aria-hidden="true" style={{ color: 'var(--text-muted)' }} />
+            <span className="sr-only">{t('providers.search' as MessageKey)}</span>
+            <input autoFocus type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t('providers.search' as MessageKey)} aria-label={t('providers.search' as MessageKey)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+            <span className="tabular text-xs" style={{ color: 'var(--text-subtle)' }}>{visibleProviders.length}/{providers.length}</span>
+          </label>}
+        </div>
       </div>
-
-      <div className="mb-6 flex flex-wrap gap-3">
-        <button type="button" onClick={() => openAdd('form')} style={btnPrimary}>
-          {t('prov.add')}
-        </button>
-        <button
-          type="button"
-          onClick={() => openAdd('toml')}
-          style={btn}
-          title={t('add.pasteHint')}
-        >
-          {t('prov.pasteToml')}
-        </button>
-      </div>
-
-      {!loading && !error && providers.length > 0 && <label className="mb-4 flex min-h-10 max-w-xl items-center gap-2 border px-3" style={{ borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)' }}>
-        <Search size={16} aria-hidden="true" style={{ color: 'var(--text-muted)' }} />
-        <span className="sr-only">{t('providers.search' as MessageKey)}</span>
-        <input autoFocus type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t('providers.search' as MessageKey)} aria-label={t('providers.search' as MessageKey)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
-        <span className="tabular text-xs" style={{ color: 'var(--text-subtle)' }}>{visibleProviders.length}/{providers.length}</span>
-      </label>}
 
       <div className="space-y-4">
         {showAdd && (

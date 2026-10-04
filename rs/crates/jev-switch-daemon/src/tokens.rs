@@ -11,7 +11,7 @@ use axum::{
     Json,
 };
 use futures_util::{stream, StreamExt};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, types::Value, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{convert::Infallible, time::Duration};
@@ -185,6 +185,18 @@ pub struct EventsPage {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HistoryView {
+    #[serde(alias = "entry")]
+    Entry,
+    Provider,
+}
+
+impl Default for HistoryView {
+    fn default() -> Self { Self::Entry }
+}
+
+#[derive(Debug, Deserialize, Default)]
 pub struct PageQuery {
     #[serde(default)]
     pub since: u64,
@@ -192,6 +204,22 @@ pub struct PageQuery {
     pub before: Option<u64>,
     #[serde(default = "default_limit")]
     pub limit: usize,
+    /// `entry` keeps parent requests; `provider` filters the same parent rows
+    /// by actual provider attempts in route_trace_json.
+    #[serde(default)]
+    pub view: HistoryView,
+    #[serde(default)]
+    pub endpoint_id: Option<String>,
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub from_ms: Option<i64>,
+    #[serde(default)]
+    pub to_ms: Option<i64>,
+    #[serde(default)]
+    pub success: Option<bool>,
+    #[serde(default)]
+    pub request_id: Option<String>,
 }
 fn default_limit() -> usize {
     100
@@ -544,7 +572,7 @@ pub async fn events_admin(
         Ok(conn) => conn,
         Err(db_error) => return error(StatusCode::INTERNAL_SERVER_ERROR, db_error.to_string()),
     };
-    match request_events(&conn, None, query.since, query.before, query.limit) {
+    match request_events_filtered(&conn, None, &query) {
         Ok(page) => Json(page).into_response(),
         Err(db_error) => error(StatusCode::INTERNAL_SERVER_ERROR, db_error.to_string()),
     }
@@ -559,7 +587,7 @@ pub async fn events_my(
         Ok(conn) => conn,
         Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
-    match caller_events(&conn, &caller.id, query.since, query.before, query.limit) {
+    match request_events_filtered(&conn, Some(&caller.id), &query) {
         Ok(page) => Json(page).into_response(),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
@@ -587,52 +615,106 @@ fn request_events(
     before: Option<u64>,
     limit: usize,
 ) -> rusqlite::Result<EventsPage> {
-    let limit = limit.clamp(1, 500);
-    let fetch_limit = limit.saturating_add(1);
-    let older_page = before.is_some();
-    let initial_page = since == 0 && !older_page;
-    let sql = if older_page {
-        "SELECT id,timestamp,success,http_status,endpoint_id,route_key,error_message,upstream_provider,upstream_model,latency_ms,upstream_calls,cost_usd,usage_json,request_id,route_trace_json,token_id
-         FROM call_logs WHERE id<?1 AND (?2 IS NULL OR token_id=?2) ORDER BY id DESC LIMIT ?3"
-    } else if initial_page {
-        "SELECT id,timestamp,success,http_status,endpoint_id,route_key,error_message,upstream_provider,upstream_model,latency_ms,upstream_calls,cost_usd,usage_json,request_id,route_trace_json,token_id
-         FROM call_logs WHERE (?1 IS NULL OR token_id=?1) ORDER BY id DESC LIMIT ?2"
-    } else {
-        "SELECT id,timestamp,success,http_status,endpoint_id,route_key,error_message,upstream_provider,upstream_model,latency_ms,upstream_calls,cost_usd,usage_json,request_id,route_trace_json,token_id
-         FROM call_logs WHERE id>?1 AND (?2 IS NULL OR token_id=?2) ORDER BY id LIMIT ?3"
-    };
-    let mut stmt = conn.prepare(sql)?;
-    let rows = if older_page {
-        stmt.query_map(
-            rusqlite::params![before, token_id, fetch_limit],
-            activity_event_from_row,
-        )?
-    } else if initial_page {
-        stmt.query_map(
-            rusqlite::params![token_id, fetch_limit],
-            activity_event_from_row,
-        )?
-    } else {
-        stmt.query_map(
-            rusqlite::params![since, token_id, fetch_limit],
-            activity_event_from_row,
-        )?
-    };
-    let mut events = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-    let has_more = events.len() > limit;
-    events.truncate(limit);
-    if initial_page || older_page {
-        events.reverse();
-    }
-    let next_since = events.last().map(|event| event.id).unwrap_or(since);
-    let next_before = events.first().map(|event| event.id);
-    Ok(EventsPage {
-        events,
-        next_since,
-        next_before,
-        has_more,
+    request_events_filtered(conn, token_id, &PageQuery {
+        since,
+        before,
+        limit,
+        ..PageQuery::default()
     })
 }
+
+const HISTORY_SCAN_BATCH: usize = 500;
+
+fn request_events_filtered(
+    conn: &Connection,
+    token_id: Option<&str>,
+    query: &PageQuery,
+) -> rusqlite::Result<EventsPage> {
+    let limit = query.limit.clamp(1, 500);
+    let descending = query.before.is_some() || query.since == 0;
+    let mut cursor = if descending { query.before } else { Some(query.since) };
+    let mut scanned_cursor = cursor;
+    let mut events = Vec::new();
+    let mut candidates_remaining = true;
+
+    while events.len() <= limit && candidates_remaining {
+        let batch = read_history_batch(conn, token_id, query, cursor, descending)?;
+        candidates_remaining = batch.len() >= HISTORY_SCAN_BATCH;
+        if batch.is_empty() { break; }
+        cursor = batch.last().map(|event| event.id);
+        scanned_cursor = cursor;
+        events.extend(batch.into_iter().filter(|event| matches_history_query(event, query)));
+    }
+
+    let has_more = events.len() > limit || candidates_remaining;
+    events.truncate(limit);
+    if descending { events.reverse(); }
+    let next_since = events.last().map(|event| event.id).unwrap_or_else(|| if descending { query.since } else { scanned_cursor.unwrap_or(query.since) });
+    let next_before = events.first().map(|event| event.id).or_else(|| if descending { scanned_cursor } else { None });
+    Ok(EventsPage { events, next_since, next_before, has_more })
+}
+
+fn read_history_batch(
+    conn: &Connection,
+    token_id: Option<&str>,
+    query: &PageQuery,
+    cursor: Option<u64>,
+    descending: bool,
+) -> rusqlite::Result<Vec<crate::events::Event>> {
+    let mut conditions = vec!["1=1".to_string()];
+    let mut values = Vec::<Value>::new();
+    if let Some(token_id) = token_id {
+        conditions.push("token_id=?".into());
+        values.push(Value::Text(token_id.to_string()));
+    }
+    if let Some(endpoint_id) = &query.endpoint_id {
+        conditions.push("endpoint_id=?".into());
+        values.push(Value::Text(endpoint_id.clone()));
+    }
+    if let Some(from_ms) = query.from_ms {
+        conditions.push("timestamp*1000>=?".into());
+        values.push(Value::Integer(from_ms));
+    }
+    if let Some(to_ms) = query.to_ms {
+        conditions.push("timestamp*1000<=?".into());
+        values.push(Value::Integer(to_ms));
+    }
+    if let Some(success) = query.success {
+        conditions.push("success=?".into());
+        values.push(Value::Integer(i64::from(success)));
+    }
+    if let Some(request_id) = &query.request_id {
+        conditions.push("request_id=?".into());
+        values.push(Value::Text(request_id.clone()));
+    }
+    if let Some(cursor) = cursor {
+        conditions.push(if descending { "id<?" } else { "id>?" }.into());
+        values.push(Value::Integer(cursor.min(i64::MAX as u64) as i64));
+    }
+    let order = if descending { "DESC" } else { "ASC" };
+    let sql = format!(
+        "SELECT id,timestamp,success,http_status,endpoint_id,route_key,error_message,upstream_provider,upstream_model,latency_ms,upstream_calls,cost_usd,usage_json,request_id,route_trace_json,token_id FROM call_logs WHERE {} ORDER BY id {} LIMIT ?",
+        conditions.join(" AND "), order
+    );
+    values.push(Value::Integer(HISTORY_SCAN_BATCH as i64));
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), activity_event_from_row)?;
+    rows.collect()
+}
+
+fn matches_history_query(event: &crate::events::Event, query: &PageQuery) -> bool {
+    let Some(provider_id) = query.provider_id.as_deref() else { return true; };
+    let Ok(detail) = serde_json::from_str::<serde_json::Value>(&event.detail) else { return false; };
+    if detail.get("provider").and_then(serde_json::Value::as_str) == Some(provider_id) {
+        return true;
+    }
+    detail.get("route_trace")
+        .and_then(|trace| trace.get("attempts"))
+        .and_then(serde_json::Value::as_array)
+        .map(|attempts| attempts.iter().any(|attempt| attempt.get("provider_id").and_then(serde_json::Value::as_str) == Some(provider_id)))
+        .unwrap_or(false)
+}
+
 
 fn activity_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<crate::events::Event> {
     let id: i64 = row.get(0)?;
@@ -693,12 +775,20 @@ fn sse_event(event: crate::events::Event) -> SseEvent {
         .unwrap_or_else(|_| SseEvent::default().comment("serialization error"))
 }
 
+fn admin_stream_start_cursor(requested: u64, latest: u64) -> u64 {
+    if requested == 0 { latest } else { requested }
+}
+
 pub async fn events_stream_admin(
     State(state): State<crate::AppState>,
     Query(query): Query<PageQuery>,
 ) -> Sse<impl futures_util::Stream<Item = Result<SseEvent, Infallible>>> {
+    // A zero cursor means "subscribe from now" for the live route stream. The
+    // durable request history has its own paging endpoint and must not replay
+    // old route_activity events when the Routing page is opened.
+    let start_cursor = admin_stream_start_cursor(query.since, state.events.latest_id());
     let stream = stream::unfold(
-        (state.events.clone(), query.since),
+        (state.events.clone(), start_cursor),
         |(bus, mut since)| async move {
             tokio::time::sleep(Duration::from_millis(500)).await;
             let events = bus.page(since, 100, None);
@@ -771,6 +861,12 @@ pub async fn events_stream_my(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admin_stream_zero_cursor_starts_at_event_bus_tail() {
+        assert_eq!(admin_stream_start_cursor(0, 17), 17);
+        assert_eq!(admin_stream_start_cursor(12, 17), 12);
+    }
 
     #[tokio::test(start_paused = true)]
     async fn caller_sse_uses_history_ids_and_resumes_without_duplicates_or_other_callers() {
@@ -872,6 +968,39 @@ mod tests {
         assert_eq!(older.events.first().unwrap().id, 1);
         assert_eq!(older.events.last().unwrap().id, 10);
         assert!(!older.has_more);
+    }
+
+    #[test]
+    fn provider_history_view_filters_parent_rows_by_real_attempt_provider() {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::db::init_database(&conn).unwrap();
+        crate::db::endpoints::create(&conn, "public", "follow_global", true).unwrap();
+        let trace = serde_json::json!({
+            "request_id": "jev-provider-history",
+            "attempts": [
+                {"provider_id":"vercel","upstream_model":"typesafe-ai/jev","outcome":"failed","upstream_status":401},
+                {"provider_id":"typesafe","upstream_model":"jev-latest","outcome":"succeeded"}
+            ]
+        });
+        conn.execute(
+            "INSERT INTO call_logs (timestamp,endpoint_id,route_key,upstream_provider,upstream_model,success,latency_ms,http_status,request_id,route_trace_json,upstream_calls) VALUES (100,'public','public→typesafe','typesafe','jev-latest',1,120,200,'jev-provider-history',?,2)",
+            [trace.to_string()],
+        ).unwrap();
+        let query = PageQuery {
+            view: HistoryView::Provider,
+            provider_id: Some("vercel".into()),
+            limit: 50,
+            ..PageQuery::default()
+        };
+        let page = request_events_filtered(&conn, None, &query).unwrap();
+        assert_eq!(page.events.len(), 1);
+        assert_eq!(page.events[0].id, 1);
+        let detail: serde_json::Value = serde_json::from_str(&page.events[0].detail).unwrap();
+        assert_eq!(detail["route_trace"]["attempts"].as_array().unwrap().len(), 2);
+
+        let query = PageQuery { provider_id: Some("missing".into()), ..query };
+        let empty = request_events_filtered(&conn, None, &query).unwrap();
+        assert!(empty.events.is_empty());
     }
 
     #[test]

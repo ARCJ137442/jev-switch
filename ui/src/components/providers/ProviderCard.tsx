@@ -331,6 +331,9 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
           </button>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
+            <span className="basis-full text-xs" style={{ color: 'var(--warning)' }}>
+              {t('providers.deleteWarning' as MessageKey)}
+            </span>
             <button
               type="button"
               disabled={busy}

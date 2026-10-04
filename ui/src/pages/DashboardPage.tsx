@@ -20,6 +20,7 @@ import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
 import { probeProvidersConcurrently, type ProviderHealth } from './dashboardHealth';
 import { readAutoProviderProbe, SETTINGS_CHANGE_EVENT, toggleFromStorage } from '../settings/preferences';
 import { GatewayServiceControl } from '../components/dashboard/GatewayServiceControl';
+import { MetricStrip, SectionHeader } from '../components/ui/SectionHeader';
 
 /**
  * Dashboard（v2.0 · 设计稿 docs/design/UI-REDESIGN-v2.md §2）
@@ -192,9 +193,7 @@ export function DashboardPage() {
   if (auth.isReadOnly) {
     return (
       <div className="page-container dashboard-container mx-auto">
-        <h1 className="mb-6 font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
-          {t('shell.navDashboard')}
-        </h1>
+        <SectionHeader title={t('shell.navDashboard')} />
         <AccessDashboard />
       </div>
     );
@@ -202,9 +201,7 @@ export function DashboardPage() {
 
   return (
     <div className="page-container dashboard-container mx-auto">
-      <h1 className="mb-6 font-semibold" style={{ fontSize: 'var(--text-2xl)' }}>
-        {t('shell.navDashboard')}
-      </h1>
+      <SectionHeader title={t('shell.navDashboard')} />
 
       {loadError && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3" style={{ ...card, color: 'var(--text-muted)' }}>
@@ -214,7 +211,7 @@ export function DashboardPage() {
       )}
 
       {/* ① 状态速览 */}
-      <div className="mb-5 grid gap-3 sm:mb-6 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <MetricStrip className="mb-5 sm:mb-6 md:grid-cols-2 xl:grid-cols-4">
         {/* runtime + address */}
         <section className="fade-in p-4 sm:p-5" style={card}>
           <div className="mb-2 flex items-center gap-2.5">
@@ -319,7 +316,7 @@ export function DashboardPage() {
             {t('dash.editRoutes')}<ArrowRight size={14} aria-hidden="true" />
           </div>
         </a>
-      </div>
+      </MetricStrip>
 
       <RuntimeTelemetry onActiveRequestsChange={setActiveRequests} />
 

@@ -196,7 +196,7 @@ export function PlaygroundPage() {
     <div className="playground-page w-full min-w-0 px-4 sm:px-6 lg:px-8">
       <div className="playground-topbar">
         <div className="playground-page-title mb-4 flex items-center gap-2">
-          <h1 className="font-semibold" style={{ fontSize: 'var(--text-2xl)', color: 'var(--text)' }}>{t('shell.navPlayground')}</h1>
+          <h1 className="font-semibold" style={{ fontSize: 'var(--text-xl)', color: 'var(--text)' }}>{t('shell.navPlayground')}</h1>
           <span role="note" tabIndex={0} aria-label={t('pg.heroLead')} title={t('pg.heroLead')} className="inline-flex h-5 w-5 cursor-help items-center justify-center" style={{ borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>?</span>
         </div>
         <section className="playground-examples-row mb-3 flex flex-wrap items-center justify-between gap-3" aria-label={t('pg.examples')}>

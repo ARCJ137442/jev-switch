@@ -13,6 +13,7 @@ import pkg from '../../package.json';
 import { useAuth } from '../auth/AuthContext';
 import { readShowStatusBar, SETTINGS_CHANGE_EVENT } from '../settings/preferences';
 import { StatusBarContributionProvider, type StatusBarItem } from './statusBar';
+import { handleFormKeyDown } from './formKeyboard';
 import './shell.css';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
@@ -148,6 +149,11 @@ function ShellFrame({ route, children }: ShellProps) {
   }, []);
 
   useEffect(() => {
+    window.addEventListener('keydown', handleFormKeyDown, true);
+    return () => window.removeEventListener('keydown', handleFormKeyDown, true);
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'F11' || !isTauri()) return;
       if ((event.target as HTMLElement | null)?.closest('input,textarea,select,[contenteditable="true"]')) return;
@@ -207,7 +213,7 @@ function ShellFrame({ route, children }: ShellProps) {
                     key={item.route}
                     href={item.href}
                     aria-current={active ? 'page' : undefined}
-                    className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 transition-colors"
+                    className={`app-shell__nav-link inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 transition-colors${active ? ' app-shell__nav-link--active' : ''}`}
                     style={{
                       fontSize: 'var(--text-sm)',
                       borderRadius: 'var(--radius)',
@@ -263,6 +269,7 @@ function ShellFrame({ route, children }: ShellProps) {
                 }}
                 aria-hidden
               />
+              <span className="app-shell__runtime-label">{daemonLabel}</span>
               <span className="tabular">v{pkg.version}</span>
             </span>
           </div>

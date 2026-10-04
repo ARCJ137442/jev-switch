@@ -82,8 +82,11 @@ export function EndpointPanel({ disabled = false, onChanged }: Props) {
   const globalConfig = storedStrategy(globalStrategy);
   return <section className="entry-workspace" aria-label={t('entry.tab')}>
     <div className="entry-toolbar">
-      <p className="entry-muted">{t('entry.subtitle')}</p>
-      <div className="entry-actions">
+      <span className="entry-muted">{t('entry.entriesCount', { n: shown.length })}</span>
+      <div className="entry-toolbar__tools">
+        {entries.length > 0 && (
+          <input autoFocus type="search" className="entry-input entry-toolbar__search" aria-label={t('entry.search')} placeholder={t('entry.search')} value={filter} onChange={e => setFilter(e.target.value)} />
+        )}
         <button className="entry-button" disabled={disabled || busy || loading || !globalConfig} onClick={() => setEditingGlobal(true)}>
           <Pencil size={14}/>{t('entry.global')} · {globalConfig ? t(`entry.${globalConfig.type}`) : globalStrategy}
         </button>
@@ -94,7 +97,6 @@ export function EndpointPanel({ disabled = false, onChanged }: Props) {
     {disabled && <p className="entry-message entry-muted">{t('entry.saveRoutesFirst')}</p>}
     {error && <div role="alert" className="entry-message entry-error">{error}</div>}
     {loading ? <p role="status" className="entry-message">{t('entry.loading')}</p> : <>
-      {entries.length > 0 && <input autoFocus type="search" className="entry-input" aria-label={t('entry.search')} placeholder={t('entry.search')} value={filter} onChange={e => setFilter(e.target.value)}/>}
       {shown.length === 0 && !error && <p className="entry-message entry-muted">{t(entries.length ? 'entry.noMatches' : 'entry.empty')}</p>}
       <div className="entry-grid">{shown.map(ep => <article key={ep.id} className="entry-card" data-enabled={ep.enabled}>
         <header><h3>{ep.id}</h3><span className="entry-badge" data-enabled={ep.enabled}>{t(ep.enabled ? 'entry.enabled' : 'entry.disabled')}</span></header>

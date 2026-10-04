@@ -589,22 +589,6 @@ async fn endpoint_writes_reject_invalid_graphs_without_changing_runtime_or_stora
         );
     }
     assert_eq!(calls.load(Ordering::SeqCst), 6);
-    let (status, body) = send(
-        app.clone(),
-        "PUT",
-        "/v1/admin/providers",
-        r#"{"providers":[]}"#,
-    )
-    .await;
-    assert_eq!(
-        status, 400,
-        "referenced providers must not be removed behind the graph: {body}"
-    );
-    let saved = jev_switch_daemon::db::load_runtime_snapshot(&db.lock().unwrap())
-        .unwrap()
-        .unwrap();
-    assert!(saved.providers.contains_key("fake"));
-    assert_eq!(saved.routes, before);
     let (status, _) = send(app.clone(), "DELETE", "/v1/admin/endpoints/alias", "").await;
     assert_eq!(
         status, 404,
@@ -648,6 +632,25 @@ async fn endpoint_writes_reject_invalid_graphs_without_changing_runtime_or_stora
     )
     .await;
     assert_eq!(status, 404);
+
+    let (status, body) = send(
+        app.clone(),
+        "PUT",
+        "/v1/admin/providers",
+        r#"{"providers":[]}"#,
+    )
+    .await;
+    assert_eq!(
+        status, 200,
+        "deleting a provider must prune its route branches atomically: {body}"
+    );
+    let saved = jev_switch_daemon::db::load_runtime_snapshot(&db.lock().unwrap())
+        .unwrap()
+        .unwrap();
+    assert!(!saved.providers.contains_key("fake"));
+    assert!(saved.routes.is_empty());
+    assert!(registry.router().edges().is_empty());
+
     drop(app);
     drop(db);
     let _ = std::fs::remove_dir_all(dir);

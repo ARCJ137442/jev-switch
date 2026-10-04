@@ -19,8 +19,35 @@
 | `POST` | `/v1/admin/providers/{id}/models` | 从已保存 provider 的同源 `/v1/models` 获取模型 ID |
 | `POST` | `/v1/admin/providers/discover-models` | 为尚未保存的表单执行一次不落盘模型发现 |
 | `GET` | `/v1/admin/telemetry` | 当前 daemon 会话的流量、请求和资源遥测（不落盘） |
+| `GET` | `/v1/admin/events` | Agent/控制台共享的可分页调用历史查询 |
+| `GET` | `/v1/events/my` | 调用方 Token 作用域内的同口径历史查询 |
 
 Admin 仅绑 `127.0.0.1`；CORS 见 §5。
+
+### `GET /v1/admin/events` 与 `GET /v1/events/my`
+
+这两个端点是 Agent 与人工控制台共享的历史查询基础。默认 `view=entry`，每条记录代表一次入口父请求；`route_trace.attempts` 包含实际 provider 尝试。使用 `view=provider` 并传 `provider_id` 时，服务端只返回该提供商曾参与的父请求，调用方再按 `route_trace.attempts` 回溯失败、重试、成功和耗时。返回仍是一条父记录，不复制入口日志。
+
+支持的查询参数：
+
+| 参数 | 说明 |
+|---|---|
+| `view=entry\|provider` | 查询视角；默认 `entry` |
+| `endpoint_id` | 精确筛选对外入口 |
+| `provider_id` | 匹配 route trace 中实际尝试过的 provider |
+| `from_ms` / `to_ms` | Unix 毫秒时间范围 |
+| `success=true\|false` | 入口最终结果 |
+| `request_id` | 精确筛选一个请求，例如 `jev-147` |
+| `since` / `before` / `limit` | 稳定 ID 游标分页；`limit` 最大 500 |
+
+示例：
+
+```text
+GET /v1/admin/events?view=provider&provider_id=vercel&from_ms=...&limit=50
+Authorization: Bearer <admin-token>
+```
+
+`route_activity` 是路由画布的内存实时生命周期流，不属于这两个历史端点；它不会写入 `call_logs`，也不会污染调用历史分页。
 
 ## 2. 形状（冻结）
 
@@ -86,7 +113,7 @@ Admin 仅绑 `127.0.0.1`；CORS 见 §5。
 
 `kind` 当前接受 `vercel`、`laya`、`typesafe`、`openrouter`。TypeSafe 官方地址是完整 endpoint `https://api.typesafe.ai/v1/systemone`，Bearer key 由 daemon 添加；官方模型示例为 `jev-latest`。OpenRouter 使用完整 chat endpoint `https://openrouter.ai/api/v1/chat/completions`，daemon 将 Jev 请求转换为结构化 JSON chat 请求，再严格解析回 Jev answers；这不表示对外入口兼容一般 OpenAI/Anthropic Chat API。本地 TypeSafe kind 也必须提供相同 Jev `POST /v1/systemone` wire format。
 
-写入后落盘 toml（0600）；响应回 **masked**，不回明文。`api_key` 省略表示保留已有密钥，空串表示清除；`api_key_env` 省略表示保留已有环境变量名。
+写入后落盘 toml（0600）；响应回 **masked**，不回明文。`api_key` 省略表示保留已有密钥，空串表示清除；`api_key_env` 省略表示保留已有环境变量名。整表中移除已有 provider 时，会在同一运行时快照写入中移除其直接引用以及因此无法再解析到任何现存 provider 的别名分支，并热替换内存路由；历史调用记录保留。
 
 ### `GET/PUT /v1/admin/routes`
 

@@ -105,6 +105,11 @@ export interface ActivityRow {
   attempt: ProviderAttemptDetail | null;
 }
 
+/** Route lifecycle telemetry belongs to the Routing canvas, not call history. */
+export function isUserHistoryEvent(event: ActivityEvent): boolean {
+  return event.kind !== 'route_activity';
+}
+
 /** One durable parent call can yield several actual provider-call rows. */
 export function activityRows(events: readonly ActivityEvent[], perspective: ActivityPerspective): ActivityRow[] {
   if (perspective === 'entry') return events.map((event) => ({ key: String(event.id), event, attempt: null }));

@@ -13,7 +13,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
 - **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与[当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
 - **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。
-- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.7.0` 已发布持久 attempt 双视图、路由 Dagre 排布、移动端样例选择和 Android 文件/剪贴板适配；`v0.7.1` 修复跨层连线未使用 Dagre 避让走廊的问题。版本与人工验证范围见[发版记录](docs/RELEASE.md)。
+- **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.7.0` 已发布持久 attempt 双视图、路由 Dagre 排布、移动端样例选择和 Android 文件/剪贴板适配；`v0.7.1` 修复跨层连线未使用 Dagre 避让走廊的问题；`v0.7.2` 修复提供商删除级联和统一表单键盘交互。版本与人工验证范围见[发版记录](docs/RELEASE.md)。
 - **可编辑调用路由 DAG**：支持对外入口、路由节点和提供商模型端口之间的多跳与分支，并配置候选优先级和失败处理；简单直连只是 DAG 的一种形式。
 - **演练场横向比较**：可比较多个对外入口、直接上游模型或混合目标；轻点样例可多选，右键/长按可快速独选；结果分别呈现实际路径、耗时、usage 与错误。
 - **密钥边界**：上游 key 留在 daemon；管理 API 只返回脱敏状态，不提供明文读回接口。不要把真实 key 提交到仓库或聊天。
@@ -21,6 +21,7 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 - **首页运行遥测**：Dashboard 展示当前 daemon 会话的入口/出口速率、累计字节、活跃请求、成功/失败/failover、网关平均延迟和 daemon 进程 CPU/内存；采样数据只在内存中保留，无法精确获得的 Tauri WebView/上游指标明确显示不可用。
 - **Headless CLI Phase 1**：`jev-switch-cli` 通过 daemon HTTP API 提供 `status`、`models`、`invoke`、`routes`、`events`，支持 JSON/表格输出，适合 Termux、SSH 与脚本；TUI 和完整 Android 原生交互仍后置。详见 [CLI 文档](docs/CLI.md)。
 - **统计与实时路由反馈**：统计页按当前筛选范围提供入口/提供商健康矩阵，格子保持正方形并按宽度自适应日/时/分/秒粒度；入口历史每次请求一行，提供商视角按该请求持久 trace 展开每次实际候选调用。路由 DAG 使用 Dagre/Sugiyama 排布不同尺寸节点，跨层连线沿虚拟节点走廊避让，并从独立实时事件流呈现固定线宽、请求曝光和响应辉光。历史调用支持自定义每页条数。
+- **Agent 可追踪历史**：控制台与 Agent 共用 `/v1/admin/events` / `/v1/events/my` 查询能力，可按入口、提供商、时间范围、成功状态、request ID 和稳定游标分页检索；入口视角追踪父请求，提供商视角回溯 `route_trace.attempts` 中的真实失败/重试/成功链路。路由画布的 `route_activity` 只作为实时过程流，不混入历史记录。
 - **跨平台界面偏好**：设置支持 10%–200% 的全局 UI 缩放，滑块步长 5% 并可输入自定义倍率；设置搜索可匹配说明内容，局域网开关以固定文案和高亮状态表达。演练场样例 chip 在窄屏自动换行，触屏可直接多选。
 - **Android APP**：作为正式下载渠道维护，优先级次于 Windows 桌面。APK 使用稳定签名并内置网关；首次打开直接启动本机后端，用户明确停止后保持关闭，首页可启停。`v0.7.0` 已发布原生 JSON 导出/分享、剪贴板和独立前台服务状态显示。维护者已确认 `v0.6.3` 的本机网关启停与 UI 连接；新桥、service、通知、Quick Settings tile、局域网和后台稳定性仍待分别验收。详见 [Android 构建与验收计划](docs/design/ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md)。
 - **当前迭代入口**：路由画布/HUD、演练场批量矩阵、Provider/Entry 搜索、统计/设置、运行控制和探测偏好按[用户反馈迭代计划](docs/design/USER-FEEDBACK-ITERATION-PLAN.md)分阶段推进。

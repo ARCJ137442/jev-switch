@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Radar, RefreshCw, Settings2, XCircle } from 'lucide-react';
+import { Activity, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, CircleDollarSign, Clock3, Columns3, Radar, RefreshCw, Settings2, XCircle } from 'lucide-react';
 import { copyText } from '../../api/nativeTransfer';
 import {
   createCallerToken,
@@ -25,7 +25,7 @@ import { useToast } from '../../app/feedback';
 import { useAuth } from '../../auth/AuthContext';
 import { useStatusBarItems } from '../../app/statusBar';
 import { getCallerToken } from '../../auth/callerSession';
-import { activityRows, matchesActivityProvider, parseRequestActivityDetail, type ActivityPerspective } from './activityDetail';
+import { activityRows, isUserHistoryEvent, matchesActivityProvider, parseRequestActivityDetail, type ActivityPerspective, type ActivityRow } from './activityDetail';
 import { buildAdaptiveHealthRows } from '../../pages/statisticsMatrix';
 
 type Pane = 'activity' | 'tokens' | 'mine';
@@ -154,6 +154,44 @@ function ProviderAttemptDetails({ event, attempt, copy }: { event: ActivityEvent
       </div>
     </div>
   );
+}
+
+type HistoryColumn = 'time' | 'event' | 'subject' | 'result' | 'latency' | 'calls' | 'usage' | 'cost' | 'request' | 'token' | 'route' | 'raw';
+
+const HISTORY_COLUMN_ORDER: readonly HistoryColumn[] = ['time', 'event', 'subject', 'result', 'latency', 'calls', 'usage', 'cost', 'request', 'token', 'route', 'raw'];
+const DEFAULT_HISTORY_COLUMNS: readonly HistoryColumn[] = ['time', 'subject', 'result', 'latency', 'calls'];
+const historyColumnMemory = { visible: [...DEFAULT_HISTORY_COLUMNS] as HistoryColumn[] };
+const HISTORY_COLUMN_KEYS: Record<HistoryColumn, MessageKey> = {
+  time: 'access.columnTime', event: 'access.columnEvent', subject: 'access.columnSubject', result: 'access.columnResult',
+  latency: 'access.columnLatency', calls: 'access.columnCalls', usage: 'access.columnUsage', cost: 'access.columnCost',
+  request: 'access.columnRequest', token: 'access.columnToken', route: 'access.columnRoute', raw: 'access.columnRaw',
+};
+
+function HistoryCell({ row, column, copy }: { row: ActivityRow; column: HistoryColumn; copy: Copy }) {
+  const detail = parseRequestActivityDetail(row.event.kind, row.event.detail);
+  const attempt = row.attempt;
+  const parent = detail;
+  const statusText = attempt
+    ? attempt.status === null ? copy(attempt.outcome === 'succeeded' ? 'access.attemptSucceeded' : attempt.outcome === 'cancelled' ? 'access.attemptCancelled' : 'access.attemptFailed') : `HTTP ${attempt.status}`
+    : parent?.status === null || parent?.status === undefined ? '—' : copy(parent.success ? 'access.requestSucceeded' : 'access.requestFailed', { status: parent.status });
+  const statusTone = attempt ? attempt.outcome === 'succeeded' : parent?.success === true;
+  const route = attempt
+    ? `${parent?.endpointId ?? '—'} → ${attempt.provider}${attempt.upstreamModel ? ` / ${attempt.upstreamModel}` : ''}`
+    : parent?.provider || parent?.upstreamModel ? `${parent.provider ?? '—'} → ${parent.upstreamModel ?? '—'}` : '—';
+  switch (column) {
+    case 'time': return <span className="whitespace-nowrap tabular text-xs" style={{ color: 'var(--text-muted)' }}>{formatDate(row.event.timestamp, '—')}</span>;
+    case 'event': return <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><EventKindMark kind={row.event.kind} />{eventKindLabel(row.event.kind, copy)}</span>;
+    case 'subject': return <span className="block max-w-56 truncate font-mono" title={attempt ? `${attempt.provider} / ${attempt.upstreamModel ?? '—'}` : parent?.endpointId ?? undefined}>{attempt ? `${attempt.provider} / ${attempt.upstreamModel ?? '—'}` : parent?.endpointId ?? '—'}</span>;
+    case 'result': return <span className="inline-flex items-center gap-1 whitespace-nowrap" style={{ color: statusTone ? 'var(--success)' : parent?.success === false || attempt?.outcome === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }}>{statusTone ? <CheckCircle2 size={13} aria-hidden="true" /> : parent?.success === false || attempt?.outcome === 'failed' ? <XCircle size={13} aria-hidden="true" /> : null}{statusText}</span>;
+    case 'latency': return <span className="whitespace-nowrap tabular" style={{ color: 'var(--text-muted)' }}>{(attempt?.latencyMs ?? parent?.latencyMs) == null ? '—' : `${attempt?.latencyMs ?? parent?.latencyMs} ms`}</span>;
+    case 'calls': return <span className="whitespace-nowrap tabular" style={{ color: 'var(--text-muted)' }}>{copy(attempt ? 'access.upstreamCall' : (parent?.upstreamCalls === 1 ? 'access.upstreamCall' : 'access.upstreamCalls'), { count: attempt ? 1 : parent?.upstreamCalls ?? '—' })}</span>;
+    case 'usage': return <span className="whitespace-nowrap text-xs tabular" style={{ color: 'var(--text-muted)' }}>{parent ? copy('access.tokenUsage', { input: parent.inputTokens ?? '—', output: parent.outputTokens ?? '—' }) : '—'}</span>;
+    case 'cost': return <span className="whitespace-nowrap text-xs" style={{ color: 'var(--text-muted)' }}>{parent ? copy('access.costValue', { value: parent.costUsd === null ? copy('access.noCost') : `${parent.costUsd.toFixed(6)} USD` }) : '—'}</span>;
+    case 'request': return <code className="whitespace-nowrap text-xs" title={parent?.requestId ?? undefined}>{parent?.requestId ?? '—'}</code>;
+    case 'token': return <code className="block max-w-36 truncate text-xs" title={row.event.token_id ?? undefined}>{row.event.token_id ?? '—'}</code>;
+    case 'route': return <span className="block max-w-64 truncate text-xs" title={route}>{route}</span>;
+    case 'raw': return attempt ? <ProviderAttemptDetails event={row.event} attempt={attempt} copy={copy} /> : <EventDetails event={row.event} copy={copy} />;
+  }
 }
 
 function StatGrid({ stats, copy }: { stats: CallerStats | OwnStats | null; copy: Copy }) {
@@ -473,18 +511,35 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
   const [timeFilter, setTimeFilter] = useState(() => activityFilterMemory.timeFilter);
   const [kindFilter, setKindFilter] = useState(() => activityFilterMemory.kindFilter);
   const [matrixDimension, setMatrixDimension] = useState<'entry' | 'provider'>(() => activityFilterMemory.matrixDimension);
+  const [visibleColumns, setVisibleColumns] = useState<HistoryColumn[]>(() => [...historyColumnMemory.visible]);
   useEffect(() => {
     Object.assign(activityFilterMemory, { perspective, pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension });
   }, [perspective, pageSize, pageIndex, entryFilter, providerFilter, timeFilter, kindFilter, matrixDimension]);
   const statusItems = useMemo(() => [{ id: 'activity-count', label: copy('access.loadedCount', { count: events.length }) }], [copy, events.length]);
   useStatusBarItems(statusItems);
+  const availableColumns = useMemo(() => HISTORY_COLUMN_ORDER.filter((column) => column !== 'token' || !callerToken), [callerToken]);
+  const toggleColumn = (column: HistoryColumn) => {
+    setVisibleColumns((current) => {
+      if (current.includes(column)) {
+        if (current.length === 1) return current;
+        const next = current.filter((item) => item !== column);
+        historyColumnMemory.visible = next;
+        return next;
+      }
+      const next = HISTORY_COLUMN_ORDER.filter((item) => current.includes(item) || item === column)
+        .filter((item) => availableColumns.includes(item));
+      historyColumnMemory.visible = next;
+      return next;
+    });
+  };
   const cursorRef = useRef(0);
   const loadedRef = useRef(false);
   const mergeEvents = useCallback((incoming: ActivityEvent[]) => {
-    if (!incoming.length) return;
-    cursorRef.current = Math.max(cursorRef.current, ...incoming.map((event) => event.id));
+    const historyEvents = incoming.filter(isUserHistoryEvent);
+    if (!historyEvents.length) return;
+    cursorRef.current = Math.max(cursorRef.current, ...historyEvents.map((event) => event.id));
     const merged = new Map(eventsRef.current.map((event) => [event.id, event]));
-      for (const event of incoming) merged.set(event.id, event);
+      for (const event of historyEvents) merged.set(event.id, event);
     eventsRef.current = [...merged.values()].sort((a, b) => b.id - a.id);
     setEvents(eventsRef.current);
   }, []);
@@ -543,7 +598,7 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
     const timer = window.setInterval(() => void refresh(), 15000);
     const controller = new AbortController();
     void streamActivity(callerToken ? { type: 'caller', token: callerToken } : { type: 'admin' }, cursorRef.current, controller.signal, (event) => {
-      if (active) mergeEvents([event]);
+      if (active && isUserHistoryEvent(event)) mergeEvents([event]);
     }).then(() => {
       if (active && !controller.signal.aborted) setStreaming(false);
     }).catch((cause) => {
@@ -621,12 +676,9 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
   const pageFrom = filteredRows.length === 0 ? 0 : safePageIndex * pageSizeNumber + 1;
   const pageTo = Math.min((safePageIndex + 1) * pageSizeNumber, filteredRows.length);
 
-  const card: React.CSSProperties = {
-    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-  };
   const fieldStyle: React.CSSProperties = { borderColor: 'var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--text)' };
   return (
-    <section className="space-y-3 rounded-md p-4" style={card}>
+    <section className="ui-surface space-y-3 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{copy('access.eventsTitle')}</h3>
         <div className="flex items-center gap-3">
@@ -634,6 +686,16 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
             {streaming ? copy('access.live') : copy('access.polling')}
           </span>
           <button type="button" disabled={refreshing} onClick={() => void refreshNow()} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm" style={{ background: 'var(--surface-hover)' }}><RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />{refreshing ? copy('access.refreshing') : copy('access.refresh')}</button>
+          <details className="ui-columns-menu relative">
+            <summary className="grid h-8 w-8 cursor-pointer list-none place-items-center rounded-md border" style={{ borderColor: 'var(--border)', background: 'var(--surface-hover)' }} title={copy('access.columns')} aria-label={copy('access.columns')}><Columns3 size={15} aria-hidden="true" /></summary>
+            <div className="absolute right-0 z-20 mt-2 grid min-w-56 gap-1 rounded-md border p-2 shadow-lg" style={{ borderColor: 'var(--border)', background: 'var(--surface-raised)' }}>
+              <p className="px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.columnsHint')}</p>
+              {availableColumns.map((column) => <label key={column} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-[var(--surface-hover)]">
+                <input type="checkbox" checked={visibleColumns.includes(column)} disabled={visibleColumns.length === 1 && visibleColumns.includes(column)} onChange={() => toggleColumn(column)} />
+                {copy(HISTORY_COLUMN_KEYS[column])}
+              </label>)}
+            </div>
+          </details>
         </div>
       </div>
       {error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>{copy(callerToken ? 'access.myLoadFailed' : 'access.eventsFailed', { reason: error })}</p>}
@@ -647,7 +709,7 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
         endMs={rangeEnd}
         copy={copy}
       />
-      <div className="flex flex-wrap items-end gap-2" aria-label={copy('access.filters')}>
+      <div className="ui-filter-bar" aria-label={copy('access.filters')}>
         <label className="grid gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>{copy('access.perspective')}
           <select value={perspective} onChange={(event) => { setPerspective(event.target.value as ActivityPerspective); setPageIndex(0); }} className="h-9 border px-2" style={fieldStyle}>
             <option value="entry">{copy('access.entryPerspective')}</option><option value="provider">{copy('access.providerPerspective')}</option>
@@ -673,29 +735,17 @@ function ActivityFeed({ callerToken, copy }: { callerToken?: string; copy: Copy 
         <table className="w-full table-fixed border-collapse text-left text-sm">
           <thead style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
             <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
-              <th className="px-2 py-2 text-xs font-medium sm:text-sm">{copy('access.time')}</th>
-              <th className="hidden px-2 py-2 font-medium sm:table-cell">{copy('access.kind')}</th>
-              {!callerToken && <th className="hidden px-2 py-2 font-medium lg:table-cell">{copy('access.callToken')}</th>}
-              <th className="px-2 py-2 font-medium">{copy('access.details')}</th>
+              {visibleColumns.map((column) => <th key={column} className="truncate px-2 py-2 font-medium">{copy(HISTORY_COLUMN_KEYS[column])}</th>)}
             </tr>
           </thead>
           <tbody>
-            {pageRows.map(({ key, event, attempt }) => (
-              <tr key={key} className="border-b align-top" style={{ borderColor: 'var(--border)' }}>
-                <td className="whitespace-nowrap px-2 py-2 text-xs tabular sm:text-sm" style={{ color: 'var(--text-muted)' }}>{formatDate(event.timestamp, '—')}</td>
-                <td className="hidden whitespace-nowrap px-2 py-2 sm:table-cell"><span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span></td>
-                {!callerToken && <td className="hidden px-2 py-2 font-mono text-xs lg:table-cell">{event.token_id ?? '—'}</td>}
-                <td className="max-w-xl break-words px-2 py-2">
-                  <div className="mb-1 flex flex-wrap items-center gap-x-2 text-xs sm:hidden" style={{ color: 'var(--text-muted)' }}>
-                    <span className="inline-flex items-center gap-1.5"><EventKindMark kind={event.kind}/>{eventKindLabel(event.kind, copy)}</span>
-                    {!callerToken && <span className="max-w-full break-all font-mono">{event.token_id ?? '—'}</span>}
-                  </div>
-                  {attempt ? <ProviderAttemptDetails event={event} attempt={attempt} copy={copy} /> : <EventDetails event={event} copy={copy} />}
-                </td>
+            {pageRows.map((row) => (
+              <tr key={row.key} className="border-b align-top" style={{ borderColor: 'var(--border)' }}>
+                {visibleColumns.map((column) => <td key={column} className="min-w-0 px-2 py-2 align-top"> <HistoryCell row={row} column={column} copy={copy} /></td>)}
               </tr>
             ))}
-            {initialLoading && events.length === 0 && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy('access.loadingEvents')}</td></tr>}
-            {!initialLoading && pageRows.length === 0 && !error && <tr><td colSpan={callerToken ? 3 : 4} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy(perspective === 'provider' ? 'access.noAttemptRows' : filteredEvents.length === 0 ? 'access.noEvents' : 'access.noFilteredEvents')}</td></tr>}
+            {initialLoading && events.length === 0 && <tr><td colSpan={visibleColumns.length} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy('access.loadingEvents')}</td></tr>}
+            {!initialLoading && pageRows.length === 0 && !error && <tr><td colSpan={visibleColumns.length} className="px-2 py-6 text-center" style={{ color: 'var(--text-muted)' }}>{copy(perspective === 'provider' ? 'access.noAttemptRows' : filteredEvents.length === 0 ? 'access.noEvents' : 'access.noFilteredEvents')}</td></tr>}
           </tbody>
         </table>
       </div>

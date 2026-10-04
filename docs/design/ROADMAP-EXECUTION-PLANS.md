@@ -1,6 +1,6 @@
 # Roadmap Execution Plans
 
-> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.7.1` 已包含 provider attempt 双视图、Dagre 节点及跨层边走廊、Android 原生 JSON/剪贴板。维护者只确认过 v0.6.3 Android 本机启停与 UI 连接，service/tile/通知、新文件/剪贴板和全链路性能仍有独立验收边界。
+> **TL;DR**：这些是基于当前源码的执行状态和后续拆解，不是版本承诺。公开 `v0.7.2` 候选保留 provider attempt 双视图、Dagre 节点及跨层边走廊、Android 原生 JSON/剪贴板，并修复 provider 删除级联和表单键盘交互。维护者只确认过 v0.6.3 Android 本机启停与 UI 连接，service/tile/通知、新文件/剪贴板和全链路性能仍有独立验收边界。
 >
 > **作者**：GPT-6 Luna xhigh（OpenAI Codex）  
 > **AI 披露**：本文由 AI 协助整理，执行顺序和最终范围由项目维护者确认。
@@ -31,6 +31,8 @@ Android 方向已从“可行性调研”进入“完整网关应用实现”：
 | [OpenRouter adapter](ROADMAP-PLAN-OPENROUTER.md) | adapter 已随 v0.2.0 发布并通过离线/WireMock 门禁 | 未使用 live key 验证账户能力/费用 |
 | 图标/性能首轮 | v0.5.0 已实现高频 UI 图标、健康探测并发/共享状态和隐藏页遥测暂停，并通过 UI tests/build、Windows 原生隔离和桌面自动门禁；品牌图标和跨硬件基线仍未完成 | 安装器、跨硬件和全链路 daemon/SQLite/UI 性能基线仍在本轮之后 |
 | [Android APP 正式发布与验收计划](ROADMAP-PLAN-ANDROID-EXPERIMENTAL.md) | 完整网关应用已稳定签名随 v0.7.0 发布；内置后端本机启停和 UI 连接仅有 v0.6.3 维护者设备证据；v0.7.0 补 Android 7–9 分享、原生 JSON/剪贴板与权限清单门禁，详见[权限审查](../verification/android-permission-audit-2026-10-03.md) | 原生 service/tile/通知、后台/OEM 回收、文件导出/剪贴板、热点 LAN 和跨 Android 版本行为仍需人工证据 |
+| [DAG 节点引擎与三类用户视图](DAG-NODE-ENGINE-ARCHITECTURE-PLAN.md) | 架构提案：入口/节点/提供商作为统一 DAG 的公开、内部、终端视图；当前只完成源码调研与分阶段计划 | Phase 0 术语、ID 兼容、迁移冲突和策略归属尚未冻结；不是当前 Release 承诺 |
+| [Dashboard 组件系统与布局编辑](DASHBOARD-COMPONENT-SYSTEM-PLAN.md) | 参考已验证的组件 registry、布局规范化、预设和编辑事务，为首页个性化及路由/设置等专用页面建立受限布局模型 | Phase 0 组件清单尚未冻结；不是当前 Release 承诺 |
 
 ## 共用交付门槛
 

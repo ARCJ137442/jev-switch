@@ -152,6 +152,11 @@ impl EventBus {
             inner.events[len - limit..].to_vec()
         }
     }
+
+    /// Current high-water mark without exposing buffered history.
+    pub fn latest_id(&self) -> u64 {
+        self.inner.lock().unwrap().next_id.saturating_sub(1)
+    }
 }
 
 #[cfg(test)]
@@ -202,5 +207,6 @@ mod tests {
 
         bus.push("request", "next");
         assert_eq!(bus.recent(1)[0].id, 44);
+        assert_eq!(bus.latest_id(), 44);
     }
 }

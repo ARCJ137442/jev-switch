@@ -1,17 +1,17 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前公开版为 `v0.7.1`，Release CI 与官网自动刷新成功；本次修复跨层路由边避让。正式 Release 附 Windows Standalone/Portable、CLI、Docker 与稳定签名 Android APK。Android service/tile/通知和新原生文件/剪贴板路径仍需独立设备验收。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前公开版候选为 `v0.7.2`，本轮修复提供商删除级联和表单键盘交互，并保留 v0.7.1 的跨层路由边修复。正式 Release 附 Windows Standalone/Portable、CLI、Docker 与稳定签名 Android APK。Android service/tile/通知和新原生文件/剪贴板路径仍需独立设备验收。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
 > **本轮索引修订：**OpenAI Codex 协助整理，2026-10-03。
 
-> **2026-10-03 adapter 状态：**当前源码 `v0.7.1` 仍内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
+> **2026-10-03 adapter 状态：**当前源码 `v0.7.2` 仍内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **历史发布快照（截至 2026-09-27）**：当时最新正式版为 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，包含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。对应 Release gate 的 Rust、UI、Tauri 与版本检查通过；验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。用户提供的 Tauri 截图整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；这些材料不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。当前版本与能力以本文后续的 2026-09-30 产品基线、[发布手册](RELEASE.md)及对应核验记录为准。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段（2026-10-03）**：公开版为 v0.7.1；Release 已附便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、provider attempt 双视图、JSON 设置备份、真实路由 activity/辉光、演练场移动端多选与 Android 原生文件/剪贴板桥；跨层连线已补 Dagre 避让走廊。MSI/NSIS 原生人工交互、Android 真机 service/文件/剪贴板、TUI、OpenRouter live 和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
+> **当前产品基线与维护阶段（2026-10-04）**：公开版候选为 v0.7.2；Release 已附便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、provider attempt 双视图、JSON 设置备份、真实路由 activity/辉光、演练场移动端多选与 Android 原生文件/剪贴板桥；跨层连线已补 Dagre 避让走廊，本轮补提供商删除级联和统一表单键盘交互。MSI/NSIS 原生人工交互、Android 真机 service/文件/剪贴板、TUI、OpenRouter live 和跨设备性能仍按各自边界处理。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
 
 ## 核心定位（一句话）
 
@@ -37,7 +37,9 @@
 | [USER-JOURNEYS.md](USER-JOURNEYS.md) | 当前基线、已发布体验与路线图用户旅程 | 前六节为历史构想；v0.2 旅程标已发布能力与边界；v0.3 旅程含 CLI/性能首轮体验 |
 | **[design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)** | **用户决策、两侧入口定义、卡片粒度、DAG、比较范围、实施路线与验收边界** | **当前产品边界；v0.5.0 通用代码已自动验证；原生人工边界见发布记录** |
 | [design/USER-FEEDBACK-ITERATION-PLAN.md](design/USER-FEEDBACK-ITERATION-PLAN.md) | 本轮用户反馈的实施顺序、UI 原则、数据/安全边界和验收门槛 | 当前迭代入口；各 Phase 不代表 Release 承诺 |
-| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 演练场、路由、统计、设置与 Android 近期用户反馈清单 | v0.7.1 已发布；剩余设备验收单独标记 |
+| [design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md](design/USER-FEEDBACK-ITERATION-PLAN-NEXT.md) | 演练场、路由、统计、设置与 Android 近期用户反馈清单 | v0.7.2 候选；剩余设备验收单独标记 |
+| [design/DAG-NODE-ENGINE-ARCHITECTURE-PLAN.md](design/DAG-NODE-ENGINE-ARCHITECTURE-PLAN.md) | DAG 节点引擎、入口/节点/提供商三类用户视图、兼容迁移、Graph API 与分阶段执行计划 | 架构提案；Phase 0 尚未冻结，不代表当前能力或 Release 承诺 |
+| [design/DASHBOARD-COMPONENT-SYSTEM-PLAN.md](design/DASHBOARD-COMPONENT-SYSTEM-PLAN.md) | Dashboard 组件注册、布局编辑器、个性化设置、预设/迁移与专用页面受限布局 | 架构提案；未进入实现或 Release 承诺 |
 | [design/UI-INTERACTION-PRINCIPLES.md](design/UI-INTERACTION-PRINCIPLES.md) | 二值状态固定文案、触屏与桌面选择、设置搜索等现行交互原则 | 新控件复用的设计依据 |
 | [verification/v0.6.0-release-candidate-2026-10-01.md](verification/v0.6.0-release-candidate-2026-10-01.md) | v0.6.0 功能变更、自动门禁、Android 构建和人工基线 | 历史版本记录；当前补丁版本见 v0.6.2 核验记录 |
 | [verification/v0.6.1-release-candidate-2026-10-01.md](verification/v0.6.1-release-candidate-2026-10-01.md) | v0.6.1 发布、可选 Android 签名和 Windows Standalone 保证 | 历史补丁发布记录；Windows Standalone/CLI/Docker 发布成功，Android APK 未附 |

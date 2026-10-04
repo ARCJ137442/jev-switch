@@ -26,7 +26,8 @@
 .dag-tool-group output { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
 .dag-insert { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .dag-insert input { width: 190px; max-width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: var(--radius); }
-.dag-viewport { position: relative; width: 100%; height: auto; min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; touch-action: none; background: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
+.dag-viewport { position: relative; width: 100%; height: auto; min-height: 0; flex: 1; overflow: hidden; overscroll-behavior: contain; touch-action: none; background: radial-gradient(var(--border) 1px, transparent 1px); background-size: 20px 20px; }
+.dag-canvas-layer { position: absolute; inset: 0; min-width: 100%; min-height: 100%; overflow: hidden; }
 .dag-world { position: relative; transform-origin: 0 0; user-select: none; }
 .dag-wires { position: absolute; inset: 0; overflow: visible; }
 .dag-glow { fill: none; stroke: var(--dag-edge-color, transparent); stroke-width: 10; opacity: var(--dag-glow-alpha, 0); filter: blur(var(--dag-glow-radius, 0px)); pointer-events: none; transition: opacity .12s linear, filter .12s linear, stroke .12s linear; }
@@ -37,7 +38,7 @@
 .dag-edge.invalid .dag-wire { stroke: var(--danger); }
 .dag-preview { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }
 .dag-preview.snapped { stroke-width: 4; stroke-dasharray: none; }
-.dag-node { position: absolute; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--text); }
+.dag-node { position: absolute; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--text); }
 .dag-entry { border-left: 3px solid var(--accent); }
 .dag-alias { border-style: dashed; }
 .dag-provider { border-top: 3px solid var(--accent); }

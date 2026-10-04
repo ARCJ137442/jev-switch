@@ -43,6 +43,7 @@ export const providersEn = {
   'providers.nameRequired': 'Display name or account is recommended.',
   'providers.enableAccount': 'Enable provider account {id}',
   'providers.disableAccount': 'Disable provider account {id}',
+  'providers.deleteWarning': 'Routes that can no longer reach another provider will be removed with this provider.',
 } as const;
 
 export const providersZh = {
@@ -90,4 +91,5 @@ export const providersZh = {
   'providers.nameRequired': '建议填写显示名称或账号。',
   'providers.enableAccount': '启用提供商账号 {id}',
   'providers.disableAccount': '停用提供商账号 {id}',
+  'providers.deleteWarning': '删除此提供商后，无法再到达其他提供商的关联路由也会一并移除。',
 } as const;

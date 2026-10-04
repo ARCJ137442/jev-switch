@@ -3,10 +3,10 @@ import { Circle } from 'lucide-react';
 type Status = 'healthy' | 'degraded' | 'failed' | 'idle';
 
 const statusColors: Record<Status, string> = {
-  healthy: 'text-green-600',
-  degraded: 'text-yellow-600',
-  failed: 'text-red-600',
-  idle: 'text-gray-400',
+  healthy: 'var(--success)',
+  degraded: 'var(--warning)',
+  failed: 'var(--danger)',
+  idle: 'var(--text-subtle)',
 };
 
 interface StatusDotProps {
@@ -24,7 +24,8 @@ export function StatusDot({ status, size = 8, fill = true, className = '' }: Sta
   return (
     <Circle
       size={size}
-      className={`${statusColors[status]} ${className}`}
+      className={className}
+      style={{ color: statusColors[status] }}
       fill={fill ? 'currentColor' : 'none'}
       strokeWidth={fill ? 0 : 2}
     />
