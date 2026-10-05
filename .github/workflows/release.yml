@@ -420,10 +420,10 @@ jobs:
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
-           tag_name: ${{ github.ref_name }}
-           name: v${{ needs.meta.outputs.version }}
-           prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
-           generate_release_notes: true
+          tag_name: ${{ github.ref_name }}
+          name: v${{ needs.meta.outputs.version }}
+          prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
+          generate_release_notes: true
           overwrite_files: true
           files: dist/**/*
           body: |
