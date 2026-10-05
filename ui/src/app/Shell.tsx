@@ -14,6 +14,7 @@ import { useAuth } from '../auth/AuthContext';
 import { readShowStatusBar, SETTINGS_CHANGE_EVENT } from '../settings/preferences';
 import { StatusBarContributionProvider, type StatusBarItem } from './statusBar';
 import { handleFormKeyDown } from './formKeyboard';
+import { cycleTopLevelRoute, isEditableShortcutTarget, isTopLevelShortcut, TOP_LEVEL_ROUTES } from './topLevelNavigation';
 import './shell.css';
 
 /* ---------- hash 路由（手写，不引第三方 router） ---------- */
@@ -152,6 +153,21 @@ function ShellFrame({ route, children }: ShellProps) {
     window.addEventListener('keydown', handleFormKeyDown, true);
     return () => window.removeEventListener('keydown', handleFormKeyDown, true);
   }, []);
+
+  useEffect(() => {
+    const availableRoutes = auth.isReadOnly
+      ? TOP_LEVEL_ROUTES.filter((item) => item === 'dashboard' || item === 'playground' || item === 'stats' || item === 'settings')
+      : TOP_LEVEL_ROUTES;
+    const onTopLevelShortcut = (event: KeyboardEvent) => {
+      // Keep browser tab switching in a normal web page; Tauri owns Ctrl+Tab.
+      if (!isTopLevelShortcut(event, isTauri()) || isEditableShortcutTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.location.hash = `#/${cycleTopLevelRoute(route, event.shiftKey, availableRoutes)}`;
+    };
+    window.addEventListener('keydown', onTopLevelShortcut);
+    return () => window.removeEventListener('keydown', onTopLevelShortcut);
+  }, [auth.isReadOnly, route]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-05，最新公开发行版候选为 [`v0.9.1`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.1)。本 patch 版本修复 Routing DAG 画布滚轮平移：普通滚轮上下移动，Shift+滚轮左右移动，并保留 Ctrl/⌘ 缩放、节点拖拽、键盘和触摸路径；同时继承 v0.9.0 的多模态 SystemOne 扩展兼容：local 模式默认保留未知字段，provider 可显式转发扩展，官方 TypeSafe 默认剥离并在响应元数据记录处理结果。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-05，最新公开发行版候选为 [`v0.9.2`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.2)。本 patch 版本在 v0.9.1 的多模态 SystemOne 扩展兼容和 Routing DAG 滚轮平移基础上，为 Tauri APP 增加 Ctrl+Tab 顺序切换与 Ctrl+Shift+Tab 逆序切换；浏览器环境、输入控件和只读权限边界保持清晰。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 
@@ -17,6 +17,8 @@
 - `src-tauri/Cargo.toml` 的 `[package].version`
 
 每次发布资料前还要核对 GitHub 仓库 About 简介仍采用“英文一句话 | 中文一句话介绍”格式，且与当前 [README](../README.md) 和已发布能力一致。当前实施与验收状态以[入口网关主计划](design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)为准；未来能力只以[路线图](../ROADMAP.md)为准。v0.5.0 在前一版本基础上整理高频 UI 图标、provider probe 并发、共享 health 状态、遥测后台调度、Routing/Playground/Settings/Statistics 体验、Android daemon library 与历史 debug APK，并加入 LAN opt-in、网关启停、统计分页/矩阵与 CLI 发布；后续正式 Android APK 使用固定签名密钥，由同一主 Release 流水线构建和校验证书。Awesome Jev 的可选徽章只在清单实际收录并发布条目后添加，开放 PR 不等于已收录。
+
+每个版本的发布说明还必须讲清楚“为什么做、用户怎么用、结果如何、与什么对照、边界在哪里”。版本对应的 `CHANGELOG.md` 段落必须包含 `用户叙事与对照场景`、至少一个 `起点`、`问题`、`操作`、`结果`、`对照`、`边界`，并在核验文档中给出至少一个从起点到结果的具体故事。Release workflow 的 `meta` job 会检查这些字段，缺少时阻止 tag 发布。
 
 Rust 与 npm 锁文件也要跟随版本/依赖变动更新：`rs/Cargo.lock`、`src-tauri/Cargo.lock`、`ui/package-lock.json`。Cargo 锁文件由普通 `cargo check` 更新；npm 锁文件可用 `npm install --package-lock-only --prefix ui` 更新。随后用下列锁文件严格模式确认没有漂移：
 
