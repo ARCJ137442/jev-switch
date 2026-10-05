@@ -3,6 +3,7 @@ import type { AdminProvider, ProbeResponse } from '../../api/admin';
 import { KeyForm } from './KeyForm';
 import { ProviderConfigForm, type ProviderConfigFields } from './ProviderConfigForm';
 import { ProbeButton } from './ProbeButton';
+import { ProviderLifecyclePanel } from './ProviderLifecyclePanel';
 import { useI18n, type MessageKey } from '../../i18n';
 import type { ProviderAvailability } from '../../pages/providerAvailability';
 
@@ -89,6 +90,7 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
   const [hist, setHist] = useState<ReadonlyArray<{ ms: number; ok: boolean }>>([]);
   const [showKeyForm, setShowKeyForm] = useState(false);
   const [showConfigForm, setShowConfigForm] = useState(false);
+  const [showLifecycle, setShowLifecycle] = useState(false);
   const [confirmClearKey, setConfirmClearKey] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -263,7 +265,10 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
           <button type="button" onClick={() => setConfirmClearKey(false)} style={btn}>{t('common.cancel')}</button>
         </div>}
         <div className="mt-3">
-          <button type="button" disabled={busy} onClick={() => { setShowConfigForm((value) => !value); setShowKeyForm(false); setConfirmClearKey(false); setConfirmDelete(false); }} style={btn}>{showConfigForm ? t('common.close') : t('providers.editConfig' as MessageKey)}</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={() => { setShowConfigForm((value) => !value); setShowKeyForm(false); setConfirmClearKey(false); setConfirmDelete(false); }} style={btn}>{showConfigForm ? t('common.close') : t('providers.editConfig' as MessageKey)}</button>
+            <button type="button" disabled={busy} onClick={() => { setShowLifecycle((value) => !value); setShowKeyForm(false); setConfirmClearKey(false); setConfirmDelete(false); }} style={{ ...btn, borderColor: showLifecycle ? 'var(--accent)' : 'var(--border)' }}>{showLifecycle ? t('common.close') : t('providers.lifecycleTitle' as MessageKey)}</button>
+          </div>
         </div>
       </div>
 
@@ -299,6 +304,8 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
       <div className="px-4 pb-2 text-xs" style={{ color: 'var(--text-subtle)' }}>{t('providers.probeOnly' as MessageKey)}</div>
 
       {showConfigForm && <ProviderConfigForm provider={provider} busy={busy} onSave={(fields) => onUpdate(provider, fields)} onCancel={() => setShowConfigForm(false)} />}
+
+      {showLifecycle && <ProviderLifecyclePanel provider={provider} busy={busy} />}
 
       {/* Replace key 内联表单（仅密文输入） */}
       {showKeyForm && (

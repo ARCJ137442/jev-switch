@@ -15,10 +15,16 @@
 | `GET` | `/v1/admin/routes` | 模型路由 DAG |
 | `PUT` | `/v1/admin/routes` | 写回 DAG（整表替换） |
 | `GET` | `/v1/admin/graph` | 统一 DAG 节点只读投影（Phase 1） |
+| `GET` | `/v1/admin/capabilities` | UI/Agent 配置能力只读发现 |
 | `POST` | `/v1/admin/providers/{id}/probe` | 健康探测 |
 | `POST` | `/v1/admin/providers/{id}/invoke` | 在 daemon 内用指定 provider 直接调用 Jev 请求（供演练场直连上游） |
 | `POST` | `/v1/admin/providers/{id}/models` | 从已保存 provider 的同源 `/v1/models` 获取模型 ID |
 | `POST` | `/v1/admin/providers/discover-models` | 为尚未保存的表单执行一次不落盘模型发现 |
+| `GET/PUT` | `/v1/admin/providers/{id}/lifecycle` | provider 级结构化生命周期配置读写（admin；命令不经过 shell） |
+| `POST` | `/v1/admin/providers/{id}/lifecycle/status` | 受 gate 保护的本地 provider 服务状态检查 |
+| `POST` | `/v1/admin/providers/{id}/lifecycle/start` | 受 gate 保护、等待 readiness 的结构化 argv 启动 |
+| `POST` | `/v1/admin/providers/{id}/lifecycle/stop` | 受 gate 保护的显式/托管进程停止 |
+| `GET/PUT` | `/v1/admin/host-commands` | 全局主机命令开关；开启由 UI 5 秒确认后提交 |
 | `GET` | `/v1/admin/telemetry` | 当前 daemon 会话的流量、请求和资源遥测（不落盘） |
 | `GET` | `/v1/admin/events` | Agent/控制台共享的可分页调用历史查询 |
 | `GET` | `/v1/events/my` | 调用方 Token 作用域内的同口径历史查询 |
@@ -114,7 +120,27 @@ Authorization: Bearer <admin-token>
 
 `kind` 当前接受 `vercel`、`laya`、`typesafe`、`openrouter`。TypeSafe 官方地址是完整 endpoint `https://api.typesafe.ai/v1/systemone`，Bearer key 由 daemon 添加；官方模型示例为 `jev-latest`。OpenRouter 使用完整 chat endpoint `https://openrouter.ai/api/v1/chat/completions`，daemon 将 Jev 请求转换为结构化 JSON chat 请求，再严格解析回 Jev answers；这不表示对外入口兼容一般 OpenAI/Anthropic Chat API。本地 TypeSafe kind 也必须提供相同 Jev `POST /v1/systemone` wire format。
 
+Provider 响应另含非敏感 `lifecycle` 摘要：`controllable`、`process_policy`、`mode`、`configured`、`service_state` 和有界超时。普通 provider 列表不返回命令正文或任何 API key；专用 lifecycle 资源在 admin 权限下返回结构化命令配置（仍不返回 key），供 UI/Agent 配置使用。`PUT` 中可选 `lifecycle` 字段省略时保留现有配置。
+
 写入后落盘 toml（0600）；响应回 **masked**，不回明文。`api_key` 省略表示保留已有密钥，空串表示清除；`api_key_env` 省略表示保留已有环境变量名。整表中移除已有 provider 时，会在同一运行时快照写入中移除其直接引用以及因此无法再解析到任何现存 provider 的别名分支，并热替换内存路由；历史调用记录保留。
+
+### `GET /v1/admin/capabilities`
+
+返回 UI/Agent 可发现的配置能力描述，包括稳定 key、资源、读写/执行 scope、风险、确认方式、审计标记和 schema 版本。当前只读发现已实现；类型化 configuration PATCH、scope enforcement 和生命周期执行仍按对应设计计划推进。
+
+### Provider lifecycle 0.10.x
+
+```text
+GET  /v1/admin/providers/{id}/lifecycle
+PUT  /v1/admin/providers/{id}/lifecycle
+POST /v1/admin/providers/{id}/lifecycle/status
+POST /v1/admin/providers/{id}/lifecycle/start
+POST /v1/admin/providers/{id}/lifecycle/stop
+GET  /v1/admin/host-commands
+PUT  /v1/admin/host-commands   {"enabled": boolean}
+```
+
+这些端点受现有 admin 会话门保护；桌面 LAN 开放时只有 loopback 走本机所有者直通，其他 LAN/cloud 请求需管理员会话或 admin token。执行同时要求全局 `allow_host_commands=true` 与 provider `lifecycle.controllable=true`，使用结构化 `program`/`args`，不经过 shell。`start` 只有 readiness 成功才返回 `running`；unknown、超时、命令失败均返回稳定的 `code/message/remediation` 错误。`startup_check` 与 `on_demand` 只在明确 `stopped` 或请求前置时触发，生命周期所有权和审计独立存储，不进入调用历史；细粒度 Agent scope、跨 daemon 进程组回收、UI 和平台验收仍在后续阶段。
 
 ### `GET/PUT /v1/admin/routes`
 

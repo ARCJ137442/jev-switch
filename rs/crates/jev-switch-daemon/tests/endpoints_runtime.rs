@@ -251,6 +251,7 @@ async fn endpoint_routes_are_persisted_replaced_and_disabled_at_runtime() {
         known_keys: Arc::new(RwLock::new(vec![])),
         auth: Arc::new(jev_switch_daemon::auth::AuthState::default()),
         listen: Arc::new(std::sync::OnceLock::new()),
+        lifecycle: jev_switch_daemon::lifecycle::LifecycleManager::default(),
         events: jev_switch_daemon::events::EventBus::new(16),
         service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         db_conn: db.clone(),
@@ -913,6 +914,7 @@ async fn endpoint_and_global_strategy_settings_drive_real_scheduler_paths() {
             providers: jev_switch_daemon::config::Config::load(&config_path)
                 .unwrap()
                 .providers,
+            allow_host_commands: false,
             nodes: vec![],
             routes: vec![],
             source_toml_fingerprint: "test".into(),
@@ -933,6 +935,7 @@ async fn endpoint_and_global_strategy_settings_drive_real_scheduler_paths() {
         known_keys: Arc::new(RwLock::new(vec![])),
         auth: Arc::new(jev_switch_daemon::auth::AuthState::default()),
         listen: Arc::new(std::sync::OnceLock::new()),
+        lifecycle: jev_switch_daemon::lifecycle::LifecycleManager::default(),
         events: jev_switch_daemon::events::EventBus::new(32),
         service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         db_conn: db,
@@ -1061,6 +1064,7 @@ async fn managed_tokens_enforce_roles_and_isolate_stats_and_events() {
             providers: jev_switch_daemon::config::Config::load(&config_path)
                 .unwrap()
                 .providers,
+            allow_host_commands: false,
             nodes: vec![],
             routes: vec![],
             source_toml_fingerprint: "test".into(),
@@ -1099,6 +1103,7 @@ async fn managed_tokens_enforce_roles_and_isolate_stats_and_events() {
         known_keys: Arc::new(RwLock::new(vec![])),
         auth: Arc::new(jev_switch_daemon::auth::AuthState::default()),
         listen: Arc::new(std::sync::OnceLock::new()),
+        lifecycle: jev_switch_daemon::lifecycle::LifecycleManager::default(),
         events: jev_switch_daemon::events::EventBus::new(16),
         service_endpoints: Arc::new(RwLock::new(HashMap::new())),
         db_conn: db.clone(),

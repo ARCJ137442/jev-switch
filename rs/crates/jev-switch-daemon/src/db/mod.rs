@@ -14,6 +14,8 @@ pub mod schema;
 pub struct RuntimeConfigSnapshot {
     pub providers: HashMap<String, ProviderConfig>,
     #[serde(default)]
+    pub allow_host_commands: bool,
+    #[serde(default)]
     pub nodes: Vec<jev_core::graph::GraphNode>,
     pub routes: Vec<RouteEdge>,
     pub source_toml_fingerprint: String,
@@ -51,7 +53,7 @@ pub fn config_fingerprint(path: &Path) -> String {
         .and_then(|value| {
             let table = value.as_table()?;
             let mut relevant = toml::Table::new();
-            for key in ["providers", "routes", "router"] {
+            for key in ["providers", "routes", "router", "allow_host_commands"] {
                 if let Some(value) = table.get(key) {
                     relevant.insert(key.into(), value.clone());
                 }
@@ -73,7 +75,10 @@ pub fn derive_runtime_nodes(
     providers: &HashMap<String, ProviderConfig>,
 ) -> Result<Vec<GraphNode>> {
     let endpoints = endpoints::load_all(conn)?;
-    let public_ids: Vec<&str> = endpoints.iter().map(|endpoint| endpoint.id.as_str()).collect();
+    let public_ids: Vec<&str> = endpoints
+        .iter()
+        .map(|endpoint| endpoint.id.as_str())
+        .collect();
     let mut nodes = jev_core::graph::GraphDocument::derive_nodes(
         routes,
         providers.keys().cloned(),
@@ -113,6 +118,7 @@ pub fn restore_or_seed_runtime_config(
         migrate_legacy_public_endpoints(conn, &snapshot.routes, &snapshot.providers)?;
         let drifted = snapshot.source_toml_fingerprint != current_fingerprint;
         config.providers = snapshot.providers;
+        config.allow_host_commands = snapshot.allow_host_commands;
         config.router.clear();
         config.routes = snapshot.routes;
         if drifted {
@@ -143,6 +149,7 @@ pub fn restore_or_seed_runtime_config(
     migrate_legacy_public_endpoints(conn, &routes, &config.providers)?;
     let snapshot = RuntimeConfigSnapshot {
         providers: config.providers.clone(),
+        allow_host_commands: config.allow_host_commands,
         nodes: derive_runtime_nodes(conn, &routes, &config.providers)?,
         routes,
         source_toml_fingerprint: current_fingerprint,
@@ -235,6 +242,7 @@ pub fn persist_runtime_config(
         conn,
         &RuntimeConfigSnapshot {
             providers: config.providers.clone(),
+            allow_host_commands: config.allow_host_commands,
             nodes: derive_runtime_nodes(conn, &config.route_edges(), &config.providers)?,
             routes: config.route_edges(),
             source_toml_fingerprint: source_fingerprint,
@@ -252,6 +260,7 @@ pub fn accept_toml_baseline(
         conn,
         &RuntimeConfigSnapshot {
             providers: config.providers.clone(),
+            allow_host_commands: config.allow_host_commands,
             nodes: derive_runtime_nodes(conn, &config.route_edges(), &config.providers)?,
             routes: config.route_edges(),
             source_toml_fingerprint: config_fingerprint(config_path),

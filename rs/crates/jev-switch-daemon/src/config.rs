@@ -43,6 +43,8 @@ pub enum ConfigError {
     InvalidMode(String),
     #[error("invalid bind '{0}' (expected ip:port)")]
     InvalidBind(String),
+    #[error("invalid lifecycle configuration for provider '{provider}': {reason}")]
+    InvalidLifecycle { provider: String, reason: String },
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -196,6 +198,129 @@ pub fn resolve_admin_password(file_password: Option<&str>, env: Option<&str>) ->
         .map(String::from)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub enum ProcessPolicy {
+    /// Keep a process started by Jev-Switch alive when the daemon exits.
+    Persistent,
+    /// Stop a process owned by this daemon during a normal daemon shutdown.
+    Session,
+    /// The external supervisor owns the process; only an explicit stop command may act on it.
+    External,
+}
+
+impl Default for ProcessPolicy {
+    fn default() -> Self {
+        Self::Persistent
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct ProviderLifecycleConfig {
+    /// Explicit opt-in for Jev-Switch lifecycle control. Existing providers remain manual.
+    #[serde(default)]
+    pub controllable: bool,
+    /// Whether a process started by this daemon survives daemon shutdown.
+    #[serde(default)]
+    pub process_policy: ProcessPolicy,
+    /// Structured executable path and argv are intentionally stored separately from shell text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_program: Option<String>,
+    #[serde(default)]
+    pub stop_args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_program: Option<String>,
+    #[serde(default)]
+    pub status_args: Vec<String>,
+    /// Explicit opt-in for exposing the provider key to the child environment.
+    #[serde(default)]
+    pub inject_api_key: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_dir: Option<String>,
+    #[serde(default = "default_lifecycle_timeout_ms")]
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
+    pub timeout_ms: u64,
+    #[serde(default = "default_lifecycle_readiness_timeout_ms")]
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
+    pub readiness_timeout_ms: u64,
+    /// manual, startup_check, or on_demand. Kept as a string until the execution contract is frozen.
+    #[serde(default = "default_lifecycle_mode")]
+    pub mode: String,
+}
+
+fn default_lifecycle_timeout_ms() -> u64 {
+    30_000
+}
+
+fn default_lifecycle_readiness_timeout_ms() -> u64 {
+    30_000
+}
+
+fn default_lifecycle_mode() -> String {
+    "manual".to_string()
+}
+
+impl Default for ProviderLifecycleConfig {
+    fn default() -> Self {
+        Self {
+            controllable: false,
+            process_policy: ProcessPolicy::default(),
+            program: None,
+            args: Vec::new(),
+            stop_program: None,
+            stop_args: Vec::new(),
+            status_program: None,
+            status_args: Vec::new(),
+            inject_api_key: false,
+            working_dir: None,
+            timeout_ms: default_lifecycle_timeout_ms(),
+            readiness_timeout_ms: default_lifecycle_readiness_timeout_ms(),
+            mode: default_lifecycle_mode(),
+        }
+    }
+}
+
+impl ProviderLifecycleConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        if !matches!(self.mode.as_str(), "manual" | "startup_check" | "on_demand") {
+            return Err("mode must be manual, startup_check, or on_demand".into());
+        }
+        if self.timeout_ms == 0 || self.timeout_ms > 120_000 {
+            return Err("timeout_ms must be between 1 and 120000".into());
+        }
+        if self.readiness_timeout_ms == 0 || self.readiness_timeout_ms > 300_000 {
+            return Err("readiness_timeout_ms must be between 1 and 300000".into());
+        }
+        if self
+            .working_dir
+            .as_deref()
+            .is_some_and(|path| !std::path::Path::new(path).is_absolute())
+        {
+            return Err("working_dir must be an absolute path".into());
+        }
+        if self.program.is_none()
+            && (!self.args.is_empty() || self.mode != "manual" || self.controllable)
+        {
+            return Err("program is required for a controllable or automatic lifecycle".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub kind: String,
@@ -222,6 +347,9 @@ pub struct ProviderConfig {
     /// for official TypeSafe, which currently accepts text/JSON state only.
     #[serde(default)]
     pub forward_extensions: bool,
+    /// Advanced local-service lifecycle control; disabled by default for compatibility and safety.
+    #[serde(default)]
+    pub lifecycle: ProviderLifecycleConfig,
 }
 
 fn default_enabled() -> bool {
@@ -266,6 +394,9 @@ pub struct Config {
     /// Whether the Jev call path accepts work. Android defaults to stopped; other targets default on.
     #[serde(default)]
     pub gateway_enabled: Option<bool>,
+    /// Global host-command gate for provider lifecycle and Agent execution; default off.
+    #[serde(default)]
+    pub allow_host_commands: bool,
 }
 
 impl Config {
@@ -348,6 +479,15 @@ impl Config {
         let raw = std::fs::read_to_string(path)?;
         let cfg: Config = toml::from_str(&raw)?;
         check_acyclic(&cfg.route_edges()).map_err(|e| ConfigError::Cycle(e.to_string()))?;
+        for (provider_id, provider) in &cfg.providers {
+            provider
+                .lifecycle
+                .validate()
+                .map_err(|reason| ConfigError::InvalidLifecycle {
+                    provider: provider_id.clone(),
+                    reason,
+                })?;
+        }
         Ok(cfg)
     }
 
@@ -694,6 +834,86 @@ enabled = false
         let cfg: Config = toml::from_str(toml).unwrap();
         let p = cfg.providers.get("vercel").unwrap();
         assert!(!p.enabled);
+    }
+
+    #[test]
+    fn lifecycle_defaults_preserve_manual_provider_behavior() {
+        let cfg: Config = toml::from_str(
+            r#"
+[providers.cloud]
+kind = "typesafe"
+base = "https://example.invalid/v1/systemone"
+enabled = true
+"#,
+        )
+        .unwrap();
+        let provider = cfg.providers.get("cloud").unwrap();
+        assert!(!cfg.allow_host_commands);
+        assert!(!provider.lifecycle.controllable);
+        assert_eq!(provider.lifecycle.mode, "manual");
+        assert!(matches!(
+            provider.lifecycle.process_policy,
+            ProcessPolicy::Persistent
+        ));
+        assert!(provider.lifecycle.program.is_none());
+    }
+
+    #[test]
+    fn lifecycle_schema_round_trips_structured_commands_without_shell_text() {
+        let cfg: Config = toml::from_str(
+            r#"
+allow_host_commands = true
+
+[providers.openjev]
+kind = "typesafe"
+base = "http://127.0.0.1:11436/v1/systemone"
+enabled = true
+
+[providers.openjev.lifecycle]
+controllable = true
+process_policy = "session"
+mode = "startup_check"
+program = "C:/Tools/OpenJev/openjev.exe"
+args = ["--port", "11436"]
+stop_program = "C:/Tools/OpenJev/stop.exe"
+status_program = "C:/Tools/OpenJev/status.exe"
+working_dir = "C:/Tools/OpenJev"
+"#,
+        )
+        .unwrap();
+        let provider = cfg.providers.get("openjev").unwrap();
+        assert!(cfg.allow_host_commands);
+        assert!(provider.lifecycle.controllable);
+        assert!(matches!(
+            provider.lifecycle.process_policy,
+            ProcessPolicy::Session
+        ));
+        assert_eq!(provider.lifecycle.mode, "startup_check");
+        assert_eq!(provider.lifecycle.args, vec!["--port", "11436"]);
+        assert_eq!(provider.lifecycle.timeout_ms, 30_000);
+        assert_eq!(provider.lifecycle.readiness_timeout_ms, 30_000);
+
+        let serialized = toml::to_string(&provider.lifecycle).unwrap();
+        assert!(serialized.contains("process_policy = \"session\""));
+        assert!(serialized.contains("args = [\"--port\", \"11436\"]"));
+    }
+
+    #[test]
+    fn lifecycle_validation_rejects_automatic_provider_without_program() {
+        let cfg: Config = toml::from_str(
+            r#"
+[providers.laya]
+kind = "laya"
+base = "http://127.0.0.1:18765/v1/systemone"
+
+[providers.laya.lifecycle]
+controllable = true
+mode = "on_demand"
+"#,
+        )
+        .unwrap();
+        let reason = cfg.providers["laya"].lifecycle.validate().unwrap_err();
+        assert!(reason.contains("program is required"));
     }
 
     /* ── A7：明文 api_key 优先 + env 兼容 ────────────────────────── */

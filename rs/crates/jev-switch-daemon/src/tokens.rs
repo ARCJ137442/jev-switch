@@ -193,7 +193,9 @@ pub enum HistoryView {
 }
 
 impl Default for HistoryView {
-    fn default() -> Self { Self::Entry }
+    fn default() -> Self {
+        Self::Entry
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -615,12 +617,16 @@ fn request_events(
     before: Option<u64>,
     limit: usize,
 ) -> rusqlite::Result<EventsPage> {
-    request_events_filtered(conn, token_id, &PageQuery {
-        since,
-        before,
-        limit,
-        ..PageQuery::default()
-    })
+    request_events_filtered(
+        conn,
+        token_id,
+        &PageQuery {
+            since,
+            before,
+            limit,
+            ..PageQuery::default()
+        },
+    )
 }
 
 const HISTORY_SCAN_BATCH: usize = 500;
@@ -632,7 +638,11 @@ fn request_events_filtered(
 ) -> rusqlite::Result<EventsPage> {
     let limit = query.limit.clamp(1, 500);
     let descending = query.before.is_some() || query.since == 0;
-    let mut cursor = if descending { query.before } else { Some(query.since) };
+    let mut cursor = if descending {
+        query.before
+    } else {
+        Some(query.since)
+    };
     let mut scanned_cursor = cursor;
     let mut events = Vec::new();
     let mut candidates_remaining = true;
@@ -640,18 +650,43 @@ fn request_events_filtered(
     while events.len() <= limit && candidates_remaining {
         let batch = read_history_batch(conn, token_id, query, cursor, descending)?;
         candidates_remaining = batch.len() >= HISTORY_SCAN_BATCH;
-        if batch.is_empty() { break; }
+        if batch.is_empty() {
+            break;
+        }
         cursor = batch.last().map(|event| event.id);
         scanned_cursor = cursor;
-        events.extend(batch.into_iter().filter(|event| matches_history_query(event, query)));
+        events.extend(
+            batch
+                .into_iter()
+                .filter(|event| matches_history_query(event, query)),
+        );
     }
 
     let has_more = events.len() > limit || candidates_remaining;
     events.truncate(limit);
-    if descending { events.reverse(); }
-    let next_since = events.last().map(|event| event.id).unwrap_or_else(|| if descending { query.since } else { scanned_cursor.unwrap_or(query.since) });
-    let next_before = events.first().map(|event| event.id).or_else(|| if descending { scanned_cursor } else { None });
-    Ok(EventsPage { events, next_since, next_before, has_more })
+    if descending {
+        events.reverse();
+    }
+    let next_since = events.last().map(|event| event.id).unwrap_or_else(|| {
+        if descending {
+            query.since
+        } else {
+            scanned_cursor.unwrap_or(query.since)
+        }
+    });
+    let next_before = events.first().map(|event| event.id).or_else(|| {
+        if descending {
+            scanned_cursor
+        } else {
+            None
+        }
+    });
+    Ok(EventsPage {
+        events,
+        next_since,
+        next_before,
+        has_more,
+    })
 }
 
 fn read_history_batch(
@@ -698,23 +733,37 @@ fn read_history_batch(
     );
     values.push(Value::Integer(HISTORY_SCAN_BATCH as i64));
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(rusqlite::params_from_iter(values.iter()), activity_event_from_row)?;
+    let rows = stmt.query_map(
+        rusqlite::params_from_iter(values.iter()),
+        activity_event_from_row,
+    )?;
     rows.collect()
 }
 
 fn matches_history_query(event: &crate::events::Event, query: &PageQuery) -> bool {
-    let Some(provider_id) = query.provider_id.as_deref() else { return true; };
-    let Ok(detail) = serde_json::from_str::<serde_json::Value>(&event.detail) else { return false; };
+    let Some(provider_id) = query.provider_id.as_deref() else {
+        return true;
+    };
+    let Ok(detail) = serde_json::from_str::<serde_json::Value>(&event.detail) else {
+        return false;
+    };
     if detail.get("provider").and_then(serde_json::Value::as_str) == Some(provider_id) {
         return true;
     }
-    detail.get("route_trace")
+    detail
+        .get("route_trace")
         .and_then(|trace| trace.get("attempts"))
         .and_then(serde_json::Value::as_array)
-        .map(|attempts| attempts.iter().any(|attempt| attempt.get("provider_id").and_then(serde_json::Value::as_str) == Some(provider_id)))
+        .map(|attempts| {
+            attempts.iter().any(|attempt| {
+                attempt
+                    .get("provider_id")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(provider_id)
+            })
+        })
         .unwrap_or(false)
 }
-
 
 fn activity_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<crate::events::Event> {
     let id: i64 = row.get(0)?;
@@ -776,7 +825,11 @@ fn sse_event(event: crate::events::Event) -> SseEvent {
 }
 
 fn admin_stream_start_cursor(requested: u64, latest: u64) -> u64 {
-    if requested == 0 { latest } else { requested }
+    if requested == 0 {
+        latest
+    } else {
+        requested
+    }
 }
 
 pub async fn events_stream_admin(
@@ -996,9 +1049,15 @@ mod tests {
         assert_eq!(page.events.len(), 1);
         assert_eq!(page.events[0].id, 1);
         let detail: serde_json::Value = serde_json::from_str(&page.events[0].detail).unwrap();
-        assert_eq!(detail["route_trace"]["attempts"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            detail["route_trace"]["attempts"].as_array().unwrap().len(),
+            2
+        );
 
-        let query = PageQuery { provider_id: Some("missing".into()), ..query };
+        let query = PageQuery {
+            provider_id: Some("missing".into()),
+            ..query
+        };
         let empty = request_events_filtered(&conn, None, &query).unwrap();
         assert!(empty.events.is_empty());
     }
@@ -1024,9 +1083,15 @@ mod tests {
         let history = request_events(&conn, None, 0, None, 50).unwrap();
         assert_eq!(history.events.len(), 1);
         let detail: serde_json::Value = serde_json::from_str(&history.events[0].detail).unwrap();
-        assert_eq!(detail["route_trace"]["attempts"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            detail["route_trace"]["attempts"].as_array().unwrap().len(),
+            2
+        );
         assert_eq!(detail["route_trace"]["attempts"][0]["upstream_status"], 401);
-        assert_eq!(detail["route_trace"]["attempts"][1]["provider_id"], "jev-typesafe");
+        assert_eq!(
+            detail["route_trace"]["attempts"][1]["provider_id"],
+            "jev-typesafe"
+        );
     }
 
     #[test]

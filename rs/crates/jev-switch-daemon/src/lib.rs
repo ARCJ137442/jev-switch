@@ -35,6 +35,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod events;
+pub mod lifecycle;
 pub mod listen;
 pub mod telemetry;
 pub mod tokens;
@@ -88,6 +89,8 @@ pub struct AppState {
     /// `OnceLock` = build_state 时 supervisor 尚未创建）。缺失时 mode 翻转
     /// `rebind.skipped="no listener"`、`PUT /listen` → 503（oneshot 测试路径）。
     pub listen: Arc<std::sync::OnceLock<listen::ListenHandle>>,
+    /// Local provider lifecycle manager; execution remains gated by config.
+    pub lifecycle: lifecycle::LifecycleManager,
     /// 事件总线（Dashboard 实时流水数据源）。
     pub events: events::EventBus,
     /// Phase 4.2: 服务入口配置（内存 + SQLite 持久化）
@@ -169,8 +172,10 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
     }
     let route_edges = config.route_edges();
     let telemetry = telemetry::Telemetry::new();
+    let lifecycle = lifecycle::LifecycleManager::default();
+    lifecycle.configure(&config);
     let mut registry = Registry::new(route_edges);
-    for upstream in build_runtime_upstreams(&config, &telemetry) {
+    for upstream in build_runtime_upstreams_with_lifecycle(&config, &telemetry, lifecycle.clone()) {
         tracing::info!(provider = %upstream.id(), "configured upstream ready");
         registry.register(upstream);
     }
@@ -234,19 +239,22 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         }
     };
 
+    let db_conn = Arc::new(Mutex::new(db_conn));
     let state = AppState {
         registry: Arc::new(registry),
         config_path,
         known_keys: Arc::new(RwLock::new(known_keys)),
         auth,
         listen: Arc::new(std::sync::OnceLock::new()),
+        lifecycle,
         events: events::EventBus::new(200),
         service_endpoints: Arc::new(RwLock::new(endpoints)),
-        db_conn: Arc::new(Mutex::new(db_conn)),
+        db_conn: db_conn.clone(),
         telemetry,
         gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(gateway_enabled)),
         strip_unknown_fields: Arc::new(std::sync::atomic::AtomicBool::new(strip_unknown_fields)),
     };
+    state.lifecycle.attach_database(db_conn);
     let events = state.events.clone();
     state
         .registry
@@ -374,17 +382,34 @@ fn is_loopback_http_endpoint(base: &str) -> bool {
 
 /// Add daemon-local timing at the composition boundary without changing the
 /// frozen `UpstreamAdapter` contract or leaking telemetry into core crates.
-pub(crate) fn build_runtime_upstreams(
+pub(crate) fn build_runtime_upstreams_with_lifecycle(
     config: &Config,
     telemetry: &telemetry::Telemetry,
+    lifecycle: lifecycle::LifecycleManager,
+) -> Vec<Box<dyn UpstreamAdapter>> {
+    build_upstreams_with_timing(config, telemetry, Some(lifecycle))
+}
+
+fn build_upstreams_with_timing(
+    config: &Config,
+    telemetry: &telemetry::Telemetry,
+    lifecycle: Option<lifecycle::LifecycleManager>,
 ) -> Vec<Box<dyn UpstreamAdapter>> {
     build_upstreams(config)
         .into_iter()
         .map(|adapter| {
-            Box::new(TimedUpstream {
+            let timed: Box<dyn UpstreamAdapter> = Box::new(TimedUpstream {
                 inner: adapter,
                 telemetry: telemetry.clone(),
-            }) as Box<dyn UpstreamAdapter>
+            });
+            if let Some(lifecycle) = &lifecycle {
+                Box::new(LifecycleGateUpstream {
+                    inner: timed,
+                    lifecycle: lifecycle.clone(),
+                }) as Box<dyn UpstreamAdapter>
+            } else {
+                timed
+            }
         })
         .collect()
 }
@@ -409,6 +434,49 @@ impl UpstreamAdapter for TimedUpstream {
         let result = self.inner.evaluate(req).await;
         self.telemetry.record_upstream_attempt(started.elapsed());
         result
+    }
+}
+
+/// Execute provider `on_demand` startup only when the router reaches this
+/// concrete candidate. A lifecycle failure is represented as a non-retryable
+/// 503 provider failure so the existing `on_error=next` policy can advance to
+/// the next route without changing the frozen core adapter contract.
+struct LifecycleGateUpstream {
+    inner: Box<dyn UpstreamAdapter>,
+    lifecycle: lifecycle::LifecycleManager,
+}
+
+#[async_trait::async_trait]
+impl UpstreamAdapter for LifecycleGateUpstream {
+    fn id(&self) -> &str {
+        self.inner.id()
+    }
+
+    fn capabilities(&self) -> jev_core::upstream::Capabilities {
+        self.inner.capabilities()
+    }
+
+    async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, jev_core::upstream::JevError> {
+        if let Some(config) = self.lifecycle.config_snapshot() {
+            if let Some(provider) = config.providers.get(self.id()) {
+                if provider.lifecycle.mode == "on_demand" && provider.lifecycle.controllable {
+                    let status = self.lifecycle.status(self.id(), provider, &config).await;
+                    if status.state != "running" {
+                        if let Err(reason) =
+                            self.lifecycle.start(self.id(), provider, &config).await
+                        {
+                            return Err(jev_core::upstream::JevError::Upstream {
+                                upstream_id: self.id().to_string(),
+                                status: 503,
+                                body: format!("provider lifecycle failed: {reason}"),
+                                retryable: false,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        self.inner.evaluate(req).await
     }
 }
 
@@ -492,6 +560,11 @@ pub fn build_app(state: AppState) -> Router {
             get(admin::get_routes).put(admin::put_routes),
         )
         .route("/v1/admin/graph", get(admin::get_graph))
+        .route("/v1/admin/capabilities", get(admin::get_capabilities))
+        .route(
+            "/v1/admin/host-commands",
+            get(admin::get_host_commands).put(admin::put_host_commands),
+        )
         .route(
             "/v1/admin/config/storage",
             get(admin::runtime_config_status),
@@ -528,6 +601,22 @@ pub fn build_app(state: AppState) -> Router {
         .route(
             "/v1/admin/providers/:id/models",
             post(admin::discover_provider_models),
+        )
+        .route(
+            "/v1/admin/providers/:id/lifecycle/status",
+            post(admin::provider_lifecycle_status),
+        )
+        .route(
+            "/v1/admin/providers/:id/lifecycle",
+            get(admin::get_provider_lifecycle).put(admin::put_provider_lifecycle),
+        )
+        .route(
+            "/v1/admin/providers/:id/lifecycle/start",
+            post(admin::provider_lifecycle_start),
+        )
+        .route(
+            "/v1/admin/providers/:id/lifecycle/stop",
+            post(admin::provider_lifecycle_stop),
         )
         .route(
             "/v1/admin/providers/discover-models",
@@ -772,6 +861,7 @@ async fn systemone_handler(
             &keys,
         );
     }
+
     let started = std::time::Instant::now();
     state.telemetry.begin_request(body.len() as u64);
     let strategy = admin::endpoints::routing_strategy(&state, &endpoint_id);
@@ -1153,6 +1243,7 @@ mod tests {
                     api_key_env: None,
                     enabled: true,
                     forward_extensions: false,
+                    lifecycle: Default::default(),
                 },
             );
         }
@@ -1178,6 +1269,7 @@ mod tests {
                 api_key_env: None,
                 enabled: true,
                 forward_extensions: false,
+                lifecycle: Default::default(),
             },
         );
 

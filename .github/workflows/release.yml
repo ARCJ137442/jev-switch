@@ -45,6 +45,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       publish: ${{ steps.v.outputs.publish }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
 
@@ -102,6 +103,11 @@ jobs:
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          if [ "$VERSION" = "0.10.0" ]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ── 2. 测试门禁（复用 ci.yml，不重复实现） ─────────────────────────
   gate:
@@ -414,15 +420,16 @@ jobs:
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: v${{ needs.meta.outputs.version }}
-          generate_release_notes: true
+           tag_name: ${{ github.ref_name }}
+           name: v${{ needs.meta.outputs.version }}
+           prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
+           generate_release_notes: true
           overwrite_files: true
           files: dist/**/*
           body: |
             ## 版本说明
 
-            本次为 `${{ needs.meta.outputs.version }}` 版本。Android APK 继续使用同一稳定签名；请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
+             本次为 `${{ needs.meta.outputs.version }}` 版本。该版本按当前版本策略标记为预发布候选；Android APK 继续使用同一稳定签名，请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
 
             ## 本版内容
 

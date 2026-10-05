@@ -3,6 +3,11 @@ import { t as tI18n } from '../i18n/core';
 import { PROVIDERS_FIXTURE } from '../fixtures/providers.mock';
 import { ROUTES_FIXTURE } from '../fixtures/routes.mock';
 import type { ProviderView } from '../generated/ProviderView';
+import type { ProviderLifecycleView } from '../generated/ProviderLifecycleView';
+import type { ProviderLifecycleConfig } from '../generated/ProviderLifecycleConfig';
+import type { ProviderLifecycleDoc } from '../generated/ProviderLifecycleDoc';
+import type { LifecycleStatus } from '../generated/LifecycleStatus';
+import type { HostCommandControlResponse as GeneratedHostCommandControlResponse } from '../generated/HostCommandControlResponse';
 import type { ProviderInput } from '../generated/ProviderInput';
 import type { ProbeResult } from '../generated/ProbeResult';
 import type { ProviderModelsResult } from '../generated/ProviderModelsResult';
@@ -58,6 +63,8 @@ export type ProviderModelsResponse = ProviderModelsResult;
 export type RuntimeTelemetry = TelemetrySnapshot;
 export type LanAccessResponse = GeneratedLanAccessResponse;
 export type GatewayControlResponse = GeneratedGatewayControlResponse;
+
+export type HostCommandControlResponse = GeneratedHostCommandControlResponse;
 
 /* ---------- 通用请求（#43 cloud：admin 会话附带 + 401/403 全局上报） ---------- */
 
@@ -180,6 +187,8 @@ function cloneProviders(list: AdminProvider[]): AdminProvider[] {
 
 /** mock 内存态（PUT 整表替换语义，写入即刷新） */
 let mockProviders: AdminProvider[] = cloneProviders(PROVIDERS_FIXTURE.providers);
+let mockHostCommandsEnabled = false;
+const mockLifecycleConfig = new Map<string, ProviderLifecycleConfig>();
 
 /** 契约 04 redact 形态：前缀 3 字符 + **** + 末 4 */
 function maskKey(key: string): string {
@@ -188,6 +197,16 @@ function maskKey(key: string): string {
 }
 
 const MOCK_PROBE_LATENCY: Record<string, number> = { vercel: 42, laya: 18 };
+
+const manualLifecycle = (): ProviderLifecycleView => ({
+  controllable: false,
+  process_policy: 'persistent',
+  mode: 'manual',
+  configured: false,
+  service_state: 'unknown',
+  timeout_ms: 30000,
+  readiness_timeout_ms: 30000,
+});
 
 /**
  * 仅供 dev 验证冲突横幅（GET 深比较驱动）：
@@ -207,6 +226,7 @@ export function mutateMockExternally(): void {
       forward_extensions: false,
       api_key_masked: null,
       api_key_set: false,
+      lifecycle: manualLifecycle(),
     },
   ];
 }
@@ -237,6 +257,7 @@ function mockPut(list: AdminProviderWrite[]): ProvidersResponse {
       name: w.name ?? prev?.name,
       account: w.account ?? prev?.account,
       models: [...(w.models ?? prev?.models ?? [])],
+      lifecycle: prev?.lifecycle ?? manualLifecycle(),
       api_key_masked: clearKey ? '' : hasKey ? maskKey(w.api_key as string) : (prev?.api_key_masked ?? null),
       api_key_set: clearKey ? false : hasKey ? true : (prev?.api_key_set ?? false),
     };
@@ -278,6 +299,133 @@ export async function probeProvider(id: string): Promise<ProbeResponse> {
   }
   const encoded = encodeURIComponent(id);
   return request<ProbeResponse>(`/v1/admin/providers/${encoded}/probe`, { method: 'POST' });
+}
+
+export async function getProviderLifecycle(id: string): Promise<ProviderLifecycleDoc> {
+  if (adminMode === 'mock') {
+    await delay(80);
+    const provider = mockProviders.find((item) => item.id === id);
+    if (!provider) throw new Error('provider not found');
+    const command = mockLifecycleConfig.get(id) ?? defaultLifecycleConfig();
+    return {
+      provider_id: id,
+      command: { ...command },
+      config: provider.lifecycle,
+      status: mockLifecycleStatus(id, command),
+    };
+  }
+  return request<ProviderLifecycleDoc>(`/v1/admin/providers/${encodeURIComponent(id)}/lifecycle`);
+}
+
+export async function putProviderLifecycle(id: string, command: ProviderLifecycleConfig): Promise<ProviderLifecycleDoc> {
+  if (adminMode === 'mock') {
+    await delay(120);
+    const provider = mockProviders.find((item) => item.id === id);
+    if (!provider) throw new Error('provider not found');
+    mockLifecycleConfig.set(id, { ...command });
+    provider.lifecycle = {
+      controllable: command.controllable,
+      process_policy: command.process_policy,
+      mode: command.mode,
+      configured: Boolean(command.program || command.stop_program || command.status_program),
+      service_state: mockLifecycleStatus(id, command).state,
+      timeout_ms: command.timeout_ms,
+      readiness_timeout_ms: command.readiness_timeout_ms,
+    };
+    return {
+      provider_id: id,
+      command: { ...command },
+      config: provider.lifecycle,
+      status: mockLifecycleStatus(id, command),
+    };
+  }
+  return request<ProviderLifecycleDoc>(`/v1/admin/providers/${encodeURIComponent(id)}/lifecycle`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(command),
+  });
+}
+
+export async function providerLifecycleStatus(id: string): Promise<LifecycleStatus> {
+  if (adminMode === 'mock') {
+    await delay(80);
+    const command = mockLifecycleConfig.get(id) ?? defaultLifecycleConfig();
+    return mockLifecycleStatus(id, command);
+  }
+  return request<LifecycleStatus>(`/v1/admin/providers/${encodeURIComponent(id)}/lifecycle/status`, { method: 'POST' });
+}
+
+export async function startProviderService(id: string): Promise<LifecycleStatus> {
+  if (adminMode === 'mock') {
+    await delay(350);
+    const provider = mockProviders.find((item) => item.id === id);
+    if (provider?.lifecycle.controllable && mockHostCommandsEnabled) {
+      provider.lifecycle.service_state = 'running';
+      return { ...mockLifecycleStatus(id, mockLifecycleConfig.get(id) ?? defaultLifecycleConfig()), state: 'running', readiness: 'ready', message: null };
+    }
+    return mockLifecycleStatus(id, mockLifecycleConfig.get(id) ?? defaultLifecycleConfig());
+  }
+  return request<LifecycleStatus>(`/v1/admin/providers/${encodeURIComponent(id)}/lifecycle/start`, { method: 'POST' });
+}
+
+export async function stopProviderService(id: string): Promise<LifecycleStatus> {
+  if (adminMode === 'mock') {
+    await delay(250);
+    const provider = mockProviders.find((item) => item.id === id);
+    if (provider?.lifecycle.controllable && mockHostCommandsEnabled) {
+      provider.lifecycle.service_state = 'stopped';
+      return { ...mockLifecycleStatus(id, mockLifecycleConfig.get(id) ?? defaultLifecycleConfig()), state: 'stopped', readiness: 'not_ready', message: null };
+    }
+    return mockLifecycleStatus(id, mockLifecycleConfig.get(id) ?? defaultLifecycleConfig());
+  }
+  return request<LifecycleStatus>(`/v1/admin/providers/${encodeURIComponent(id)}/lifecycle/stop`, { method: 'POST' });
+}
+
+export async function getHostCommands(): Promise<HostCommandControlResponse> {
+  if (adminMode === 'mock') return { enabled: mockHostCommandsEnabled, requires_confirmation: true };
+  return request<HostCommandControlResponse>('/v1/admin/host-commands');
+}
+
+export async function putHostCommands(enabled: boolean): Promise<HostCommandControlResponse> {
+  if (adminMode === 'mock') {
+    await delay(100);
+    mockHostCommandsEnabled = enabled;
+    return { enabled, requires_confirmation: true };
+  }
+  return request<HostCommandControlResponse>('/v1/admin/host-commands', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+function defaultLifecycleConfig(): ProviderLifecycleConfig {
+  return {
+    controllable: false,
+    process_policy: 'persistent',
+    args: [],
+    stop_args: [],
+    status_args: [],
+    inject_api_key: false,
+    timeout_ms: 30000,
+    readiness_timeout_ms: 30000,
+    mode: 'manual',
+  };
+}
+
+function mockLifecycleStatus(id: string, command: ProviderLifecycleConfig): LifecycleStatus {
+  const state = !mockHostCommandsEnabled ? 'disabled' : !command.controllable ? 'uncontrolled' : 'unknown';
+  return {
+    provider_id: id,
+    state,
+    readiness: 'unknown',
+    controllable: command.controllable && mockHostCommandsEnabled,
+    configured: Boolean(command.program || command.stop_program || command.status_program),
+    managed_by_jev: false,
+    pid: null,
+    execution_id: null,
+    message: 'browser_mock_does_not_execute_host_commands',
+  };
 }
 
 /** Fetch a provider-owned model catalog through the daemon; the browser never contacts the upstream directly. */

@@ -101,6 +101,50 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
             "../../../../migrations/007_persist_request_trace.sql"
         ))?;
     }
+    let current_version: i32 = conn.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM migrations",
+        [],
+        |row| row.get(0),
+    )?;
+    if current_version < 8 {
+        // Lifecycle ownership is intentionally separate from call history and
+        // route activity. Only execution identity hashes and stable outcome
+        // codes are persisted; command bodies and secrets never are.
+        conn.execute_batch(include_str!(
+            "../../../../migrations/008_provider_lifecycle.sql"
+        ))?;
+    } else {
+        // Keep databases created by interrupted migrations repairable without
+        // depending solely on the numeric marker.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS provider_lifecycle_processes (
+                provider_id TEXT PRIMARY KEY,
+                execution_id TEXT NOT NULL,
+                pid INTEGER,
+                program TEXT NOT NULL,
+                command_hash TEXT NOT NULL,
+                process_policy TEXT NOT NULL,
+                started_at INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS provider_lifecycle_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider_id TEXT NOT NULL,
+                execution_id TEXT,
+                action TEXT NOT NULL,
+                state TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                started_at INTEGER NOT NULL,
+                finished_at INTEGER NOT NULL,
+                pid INTEGER,
+                command_hash TEXT,
+                message TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_provider_lifecycle_events_provider
+                ON provider_lifecycle_events(provider_id, finished_at);",
+        )?;
+    }
     Ok(())
 }
 

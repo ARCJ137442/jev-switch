@@ -1,17 +1,17 @@
 # Jev-Switch 文档索引
 
-> **TL;DR：**当前公开版候选为 `v0.9.3`，在 v0.9.2 的 Tauri 顶级页面快捷切换基础上接入 Windows Authenticode 签名门禁、时间戳和签名清单。正式 Release 附 Windows Standalone/Portable、CLI、Docker 与稳定签名 Android APK。真实多模态模型推理仍按独立实验记录，不把协议兼容误写成模型质量保证。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
+> **TL;DR：**当前公开版候选为 `v0.10.0` 预发布版，加入 provider 级受控模型生命周期、readiness、按需启动、独立审计和主机命令安全开关。正式 Release 资产仍按 Windows Standalone/Portable、CLI、Docker 与稳定签名 Android APK 流程构建。真实本地服务、平台进程组和 Agent scope 仍需人工验收。先读入口网关实施计划；未排期的未来方向见 [ROADMAP.md](../ROADMAP.md)。
 >
-> **本轮索引修订：**OpenAI Codex 协助整理，2026-10-03。
+> **本轮索引修订：**OpenAI Codex 协助整理，2026-10-05。
 
-> **2026-10-03 adapter 状态：**当前源码 `v0.7.2` 仍内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter 上游；官方 TypeSafe `/v1/systemone` 和 OpenRouter `/api/v1/chat/completions` 均已完成协议/离线核对。OpenRouter 仍无 live key 证据，按对应核验边界保留。
+> **2026-10-05 adapter 状态：**当前源码 `v0.10.0` 仍内置 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter 上游；本次新增 provider lifecycle，不改变上游 adapter 协议边界。真实本地服务生命周期仍按预发布人工验收边界保留。
 >
 > **TypeSafe 实测：**2026-09-29 使用隔离 daemon 和用户本地密钥文件完成一笔官方 API 调用，HTTP 200；未记录密钥。范围与边界见[官方 API 实测](verification/typesafe-official-live-2026-09-29.md)。
 >
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **历史发布快照（截至 2026-09-27）**：当时最新正式版为 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，包含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。对应 Release gate 的 Rust、UI、Tauri 与版本检查通过；验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。用户提供的 Tauri 截图整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；这些材料不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。当前版本与能力以本文后续的 2026-09-30 产品基线、[发布手册](RELEASE.md)及对应核验记录为准。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段（2026-10-05）**：公开版候选为 v0.9.3；除 v0.8.0 的便携/Standalone、通用 UI/后端、LAN opt-in、网关启停、provider attempt 双视图、JSON 设置备份、真实路由 activity/辉光、演练场移动端多选与 Android 原生文件/剪贴板桥外，v0.9.x 还支持多模态扩展字段、Routing DAG 滚轮平移、Tauri APP 顶级页面循环快捷键和 Windows Authenticode 签名门禁。Graph API 写入、节点页面、自由拖拽和专用页面布局仍未实现；真实多模态模型运行与校准另行验收。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
+> **当前产品基线与维护阶段（2026-10-05）**：公开候选为 v0.10.0 预发布版；v0.10.x 增加 provider 受控生命周期、readiness、按候选 on-demand、独立审计、主机命令开关和 Provider 高级 UI。真实本地服务、平台进程组、Agent scope、Android/cloud 权限仍需人工验收；模型画像/属性路由排期 0.11.0。Graph API 写入、节点页面、自由拖拽和专用页面布局仍未实现；真实多模态模型运行与校准另行验收。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
 
 ## 核心定位（一句话）
 
@@ -23,12 +23,16 @@
 |---|---|---|
 | **[../ROADMAP.md](../ROADMAP.md)** | **未来功能方向、优先级和可验收边界** | OpenRouter 已发布；其他方向按表内状态推进 |
 | [design/ROADMAP-EXECUTION-PLANS.md](design/ROADMAP-EXECUTION-PLANS.md) | 基于当前源码的近期路线图执行拆解、文件入口、ICE 和验收门槛 | 计划草案；不代表 Release 承诺 |
+| [design/LOCAL-MODEL-LIFECYCLE-PLAN.md](design/LOCAL-MODEL-LIFECYCLE-PLAN.md) | 本地模型 provider 的受控启动/停止/状态检查、敏感环境变量和进程所有权设计 | 0.10.x 后端 readiness/候选门控/审计、主机开关和 Provider UI 已实现；scope、真实服务、进程组和平台验收未完成，不属于当前 Release 能力 |
+| [design/CONFIG-CAPABILITY-REGISTRY-PLAN.md](design/CONFIG-CAPABILITY-REGISTRY-PLAN.md) | 人类配置入口与 Agent API 的统一 capability、权限、版本迁移和审计契约 | capability discovery、lifecycle 领域读写/执行和独立审计已实现；通用 PATCH/细粒度 scope 未实现 |
+| [design/MODEL-PROFILES-ATTRIBUTE-ROUTING-PLAN.md](design/MODEL-PROFILES-ATTRIBUTE-ROUTING-PLAN.md) | 模型画像、自动/人工证据、隐私/模态硬过滤、软排序与入口需求声明 | 已排到 0.11.0；需求已归档，尚未实现 |
 | [verification/typesafe-systemone-adapter-2026-09-28.md](verification/typesafe-systemone-adapter-2026-09-28.md) | TypeSafe 官方与本地-compatible SystemOne adapter 的当前实现、wiremock 证据和边界 | 源码/离线契约验证；不代表已发布或已做真实官方推理 |
 | [verification/multimodal-systemone-compatibility-2026-10-05.md](verification/multimodal-systemone-compatibility-2026-10-05.md) | 多模态 SystemOne 扩展字段、local loopback 转发、官方 TypeSafe 剥离与可追溯元数据 | 已实现协议/adapter 边界；真实多模态服务仍待本机 smoke |
 | [verification/v0.9.0-release-candidate-2026-10-05.md](verification/v0.9.0-release-candidate-2026-10-05.md) | v0.9.0 多模态兼容发布候选、版本一致性与自动门禁 | 发布候选；远端 CI/Release 以 tag workflow 为准 |
 | [verification/v0.9.1-release-candidate-2026-10-05.md](verification/v0.9.1-release-candidate-2026-10-05.md) | v0.9.1 Routing DAG 滚轮平移修复与发布门禁 | 发布候选；远端 CI/Release 以 tag workflow 为准 |
 | [verification/v0.9.2-release-candidate-2026-10-05.md](verification/v0.9.2-release-candidate-2026-10-05.md) | v0.9.2 Tauri 顶级页面 Ctrl+Tab 循环切换与发布门禁 | 发布候选；远端 CI/Release 以 tag workflow 为准 |
 | [verification/v0.9.3-release-candidate-2026-10-05.md](verification/v0.9.3-release-candidate-2026-10-05.md) | v0.9.3 Windows Authenticode 签名门禁、签名顺序与签名清单 | 已随 tag 触发；远端 CI/Release 结果待确认 |
+| [verification/v0.10.0-release-candidate-2026-10-05.md](verification/v0.10.0-release-candidate-2026-10-05.md) | v0.10.0 provider 生命周期、主机命令开关和预发布边界 | 预发布候选；自动化通过，人工真实服务验收待完成 |
 | [verification/typesafe-official-live-2026-09-29.md](verification/typesafe-official-live-2026-09-29.md) | TypeSafe 官方 key 的隔离单次实测，Noul/Choice/Score 与 usage | 当前源码直连 provider；不代表 Standalone/公开入口 E2E |
 | [verification/standalone-lmstudio-e2e-2026-09-29.md](verification/standalone-lmstudio-e2e-2026-09-29.md) | 较早 Standalone 候选的冷启动、缓存、五页 WebView 与 LM Studio 本地 SystemOne UI 路由 trace | 该记录只属于文档顶部候选哈希；真实系统托盘点击和第二次双击聚焦仍待人工确认 |
 | [verification/typesafe-model-discovery-2026-09-29.md](verification/typesafe-model-discovery-2026-09-29.md) | TypeSafe `/v1/models` 实测与 daemon/UI 自动模型发现 | 管理时目录/鉴权检查；不替代推理调用 |

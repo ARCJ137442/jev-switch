@@ -231,6 +231,27 @@
 
 **验收：**删除仍被路由直接引用的 provider 后，配置、可执行路由和页面状态一致；保留的别名分支仍能到达其他 provider。各表单可用 `Ctrl/Cmd+Enter` 提交，单行输入可继续用 `Enter` 或 `Tab` 导航，多行内容不会被截断或误提交。
 
+### 本地模型 provider 快速启停（0.10.x 后端主线，UI/平台验收未完成）
+
+- [x] 将需求收敛为独立的[本地模型提供商生命周期计划](LOCAL-MODEL-LIFECYCLE-PLAN.md)：provider `enabled`、`controllable`、实际服务状态和 `process_policy` 四维分离，支持结构化启动/停止/状态命令、启动策略、readiness 检查和 toast 反馈；云端 provider 默认属于不可控服务。
+- [x] 规定命令只允许参数化 argv，不执行任意 shell；API 地址、逗号/JSON 模型列表和经确认的 API key 以临时 allowlist 环境变量注入，日志/历史/调试输出全部脱敏。
+- [x] 规定全局 `allow_host_commands` 默认关闭，开启时使用 5 秒警告；LAN/cloud 仅管理员可配置/执行，Android local 可在 APP 内明确放行，停止只处理本应用拥有的 PID/进程组或显式停止命令，不按端口/进程名误杀用户服务。
+- [x] 新增[配置能力注册表与 Agent API 计划](CONFIG-CAPABILITY-REGISTRY-PLAN.md)：人类配置入口共享 Agent discovery、类型校验、权限 scope、审计、错误码和 schema migration，lifecycle 执行要求独立的 `provider:lifecycle:execute`/`host_commands:enable` 权限。
+- [x] `0.10.x` 已将 lifecycle schema、Provider 脱敏摘要、`GET /v1/admin/capabilities`、独立 lifecycle 读写/执行 API、结构化 argv、readiness、`startup_check`/`on_demand`、provider 互斥、持久所有权快照、独立审计表、主机命令开关和 Provider 高级 UI 加入 daemon/UI；已通过 workspace/ts-rs/UI 门禁，scope 写入、完整进程组策略、真实 Laya/StartLux/OpenJev 与平台验收尚未完成。
+
+### 2026-10-05 jev-decision-lab 模型画像与属性路由输入（排期 0.11.0，尚未实现）
+
+- [x] 已归档[模型画像与属性路由计划](MODEL-PROFILES-ATTRIBUTE-ROUTING-PLAN.md)：Capabilities 与 profile 分层；静态/动态、automatic/manual 两个维度正交，人工覆盖保存来源、时间和理由。
+- [x] 已冻结候选处理方向：required modalities、privacy/locality、health/availability、memory budget 和用户禁止远程属于硬过滤；quality、latency、cost、loaded 和偏好属于过滤后的软排序。
+- [x] 已冻结空候选边界：返回可解释 `no_eligible_provider` 或入口明确允许的 fallback，不偷偷放宽隐私/模态约束；保留 extensions/media 和 route trace。
+- [x] 已冻结 System0/Jev/人工边界：System0 负责资源采集、权限和可撤销副作用；Jev 只做有限候选选择，不递归决定自己的路由，不自动杀进程、删除或发消息。
+- [ ] 实现 profile evidence、入口 requirements、硬过滤纯函数、软排序、trace 解释和 Agent capability 映射。
+- [x] 0.10.x 生命周期 schema、SQLite 迁移、daemon API、进程所有权快照和 readiness 核心已落地；剩余进程组/UI/Agent scope 工作归入生命周期计划。
+- [ ] 实现 Providers 高级配置面板、敏感参数模态警告、状态徽标、检查/启动/停止按钮和中英文文案。
+- [ ] 补齐 Windows StartLux/OpenJev/Laya、Unix process group、端口冲突、超时、旧进程和 Android/cloud 禁用矩阵，并进行人工验收。
+
+**当前边界：**计划落盘不等于完整产品能力。没有 lifecycle 配置的 provider 继续按现有纯人工方式管理；0.10.x 后端能力尚未进入 `v0.9.3` Release，模型画像/属性路由不进入 0.10.x。
+
 ### 2026-10-02 核心路由策略：多跳 failover 与双视角记录
 
 - [x] 修复 `on_error=next` 将 non-retryable HTTP 错误直接返回的问题。当前语义是 retryable 错误可先重试同一 provider；边为 `next` 时，同候选重试耗尽或遇到非 retryable 上游错误后继续下一个候选；边为 `fail` 时仍首错返回。

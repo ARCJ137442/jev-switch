@@ -15,7 +15,11 @@
 
 1. **已进入 Release**：Standalone、系统主题、命令面板 Phase 1、路由动画 Phase 1、GitHub Pages、OpenRouter 上游 adapter、CLI Phase 1。
 2. **当前工作树并行主线**：DAG GraphDocument/策略历史闭环，以及 Dashboard 第一阶段组件布局编辑器。
-3. **后续收口/独立方向**：Windows 证据与性能基线、Android 跨设备回归、服务发现、数据目录迁移、TUI、全链路性能 p50/p95/p99 和路由顾问。
+3. **后续收口/独立方向**：Windows 证据与性能基线、Android 跨设备回归、服务发现、数据目录迁移、本地模型提供商生命周期、模型画像与属性路由、TUI、全链路性能 p50/p95/p99 和路由顾问。
+
+本地模型提供商生命周期的详细设计已落盘到[本地模型提供商生命周期计划](LOCAL-MODEL-LIFECYCLE-PLAN.md)，通用 Agent 配置面见[配置能力注册表计划](CONFIG-CAPABILITY-REGISTRY-PLAN.md)：0.10.x 已完成结构化 argv、readiness、startup_check、按候选 on_demand 门控、provider 互斥、所有权快照、独立审计、主机命令开关和 Provider 高级 UI；scope 写入、跨 daemon 进程组回收、真实服务和平台验收仍待实现，尚未进入正式 Release。
+
+模型画像与属性路由的需求已归档到[模型画像与属性路由计划](MODEL-PROFILES-ATTRIBUTE-ROUTING-PLAN.md)：它与 Capabilities、lifecycle、DAG/failover 分层，先做静态/动态 × 自动/人工证据和确定性硬过滤，不自动放宽隐私/模态约束。
 
 Android 方向已从“可行性调研”进入“完整网关应用实现”：先在 GitHub Actions 准备 Android 工具链、编译 daemon library 并产出可下载 APK artifact，再安排模拟器/真机启停与生命周期验收。没有本机 Android SDK 不阻塞 Phase A；没有真机证据不扩大为稳定 Android 支持。远程/局域网控制台只能作为可选模式，不能替代本机内核。
 

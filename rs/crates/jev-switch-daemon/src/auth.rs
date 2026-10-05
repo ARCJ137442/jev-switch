@@ -342,7 +342,30 @@ pub async fn require_admin_session(
         if !peer_allowed_in_local_mode(&state, &req) {
             return forbidden(&state, "local mode: loopback only");
         }
-        return next.run(req).await; // 现状回归：loopback 零校验
+        // LAN opt-in exposes the control plane to private peers, but it does
+        // not make every LAN device a local owner. Loopback keeps the desktop
+        // convenience path; non-loopback peers need an admin session or an
+        // admin managed token before lifecycle/configuration actions run.
+        let loopback = req
+            .extensions()
+            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+            .map_or(true, |axum::extract::ConnectInfo(addr)| {
+                addr.ip().is_loopback()
+            });
+        if loopback {
+            return next.run(req).await;
+        }
+        let caller = call_identity(&state, &req);
+        let caller_is_admin = caller
+            .as_ref()
+            .is_some_and(|identity| identity.role == crate::tokens::TokenRole::Admin);
+        if has_valid_session(&state, bearer_token(req.headers())) || caller_is_admin {
+            if let Some(identity) = caller {
+                req.extensions_mut().insert(identity);
+            }
+            return next.run(req).await;
+        }
+        return unauthorized(&state, "admin session required for LAN control");
     }
     // 锁作用域在 has_valid_session 内完成 prune + 查验 —— `RwLockWriteGuard` 是
     // !Send，绝不跨越 `next.run(...).await`（否则整个 middleware future 非 Send）。

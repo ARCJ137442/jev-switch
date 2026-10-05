@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.10.0] - 2026-10-05
+
+### Added
+
+- Provider 级受控模型生命周期：结构化启动、停止和状态命令，`manual`、`startup_check`、`on_demand` 三种启动策略，以及 `persistent`、`session`、`external` 进程策略。
+- readiness 检查、provider 互斥、进程身份快照、独立生命周期审计和稳定的 Agent/API 错误码。
+- 设置中的“允许主机命令”总开关，默认关闭；开启时使用 5 秒风险确认。
+- Providers 高级生命周期面板，支持命令配置、状态检查、启动/停止、API key 注入警告和脱敏状态反馈。
+- `GET/PUT /v1/admin/providers/{id}/lifecycle` 与 `GET/PUT /v1/admin/host-commands` 管理端点。
+- 模型画像与属性路由计划明确排期至 `0.11.0`，本版本不改变现有画像/候选过滤语义。
+
+### Verification
+
+- Rust workspace 默认测试、`ts-rs` 生成门禁、UI 测试、TypeScript lint 和生产构建通过。
+- 本版本尚未完成 StartLux/OpenJev/Laya 真实服务、Windows/Unix 进程组、Android/cloud 权限和 Agent scope 的人工验收；因此标记为预发布版。
+
+### 用户叙事与对照场景
+
+#### 本地模型服务：从人工切换到受控生命周期
+
+- **起点**：用户需要先单独打开 Laya、OpenJev 或其他本地模型服务，再回到 Jev Switch 配置地址和模型；关闭 Jev Switch 时又担心误停仍在使用的服务。
+- **问题**：`允许路由`、服务是否运行和服务是否由 Jev Switch 控制混在一起，命令失败也难以区分是进程启动失败还是网关调用失败。
+- **操作**：在 Provider 高级面板登记结构化 argv、状态/停止命令、启动策略与进程策略；设置中显式开启主机命令；Jev Switch 在进入候选时等待 readiness，并把生命周期失败交给既有 failover。
+- **结果**：用户可分别看到路由资格、可控服务和服务状态；持久服务不会因应用退出自动停止，失败会留下独立审计记录和可定位的错误码。
+- **对照**：无 lifecycle 配置的 provider 仍保持原有纯人工行为；云端 provider 不会因为“允许路由”而被当作可控本地服务。
+- **边界**：本版本只提供受控命令执行和契约闭环，不下载模型、不提供任意 shell、不按端口或进程名接管服务；真实平台进程组和本地服务仍需人工验收。
+
 ## [0.9.3] - 2026-10-05
 
 ### Fixed

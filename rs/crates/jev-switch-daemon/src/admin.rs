@@ -12,6 +12,7 @@
 //!   → right 引用校验 → 落盘 → `Registry::replace_edges` 热替换（无重启）
 //! - `POST /v1/admin/providers/{id}/probe` → `{ok,latency_ms,status,error}`
 //! - `POST /v1/admin/providers/{id}/models` → 从上游模型目录获取模型 ID（不运行推理）
+//! - `GET /v1/admin/capabilities` → UI/Agent 配置能力发现（只读）
 //! - `PUT  /v1/admin/mode` → **mode 热切**（不重启）：可选 `admin_password`
 //!   激活/轮换 → 写 toml `mode` → 写 `AuthState.mode` RwLock → 非显式 bind 时
 //!   联动 ListenSupervisor 热 Rebind 到成对默认（见 [`crate::listen`]）
@@ -46,7 +47,10 @@
 
 pub mod endpoints;
 
-use crate::config::{enforce_config_perms, enforce_dir_perms, Config, ProviderConfig};
+use crate::config::{
+    enforce_config_perms, enforce_dir_perms, Config, ProcessPolicy, ProviderConfig,
+    ProviderLifecycleConfig,
+};
 use crate::{error_response, known_keys_snapshot, AppState};
 use axum::{
     body::Bytes,
@@ -92,6 +96,27 @@ pub struct ProviderView {
     // 掩码形态 `sk-****a1b2`；无有效 key 时为 `""`（配 `api_key_set=false` 看）。
     pub api_key_masked: String,
     pub api_key_set: bool,
+    /// Advanced lifecycle configuration summary; command bodies are never returned.
+    pub lifecycle: ProviderLifecycleView,
+}
+
+/// Non-secret lifecycle summary exposed to the provider page and Agent discovery.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct ProviderLifecycleView {
+    pub controllable: bool,
+    pub process_policy: ProcessPolicy,
+    pub mode: String,
+    pub configured: bool,
+    pub service_state: String,
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
+    pub timeout_ms: u64,
+    #[cfg_attr(feature = "ts-rs", ts(type = "number"))]
+    pub readiness_timeout_ms: u64,
 }
 
 /// `GET /v1/admin/providers` / `PUT` 响应体。
@@ -137,6 +162,10 @@ pub struct ProviderInput {
     #[serde(default)]
     #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
     pub forward_extensions: Option<bool>,
+    /// Omitted preserves the existing lifecycle configuration.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
+    pub lifecycle: Option<ProviderLifecycleConfig>,
 }
 
 /// `PUT /v1/admin/providers` 请求体。
@@ -148,6 +177,325 @@ pub struct ProviderInput {
 )]
 pub struct PutProvidersBody {
     pub providers: Vec<ProviderInput>,
+}
+
+/// Registered configuration capabilities exposed to human and Agent clients.
+/// This is discovery metadata only; high-risk actions keep their domain endpoints.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct ConfigCapability {
+    pub key: String,
+    pub resource: String,
+    pub read_scope: String,
+    pub write_scope: Option<String>,
+    pub execute_scope: Option<String>,
+    pub risk: String,
+    pub confirmation: Option<String>,
+    pub audit: bool,
+    pub schema_version: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct CapabilitiesDoc {
+    pub capabilities: Vec<ConfigCapability>,
+}
+
+/// Lifecycle endpoints use a stable, machine-readable error surface so an
+/// Agent can distinguish a disabled host-command gate from a readiness failure.
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct LifecycleErrorBody {
+    pub code: String,
+    pub message: String,
+    pub remediation: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct ProviderLifecycleDoc {
+    pub provider_id: String,
+    /// Returned only from the dedicated admin lifecycle endpoint. The ordinary
+    /// provider list continues to expose a command-free summary.
+    pub command: ProviderLifecycleConfig,
+    pub config: ProviderLifecycleView,
+    pub status: crate::lifecycle::LifecycleStatus,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+pub struct HostCommandControlResponse {
+    pub enabled: bool,
+    pub requires_confirmation: bool,
+}
+
+/// `GET /v1/admin/capabilities` — stable discovery metadata for UI/Agent clients.
+pub async fn get_capabilities() -> Json<CapabilitiesDoc> {
+    Json(CapabilitiesDoc {
+        capabilities: vec![
+            ConfigCapability {
+                key: "providers.lifecycle.controllable".into(),
+                resource: "provider".into(),
+                read_scope: "config:read".into(),
+                write_scope: Some("provider:lifecycle:configure".into()),
+                execute_scope: None,
+                risk: "host_command".into(),
+                confirmation: Some("cooldown_5s".into()),
+                audit: true,
+                schema_version: 1,
+            },
+            ConfigCapability {
+                key: "security.allow_host_commands".into(),
+                resource: "instance".into(),
+                read_scope: "config:read".into(),
+                write_scope: Some("host_commands:enable".into()),
+                execute_scope: None,
+                risk: "host_command".into(),
+                confirmation: Some("cooldown_5s".into()),
+                audit: true,
+                schema_version: 1,
+            },
+            ConfigCapability {
+                key: "providers.lifecycle.service".into(),
+                resource: "provider".into(),
+                read_scope: "config:read".into(),
+                write_scope: Some("provider:lifecycle:configure".into()),
+                execute_scope: Some("provider:lifecycle:execute".into()),
+                risk: "host_command".into(),
+                confirmation: Some("cooldown_5s".into()),
+                audit: true,
+                schema_version: 1,
+            },
+        ],
+    })
+}
+
+pub async fn get_host_commands(State(state): State<AppState>) -> Response {
+    match load_config(&state) {
+        Ok(config) => Json(HostCommandControlResponse {
+            enabled: config.allow_host_commands,
+            requires_confirmation: true,
+        })
+        .into_response(),
+        Err(response) => response,
+    }
+}
+
+pub async fn put_host_commands(State(state): State<AppState>, body: Bytes) -> Response {
+    #[derive(serde::Deserialize)]
+    struct Input {
+        enabled: bool,
+    }
+    let input: Input = match serde_json::from_slice(&body) {
+        Ok(input) => input,
+        Err(error) => {
+            return lifecycle_error(
+                &state,
+                StatusCode::BAD_REQUEST,
+                &format!("invalid_host_command_body:{error}"),
+            )
+        }
+    };
+    let mut config = match load_config(&state) {
+        Ok(config) => config,
+        Err(response) => return response,
+    };
+    config.allow_host_commands = input.enabled;
+    {
+        let conn = match state.db_conn.lock() {
+            Ok(conn) => conn,
+            Err(error) => {
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("database lock failed: {error}"),
+                )
+            }
+        };
+        if let Err(error) = crate::db::persist_runtime_config(&conn, &config, &state.config_path) {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("save host command setting failed: {error}"),
+            );
+        }
+    }
+    state.lifecycle.configure(&config);
+    Json(HostCommandControlResponse {
+        enabled: input.enabled,
+        requires_confirmation: true,
+    })
+    .into_response()
+}
+
+pub async fn provider_lifecycle_status(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let cfg = match load_config(&state) {
+        Ok(cfg) => cfg,
+        Err(response) => return response,
+    };
+    let Some(provider) = cfg.providers.get(&id) else {
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider '{id}' not found"),
+        );
+    };
+    Json(state.lifecycle.status(&id, provider, &cfg).await).into_response()
+}
+
+pub async fn get_provider_lifecycle(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let cfg = match load_config(&state) {
+        Ok(cfg) => cfg,
+        Err(response) => return response,
+    };
+    let Some(provider) = cfg.providers.get(&id) else {
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider '{id}' not found"),
+        );
+    };
+    let status = state.lifecycle.status(&id, provider, &cfg).await;
+    Json(ProviderLifecycleDoc {
+        provider_id: id,
+        command: provider.lifecycle.clone(),
+        config: lifecycle_view(provider, &status),
+        status,
+    })
+    .into_response()
+}
+
+pub async fn put_provider_lifecycle(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    body: Bytes,
+) -> Response {
+    let lifecycle: ProviderLifecycleConfig = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(error) => {
+            return lifecycle_error(
+                &state,
+                StatusCode::BAD_REQUEST,
+                &format!("invalid_lifecycle_body:{error}"),
+            )
+        }
+    };
+    if let Err(reason) = lifecycle.validate() {
+        return lifecycle_error(
+            &state,
+            StatusCode::BAD_REQUEST,
+            &format!("invalid_lifecycle_configuration:{reason}"),
+        );
+    }
+    let mut cfg = match load_config(&state) {
+        Ok(cfg) => cfg,
+        Err(response) => return response,
+    };
+    let Some(provider) = cfg.providers.get_mut(&id) else {
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider '{id}' not found"),
+        );
+    };
+    provider.lifecycle = lifecycle;
+    {
+        let conn = match state.db_conn.lock() {
+            Ok(conn) => conn,
+            Err(error) => {
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("database lock failed: {error}"),
+                )
+            }
+        };
+        if let Err(error) = crate::db::persist_runtime_config(&conn, &cfg, &state.config_path) {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("save lifecycle configuration failed: {error}"),
+            );
+        }
+    }
+    state.lifecycle.configure(&cfg);
+    let provider = cfg.providers.get(&id).expect("provider was just validated");
+    let status = state.lifecycle.status(&id, provider, &cfg).await;
+    Json(ProviderLifecycleDoc {
+        provider_id: id,
+        command: provider.lifecycle.clone(),
+        config: lifecycle_view(provider, &status),
+        status,
+    })
+    .into_response()
+}
+
+pub async fn provider_lifecycle_start(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let cfg = match load_config(&state) {
+        Ok(cfg) => cfg,
+        Err(response) => return response,
+    };
+    let Some(provider) = cfg.providers.get(&id) else {
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider '{id}' not found"),
+        );
+    };
+    match state.lifecycle.start(&id, provider, &cfg).await {
+        Ok(status) => Json(status).into_response(),
+        Err(message) => lifecycle_error(&state, StatusCode::BAD_REQUEST, &message),
+    }
+}
+
+pub async fn provider_lifecycle_stop(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let cfg = match load_config(&state) {
+        Ok(cfg) => cfg,
+        Err(response) => return response,
+    };
+    let Some(provider) = cfg.providers.get(&id) else {
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider '{id}' not found"),
+        );
+    };
+    match state.lifecycle.stop(&id, provider, &cfg).await {
+        Ok(status) => Json(status).into_response(),
+        Err(message) => lifecycle_error(&state, StatusCode::BAD_REQUEST, &message),
+    }
 }
 
 /// `GET/PUT /v1/admin/routes` 共用体（`RouteEdge` = jev-core 导出，一份真值）。
@@ -220,7 +568,61 @@ fn err(state: &AppState, status: StatusCode, msg: impl Into<String>) -> Response
     error_response(status, msg, None, false, &keys)
 }
 
-fn load_config(state: &AppState) -> Result<Config, Response> {
+fn lifecycle_error(state: &AppState, status: StatusCode, raw: &str) -> Response {
+    let code = raw.split(':').next().unwrap_or(raw).trim().to_string();
+    let (message, remediation) = match code.as_str() {
+        "host_commands_disabled" => (
+            "Host command execution is disabled for this instance.",
+            "An administrator must enable host commands after the safety confirmation.",
+        ),
+        "provider_not_controllable" => (
+            "This provider is configured as an uncontrolled service.",
+            "Enable the provider's controllable-service setting before executing lifecycle actions.",
+        ),
+        "command_not_configured" => (
+            "The requested lifecycle command is not configured.",
+            "Configure the provider-level command or leave the action under manual control.",
+        ),
+        "readiness_timeout" => (
+            "The service command started but did not become ready before the bounded timeout.",
+            "Check the provider address, status command, service logs, and readiness timeout.",
+        ),
+        "ownership_unverified" => (
+            "The recorded process could not be verified as owned by Jev Switch.",
+            "Use the provider's explicit stop command or inspect the service manually; no PID was terminated.",
+        ),
+        "lifecycle_operation_in_progress" => (
+            "Another lifecycle action for this provider is still running.",
+            "Wait for the current action to finish before retrying.",
+        ),
+        _ => (
+            "The provider lifecycle action failed.",
+            "Inspect the lifecycle status and audit details, then correct the provider configuration.",
+        ),
+    };
+    let body = LifecycleErrorBody {
+        code,
+        message: message.into(),
+        remediation: remediation.into(),
+    };
+    let mut response = (status, Json(body)).into_response();
+    if let Ok(request_id) = HeaderValue::from_str(&format!("lifecycle-{}", lifecycle_request_id()))
+    {
+        response
+            .headers_mut()
+            .insert("x-jev-request-id", request_id);
+    }
+    let _ = state; // keep the helper's redaction boundary explicit at the handler call site
+    response
+}
+
+fn lifecycle_request_id() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
+}
+
+pub(crate) fn load_config(state: &AppState) -> Result<Config, Response> {
     let mut config = Config::load(&state.config_path).map_err(|e| {
         err_plain(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -279,6 +681,38 @@ fn provider_view(id: &str, p: &ProviderConfig, keys: &[String]) -> ProviderView 
         forward_extensions: p.forward_extensions,
         api_key_masked,
         api_key_set,
+        lifecycle: lifecycle_view(p, &unknown_lifecycle_status(id)),
+    }
+}
+
+fn unknown_lifecycle_status(provider_id: &str) -> crate::lifecycle::LifecycleStatus {
+    crate::lifecycle::LifecycleStatus {
+        provider_id: provider_id.to_string(),
+        state: "unknown".into(),
+        readiness: "unknown".into(),
+        controllable: false,
+        configured: false,
+        managed_by_jev: false,
+        pid: None,
+        execution_id: None,
+        message: None,
+    }
+}
+
+fn lifecycle_view(
+    provider: &ProviderConfig,
+    status: &crate::lifecycle::LifecycleStatus,
+) -> ProviderLifecycleView {
+    ProviderLifecycleView {
+        controllable: provider.lifecycle.controllable,
+        process_policy: provider.lifecycle.process_policy.clone(),
+        mode: provider.lifecycle.mode.clone(),
+        configured: provider.lifecycle.program.is_some()
+            || provider.lifecycle.stop_program.is_some()
+            || provider.lifecycle.status_program.is_some(),
+        service_state: status.state.clone(),
+        timeout_ms: provider.lifecycle.timeout_ms,
+        readiness_timeout_ms: provider.lifecycle.readiness_timeout_ms,
     }
 }
 
@@ -457,8 +891,22 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
                     .forward_extensions
                     .or_else(|| old.map(|o| o.forward_extensions))
                     .unwrap_or(false),
+                lifecycle: p
+                    .lifecycle
+                    .clone()
+                    .or_else(|| old.map(|o| o.lifecycle.clone()))
+                    .unwrap_or_default(),
             },
         );
+    }
+    for (provider_id, provider) in &providers {
+        if let Err(reason) = provider.lifecycle.validate() {
+            return lifecycle_error(
+                &state,
+                StatusCode::BAD_REQUEST,
+                &format!("invalid_lifecycle_configuration:{provider_id}:{reason}"),
+            );
+        }
     }
     let removed_providers: BTreeSet<String> = existing
         .providers
@@ -471,7 +919,11 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
     cfg.routes = existing.route_edges();
     prune_routes_for_removed_providers(&mut cfg.routes, &cfg.providers, &removed_providers);
     if let Err(message) = validate_route_graph(&cfg.routes, &cfg.providers) {
-        return err(&state, StatusCode::BAD_REQUEST, format!("provider update rejected: {message}"));
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            format!("provider update rejected: {message}"),
+        );
     }
     let conn = match state.db_conn.lock() {
         Ok(conn) => conn,
@@ -491,10 +943,15 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
         );
     }
     drop(conn);
+    state.lifecycle.configure(&cfg);
     refresh_known_keys(&state, &cfg);
     state
         .registry
-        .replace_upstreams(crate::build_runtime_upstreams(&cfg, &state.telemetry));
+        .replace_upstreams(crate::build_runtime_upstreams_with_lifecycle(
+            &cfg,
+            &state.telemetry,
+            state.lifecycle.clone(),
+        ));
     if let Err(message) = crate::admin::endpoints::refresh_endpoint_routes(&state, &[]) {
         return err(
             &state,
@@ -555,7 +1012,13 @@ pub async fn get_graph(State(state): State<AppState>) -> Response {
     };
     let mut snapshot = match crate::db::load_runtime_snapshot(&conn) {
         Ok(Some(snapshot)) => snapshot,
-        Ok(None) => return err(&state, StatusCode::CONFLICT, "runtime config snapshot is missing"),
+        Ok(None) => {
+            return err(
+                &state,
+                StatusCode::CONFLICT,
+                "runtime config snapshot is missing",
+            )
+        }
         Err(error) => {
             return err(
                 &state,
@@ -565,16 +1028,17 @@ pub async fn get_graph(State(state): State<AppState>) -> Response {
         }
     };
     if snapshot.nodes.is_empty() {
-        snapshot.nodes = match crate::db::derive_runtime_nodes(&conn, &snapshot.routes, &snapshot.providers) {
-            Ok(nodes) => nodes,
-            Err(error) => {
-                return err(
-                    &state,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("derive graph nodes failed: {error}"),
-                )
-            }
-        };
+        snapshot.nodes =
+            match crate::db::derive_runtime_nodes(&conn, &snapshot.routes, &snapshot.providers) {
+                Ok(nodes) => nodes,
+                Err(error) => {
+                    return err(
+                        &state,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("derive graph nodes failed: {error}"),
+                    )
+                }
+            };
     }
     Json(jev_core::graph::GraphDocument {
         nodes: snapshot.nodes,
@@ -640,13 +1104,9 @@ fn prune_routes_for_removed_providers(
     loop {
         let additions: Vec<String> = routes
             .iter()
-            .filter(|edge| {
-                edge.r#match == MatchMode::Exact && resolvable.contains(&edge.right)
-            })
+            .filter(|edge| edge.r#match == MatchMode::Exact && resolvable.contains(&edge.right))
             .map(|edge| edge.left.clone())
-            .filter(|left| {
-                !resolvable.contains(left) && !removed_providers.contains(left)
-            })
+            .filter(|left| !resolvable.contains(left) && !removed_providers.contains(left))
             .collect();
         if additions.is_empty() {
             break;
@@ -816,7 +1276,11 @@ pub async fn import_runtime_config(State(state): State<AppState>, body: Bytes) -
     }
     // Construct adapters before changing the canonical snapshot. A provider that
     // cannot be registered must not yield a successful import with stale runtime.
-    let adapters = crate::build_runtime_upstreams(&config, &state.telemetry);
+    let adapters = crate::build_runtime_upstreams_with_lifecycle(
+        &config,
+        &state.telemetry,
+        state.lifecycle.clone(),
+    );
     let adapter_ids: BTreeSet<&str> = adapters.iter().map(|adapter| adapter.id()).collect();
     for (id, provider) in &config.providers {
         if provider.enabled && !adapter_ids.contains(id.as_str()) {
@@ -865,9 +1329,16 @@ pub async fn import_runtime_config(State(state): State<AppState>, body: Bytes) -
         .collect();
     let snapshot = crate::db::RuntimeConfigSnapshot {
         providers: config.providers.clone(),
+        allow_host_commands: config.allow_host_commands,
         nodes: match crate::db::derive_runtime_nodes(&conn, &routes, &config.providers) {
             Ok(nodes) => nodes,
-            Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("derive graph nodes failed: {error}")),
+            Err(error) => {
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("derive graph nodes failed: {error}"),
+                )
+            }
         },
         routes,
         source_toml_fingerprint: crate::db::config_fingerprint(&state.config_path),
@@ -919,27 +1390,38 @@ fn no_store_json(value: impl Serialize) -> Response {
 
 /// Export the active provider and route snapshot only after explicit confirmation.
 /// This is intentionally separate from the ordinary masked provider read API.
-pub async fn export_runtime_config_json(
-    State(state): State<AppState>,
-    body: Bytes,
-) -> Response {
+pub async fn export_runtime_config_json(State(state): State<AppState>, body: Bytes) -> Response {
     if body.len() > 1024 {
-        return err(&state, StatusCode::PAYLOAD_TOO_LARGE, "confirmation body too large");
+        return err(
+            &state,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "confirmation body too large",
+        );
     }
     let request: serde_json::Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
         Err(error) => {
-            return err(&state, StatusCode::BAD_REQUEST, format!("invalid confirmation: {error}"));
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid confirmation: {error}"),
+            );
         }
     };
     if request.get("confirm").and_then(serde_json::Value::as_bool) != Some(true) {
-        return err(&state, StatusCode::BAD_REQUEST, "explicit export requires {\"confirm\":true}");
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "explicit export requires {\"confirm\":true}",
+        );
     }
     let mut config = match load_config(&state) {
         Ok(config) => config,
         Err(response) => return response,
     };
-    let effective_keys: HashMap<String, String> = config.providers.keys()
+    let effective_keys: HashMap<String, String> = config
+        .providers
+        .keys()
         .filter_map(|id| config.effective_api_key(id).map(|key| (id.clone(), key)))
         .collect();
     for (id, provider) in &mut config.providers {
@@ -957,22 +1439,37 @@ pub async fn export_runtime_config_json(
 }
 
 /// Restore a versioned provider/route backup after explicit user confirmation.
-pub async fn import_runtime_config_json(
-    State(state): State<AppState>,
-    body: Bytes,
-) -> Response {
+pub async fn import_runtime_config_json(State(state): State<AppState>, body: Bytes) -> Response {
     if body.len() > RUNTIME_BACKUP_MAX_BYTES {
-        return err(&state, StatusCode::PAYLOAD_TOO_LARGE, "configuration backup exceeds 2 MiB");
+        return err(
+            &state,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "configuration backup exceeds 2 MiB",
+        );
     }
     let request: RuntimeConfigBackupImport = match serde_json::from_slice(&body) {
         Ok(request) => request,
-        Err(error) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid configuration backup: {error}")),
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid configuration backup: {error}"),
+            )
+        }
     };
     if !request.confirm {
-        return err(&state, StatusCode::BAD_REQUEST, "explicit import requires confirm=true");
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "explicit import requires confirm=true",
+        );
     }
     if request.backup.schema_version != RUNTIME_BACKUP_SCHEMA_VERSION {
-        return err(&state, StatusCode::BAD_REQUEST, "unsupported configuration backup schema_version");
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "unsupported configuration backup schema_version",
+        );
     }
 
     let mut config = match load_config(&state) {
@@ -983,18 +1480,37 @@ pub async fn import_runtime_config_json(
     config.routes = request.backup.routes;
     config.router.clear();
     if let Err(error) = config.validate_routes() {
-        return err(&state, StatusCode::BAD_REQUEST, format!("configuration backup rejected: {error}"));
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            format!("configuration backup rejected: {error}"),
+        );
     }
     if let Err(message) = validate_route_graph(&config.route_edges(), &config.providers) {
-        return err(&state, StatusCode::BAD_REQUEST, format!("configuration backup rejected: {message}"));
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            format!("configuration backup rejected: {message}"),
+        );
     }
     for (id, provider) in &config.providers {
-        if id.trim().is_empty() || provider.kind.trim().is_empty() || provider.base.trim().is_empty() {
-            return err(&state, StatusCode::BAD_REQUEST, "configuration backup contains an incomplete provider");
+        if id.trim().is_empty()
+            || provider.kind.trim().is_empty()
+            || provider.base.trim().is_empty()
+        {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                "configuration backup contains an incomplete provider",
+            );
         }
     }
 
-    let adapters = crate::build_runtime_upstreams(&config, &state.telemetry);
+    let adapters = crate::build_runtime_upstreams_with_lifecycle(
+        &config,
+        &state.telemetry,
+        state.lifecycle.clone(),
+    );
     let adapter_ids: BTreeSet<&str> = adapters.iter().map(|adapter| adapter.id()).collect();
     for (id, provider) in &config.providers {
         if provider.enabled && !adapter_ids.contains(id.as_str()) {
@@ -1004,33 +1520,69 @@ pub async fn import_runtime_config_json(
 
     let conn = match state.db_conn.lock() {
         Ok(conn) => conn,
-        Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("database lock failed: {error}")),
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {error}"),
+            )
+        }
     };
     let endpoints = match crate::db::endpoints::load_all(&conn) {
         Ok(endpoints) => endpoints,
-        Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("load endpoints before import failed: {error}")),
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("load endpoints before import failed: {error}"),
+            )
+        }
     };
-    let endpoint_ids: std::collections::HashSet<String> = endpoints.iter().map(|endpoint| endpoint.id.clone()).collect();
-    let enabled: std::collections::HashSet<String> = endpoints.into_iter().filter(|endpoint| endpoint.enabled).map(|endpoint| endpoint.id).collect();
+    let endpoint_ids: std::collections::HashSet<String> = endpoints
+        .iter()
+        .map(|endpoint| endpoint.id.clone())
+        .collect();
+    let enabled: std::collections::HashSet<String> = endpoints
+        .into_iter()
+        .filter(|endpoint| endpoint.enabled)
+        .map(|endpoint| endpoint.id)
+        .collect();
     let routes = config.route_edges();
-    let runtime_edges = routes.iter().filter(|edge| !endpoint_ids.contains(&edge.left) || enabled.contains(&edge.left)).cloned().collect();
+    let runtime_edges = routes
+        .iter()
+        .filter(|edge| !endpoint_ids.contains(&edge.left) || enabled.contains(&edge.left))
+        .cloned()
+        .collect();
     let snapshot = crate::db::RuntimeConfigSnapshot {
         providers: config.providers.clone(),
+        allow_host_commands: config.allow_host_commands,
         nodes: match crate::db::derive_runtime_nodes(&conn, &routes, &config.providers) {
             Ok(nodes) => nodes,
-            Err(error) => return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("derive graph nodes failed: {error}")),
+            Err(error) => {
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("derive graph nodes failed: {error}"),
+                )
+            }
         },
         routes,
         source_toml_fingerprint: crate::db::config_fingerprint(&state.config_path),
     };
     if let Err(error) = crate::db::save_runtime_snapshot(&conn, &snapshot) {
-        return err(&state, StatusCode::INTERNAL_SERVER_ERROR, format!("configuration backup import failed: {error}"));
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("configuration backup import failed: {error}"),
+        );
     }
     drop(conn);
     refresh_known_keys(&state, &config);
     state.registry.replace_upstreams(adapters);
     state.registry.replace_edges(runtime_edges);
-    no_store_json(serde_json::json!({"imported": true, "schema_version": RUNTIME_BACKUP_SCHEMA_VERSION}))
+    no_store_json(
+        serde_json::json!({"imported": true, "schema_version": RUNTIME_BACKUP_SCHEMA_VERSION}),
+    )
 }
 
 /// Export the current SQLite provider/route runtime snapshot to the legacy TOML file.
@@ -2509,7 +3061,7 @@ priority = 10
             .find(|p| p["id"] == "vercel")
             .expect("vercel in list");
         let obj = vercel.as_object().unwrap();
-        assert_eq!(obj.len(), 10);
+        assert_eq!(obj.len(), 11);
         assert!(obj.get("api_key").is_none(), "键集不得含 api_key");
         // laya 无 key → set=false + 空掩码
         let laya = doc["providers"]
@@ -2546,13 +3098,22 @@ priority = 10
         assert_eq!(unconfirmed_status, 400, "{unconfirmed_body}");
         assert!(!unconfirmed_body.contains(FAKE_KEY));
 
-        let response = app.oneshot(request(r#"{"confirm":true}"#.into())).await.unwrap();
+        let response = app
+            .oneshot(request(r#"{"confirm":true}"#.into()))
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(response.headers()[axum::http::header::CACHE_CONTROL], "no-store, private");
+        assert_eq!(
+            response.headers()[axum::http::header::CACHE_CONTROL],
+            "no-store, private"
+        );
         assert_eq!(response.headers()[axum::http::header::PRAGMA], "no-cache");
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let text = String::from_utf8(body.to_vec()).unwrap();
-        assert!(text.contains(FAKE_KEY), "explicit backup must preserve a usable key");
+        assert!(
+            text.contains(FAKE_KEY),
+            "explicit backup must preserve a usable key"
+        );
         assert!(!text.contains("admin_password"));
         assert!(!text.contains("auth_tokens"));
         let json: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -2573,12 +3134,21 @@ priority = 10
                 "routes": [{"left":"jev", "right":"missing", "match":"exact", "priority":10, "sticky":"session", "on_error":"next"}]
             }
         });
-        let (invalid_status, invalid_body) = send(app.clone(), "POST", "/v1/admin/config/import-json", Some(invalid.to_string())).await;
+        let (invalid_status, invalid_body) = send(
+            app.clone(),
+            "POST",
+            "/v1/admin/config/import-json",
+            Some(invalid.to_string()),
+        )
+        .await;
         assert_eq!(invalid_status, 400, "{invalid_body}");
         assert!(!invalid_body.contains("replacement-secret"));
         let (before_status, before) = send(app.clone(), "GET", "/v1/admin/providers", None).await;
         assert_eq!(before_status, 200);
-        assert!(before.contains("laya"), "rejected import must leave active providers unchanged");
+        assert!(
+            before.contains("laya"),
+            "rejected import must leave active providers unchanged"
+        );
 
         let valid = serde_json::json!({
             "confirm": true,
@@ -2588,10 +3158,20 @@ priority = 10
                 "routes": [{"left":"jev", "right":"vercel", "match":"exact", "priority":10, "sticky":"session", "on_error":"next"}]
             }
         });
-        let (status, body) = send(app.clone(), "POST", "/v1/admin/config/import-json", Some(valid.to_string())).await;
+        let (status, body) = send(
+            app.clone(),
+            "POST",
+            "/v1/admin/config/import-json",
+            Some(valid.to_string()),
+        )
+        .await;
         assert_eq!(status, 200, "{body}");
-        assert!(body.contains("no-store") == false, "the JSON response itself should not echo backup content");
-        let (provider_status, provider_body) = send(app.clone(), "GET", "/v1/admin/providers", None).await;
+        assert!(
+            body.contains("no-store") == false,
+            "the JSON response itself should not echo backup content"
+        );
+        let (provider_status, provider_body) =
+            send(app.clone(), "GET", "/v1/admin/providers", None).await;
         assert_eq!(provider_status, 200);
         assert!(!provider_body.contains("replacement-secret"));
         assert!(!provider_body.contains("sk-test1234abcd"));
@@ -3031,17 +3611,11 @@ enabled = true
         let body = r#"{"providers":[
             {"id":"laya","kind":"laya","base":"http://127.0.0.1:18765/v1/systemone","enabled":true}
         ]}"#;
-        let (status, response) = send(
-            app.clone(),
-            "PUT",
-            "/v1/admin/providers",
-            Some(body.into()),
-        )
-        .await;
+        let (status, response) =
+            send(app.clone(), "PUT", "/v1/admin/providers", Some(body.into())).await;
         assert_eq!(status, 200, "{response}");
 
-        let (routes_status, routes_body) =
-            send(app.clone(), "GET", "/v1/admin/routes", None).await;
+        let (routes_status, routes_body) = send(app.clone(), "GET", "/v1/admin/routes", None).await;
         assert_eq!(routes_status, 200, "{routes_body}");
         let routes: serde_json::Value = serde_json::from_str(&routes_body).unwrap();
         let route_list = routes["routes"].as_array().unwrap();
@@ -3056,7 +3630,9 @@ enabled = true
             .iter()
             .any(|edge| edge["left"] == "unrelated" && edge["right"] == "laya"));
         assert!(!route_list.iter().any(|edge| edge["right"] == "vercel"));
-        assert!(!route_list.iter().any(|edge| edge["left"] == "vercel" || edge["left"] == "jev2"));
+        assert!(!route_list
+            .iter()
+            .any(|edge| edge["left"] == "vercel" || edge["left"] == "jev2"));
 
         let snapshot = crate::db::load_runtime_snapshot(&state.db_conn.lock().unwrap())
             .unwrap()
@@ -3083,9 +3659,116 @@ enabled = true
         assert_eq!(status, 200, "{body}");
         let graph: serde_json::Value = serde_json::from_str(&body).unwrap();
         let nodes = graph["nodes"].as_array().unwrap();
-        assert!(nodes.iter().any(|node| node["id"] == "jev" && node["kind"] == "public"));
-        assert!(nodes.iter().any(|node| node["id"] == "vercel" && node["kind"] == "provider"));
+        assert!(nodes
+            .iter()
+            .any(|node| node["id"] == "jev" && node["kind"] == "public"));
+        assert!(nodes
+            .iter()
+            .any(|node| node["id"] == "vercel" && node["kind"] == "provider"));
         assert!(nodes.iter().all(|node| node.get("api_key").is_none()));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn capabilities_discovery_exposes_lifecycle_scopes_without_secrets() {
+        let path = temp_config("capabilities", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let (status, body) = send(app, "GET", "/v1/admin/capabilities", None).await;
+        assert_eq!(status, 200, "{body}");
+        assert!(body.contains("providers.lifecycle.controllable"));
+        assert!(body.contains("provider:lifecycle:execute"));
+        assert!(body.contains("host_commands:enable"));
+        assert!(!body.contains("sk-test1234abcd"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn host_command_gate_round_trips_without_changing_provider_routes() {
+        let path = temp_config("host-commands", CFG_WITH_KEY);
+        let (app, state) = app_at(path.clone());
+        let (get_status, before) = send(app.clone(), "GET", "/v1/admin/host-commands", None).await;
+        assert_eq!(get_status, 200, "{before}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&before).unwrap()["enabled"],
+            false
+        );
+
+        let (put_status, body) = send(
+            app.clone(),
+            "PUT",
+            "/v1/admin/host-commands",
+            Some(r#"{"enabled":true}"#.into()),
+        )
+        .await;
+        assert_eq!(put_status, 200, "{body}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&body).unwrap()["enabled"],
+            true
+        );
+
+        let (status, _) = send(app, "GET", "/v1/admin/host-commands", None).await;
+        assert_eq!(status, 200);
+        let snapshot = crate::db::load_runtime_snapshot(&state.db_conn.lock().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(snapshot.providers.contains_key("vercel"));
+        assert!(snapshot.allow_host_commands);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn provider_lifecycle_summary_round_trips_without_exposing_commands() {
+        let path = temp_config("lifecycle-summary", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let body = r#"{"providers":[
+            {"id":"vercel","kind":"vercel","base":"https://example.invalid/v4/eval","enabled":true,
+             "lifecycle":{"controllable":true,"process_policy":"persistent","mode":"startup_check",
+               "program":"C:/Tools/OpenJev/openjev.exe","args":["--port","11436"]}},
+            {"id":"laya","kind":"laya","base":"http://127.0.0.1:18765/v1/systemone","enabled":true}
+        ]}"#;
+        let (put_status, _) =
+            send(app.clone(), "PUT", "/v1/admin/providers", Some(body.into())).await;
+        assert_eq!(put_status, 200);
+        let (get_status, response) = send(app, "GET", "/v1/admin/providers", None).await;
+        assert_eq!(get_status, 200);
+        assert!(response.contains("\"controllable\":true"));
+        assert!(response.contains("\"service_state\":\"unknown\""));
+        assert!(
+            !response.contains("openjev.exe"),
+            "command body must not be returned in the summary"
+        );
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn lifecycle_domain_endpoint_updates_config_without_echoing_command_body() {
+        let path = temp_config("lifecycle-domain", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let lifecycle = r#"{
+            "controllable":true,
+            "process_policy":"persistent",
+            "mode":"on_demand",
+            "program":"C:/Tools/OpenJev/openjev.exe",
+            "args":["--port","11436"]
+        }"#;
+        let (put_status, put_body) = send(
+            app.clone(),
+            "PUT",
+            "/v1/admin/providers/vercel/lifecycle",
+            Some(lifecycle.into()),
+        )
+        .await;
+        assert_eq!(put_status, 200, "{put_body}");
+        assert!(put_body.contains("openjev.exe"));
+
+        let (get_status, get_body) =
+            send(app, "GET", "/v1/admin/providers/vercel/lifecycle", None).await;
+        assert_eq!(get_status, 200, "{get_body}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&get_body).unwrap()["config"]["mode"],
+            "on_demand"
+        );
+        assert!(get_body.contains("openjev.exe"));
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

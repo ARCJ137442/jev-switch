@@ -350,8 +350,8 @@ async fn lan_access_requires_opt_in_and_restores_loopback_after_disable() {
         let lan_base = format!("http://{ip}:{port}");
         let (status, body) = http_get(&lan_base, "/v1/admin/status", None).await.unwrap();
         assert_eq!(
-            status, 200,
-            "private peer should reach local-mode management after opt-in: {body}"
+            status, 401,
+            "private peer must authenticate for local-mode management after opt-in: {body}"
         );
         let (status, body) = http_get(&lan_base, "/v1/models", None).await.unwrap();
         assert_eq!(

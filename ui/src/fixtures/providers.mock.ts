@@ -1,4 +1,15 @@
 import type { ProvidersResponse } from '../api/admin';
+import type { ProviderLifecycleView } from '../generated/ProviderLifecycleView';
+
+const MANUAL_LIFECYCLE: ProviderLifecycleView = {
+  controllable: false,
+  process_policy: 'persistent',
+  mode: 'manual',
+  configured: false,
+  service_state: 'unknown',
+  timeout_ms: 30000,
+  readiness_timeout_ms: 30000,
+};
 
 /**
  * Providers mock fixture — 形状严格按 contracts/05 §2 GET /v1/admin/providers 字面。
@@ -14,6 +25,7 @@ export const PROVIDERS_FIXTURE: ProvidersResponse = {
       forward_extensions: false,
       api_key_masked: 'sk-****a1b2',
       api_key_set: true,
+      lifecycle: MANUAL_LIFECYCLE,
     },
     {
       id: 'laya',
@@ -23,6 +35,7 @@ export const PROVIDERS_FIXTURE: ProvidersResponse = {
       forward_extensions: false,
       api_key_masked: 'sk-****a1b2',
       api_key_set: true,
+      lifecycle: MANUAL_LIFECYCLE,
     },
   ],
 };

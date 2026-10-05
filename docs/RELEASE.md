@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-05，最新公开发行版候选为 [`v0.9.3`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.3)。本 patch 版本在 v0.9.2 的 Tauri 顶级页面快捷切换基础上接入 Windows Authenticode 签名门禁、RFC 3161 时间戳和签名清单；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-05，最新发行候选为 [`v0.10.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.10.0)，并标记为预发布版。本版本加入 provider 级受控模型生命周期、readiness、按候选 on-demand 启动、独立审计、主机命令安全开关和 Provider 高级 UI；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实本地服务、平台进程组、Agent scope 和 Android/cloud 权限仍未完成人工验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 
@@ -184,6 +184,8 @@ Windows SmartScreen 的“发布者：未知”来自没有 Authenticode 签名�
 | `WINDOWS_CERTIFICATE_PASSWORD` | PFX 私钥密码 |
 
 tag push 会在构建开始时校验这两个 Secret；缺失或 Base64/PFX 无法解析会直接阻断 Windows job，不会发布未签名安装包。签名使用 `signtool` 的 SHA-256 文件摘要、RFC 3161 时间戳和 `/pa` 验证，覆盖 daemon、Tauri 壳、MSI、NSIS、Standalone；Portable ZIP 在签名完成后压缩。`workflow_dispatch` 干跑允许不配置证书，但产物明确是未签名验证包，不能作为 Release。签名清单会随 Windows artifact/Release 上传，包含文件名、SHA-256、签名状态和证书指纹。
+
+如果 Windows job 因缺少 Secret 失败，配置完成后可以直接在该次失败的 Release run 中点击 **Re-run failed jobs**，不需要重建 tag。当前 `v0.9.3` run `37285568031` 的其他 jobs 已通过，Windows 失败只发生在签名证书预检；配置 Secret 后应直接重跑 Windows job。
 
 代码签名不能保证每台机器立即跳过 SmartScreen：新证书和新文件仍可能经历基于下载信誉的“未知应用”提示，用户可核对发布者、Release SHA-256 与签名清单。不要为了消除提示而关闭 Defender 或把自签名证书当成公开信任证书。
 

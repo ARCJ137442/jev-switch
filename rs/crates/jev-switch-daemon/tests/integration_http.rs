@@ -80,6 +80,7 @@ fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
         known_keys: Arc::new(RwLock::new(Vec::new())),
         auth: Arc::new(jev_switch_daemon::auth::AuthState::default()),
         listen: Arc::new(std::sync::OnceLock::new()),
+        lifecycle: jev_switch_daemon::lifecycle::LifecycleManager::default(),
         events: jev_switch_daemon::events::EventBus::new(200),
         service_endpoints: Arc::new(RwLock::new(endpoints)),
         db_conn: Arc::new(Mutex::new(db_conn)),

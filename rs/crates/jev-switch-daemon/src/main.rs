@@ -62,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
     jev_switch_daemon::config::check_config_perms_warn(&config_path);
 
     // 2. 装配（Registry + admin state + auth 态）→ 3. axum app
+    let lifecycle_config = config.clone();
     let state = build_state(config, config_path);
     let app = build_app(state.clone());
 
@@ -81,9 +82,23 @@ async fn main() -> anyhow::Result<()> {
         "jev-switch listening (listen layer = supervisor task; rebind without process restart)"
     );
 
+    // `startup_check` is intentionally bounded and only starts providers whose
+    // probe explicitly reports `stopped`; unknown/permission failures never
+    // trigger a host command. The task runs after the listener is available so
+    // the control plane remains reachable while a local model becomes ready.
+    let lifecycle = state.lifecycle.clone();
+    let startup_config = lifecycle_config.clone();
+    tokio::spawn(async move {
+        lifecycle.startup_check(&startup_config).await;
+    });
+
     // 5. 等平台停机信号 → 优雅停机（停 accept、在途请求跑完、超时兜底强杀）。
     let signal = shutdown_signal().await?;
     tracing::info!(signal, "shutdown signal received; graceful shutdown");
+    state
+        .lifecycle
+        .shutdown_session_services(&lifecycle_config.providers)
+        .await;
     handle.shutdown().await.context("shutdown listen layer")?;
     Ok(())
 }

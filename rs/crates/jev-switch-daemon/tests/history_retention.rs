@@ -550,7 +550,7 @@ fn version_five_migration_preserves_full_rows_and_autoincrement_high_watermark()
         conn.query_row("SELECT MAX(version) FROM migrations", [], |row| row
             .get::<_, i64>(0))
             .unwrap(),
-        7
+        8
     );
     assert_eq!(
         conn.query_row("SELECT request_id FROM call_logs WHERE id=23", [], |row| {
