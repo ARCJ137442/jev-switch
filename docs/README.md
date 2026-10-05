@@ -11,7 +11,7 @@
 > **本仓库**：[`ARCJ137442/jev-switch`](https://github.com/ARCJ137442/jev-switch)（public）<br>
 > **定位**：**Jev-Switch = 模型调用入口之间进行可配置转换的轻量网关**（Rust 内核 + React 控制台，支持本地/云端方向与 Tauri/Docker 交付）
 > **历史发布快照（截至 2026-09-27）**：当时最新正式版为 [v0.1.0 Release](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.1.0)，包含 Windows MSI、NSIS、便携 ZIP 与 Docker 镜像。对应 Release gate 的 Rust、UI、Tauri 与版本检查通过；验收证据覆盖 2 家上游、9 条路由、7 个公开入口和 34 条调用记录。用户提供的 Tauri 截图整理为公开安全图册，并确认当时安装版“关窗留托盘、点菜单恢复”通过；这些材料不证明 Release 候选的精确 build identity、托盘 Exit 或退出后恢复。当前版本与能力以本文后续的 2026-09-30 产品基线、[发布手册](RELEASE.md)及对应核验记录为准。历史结论只适用于各自版本与覆盖范围。
-> **当前产品基线与维护阶段（2026-10-05）**：公开候选为 v0.10.0 预发布版；v0.10.x 增加 provider 受控生命周期、readiness、按候选 on-demand、独立审计、主机命令开关和 Provider 高级 UI。真实本地服务、平台进程组、Agent scope、Android/cloud 权限仍需人工验收；模型画像/属性路由排期 0.11.0。Graph API 写入、节点页面、自由拖拽和专用页面布局仍未实现；真实多模态模型运行与校准另行验收。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
+> **当前产品基线与维护阶段（2026-10-06）**：公开候选为 v0.10.0 预发布版；v0.10.x 增加 provider 受控生命周期、readiness、按候选 on-demand、独立审计、主机命令开关和 Provider 高级 UI。Windows Standalone 经本地 Laya 真实请求人工验证；其他本地服务、平台进程组、Agent scope、Android/cloud 权限仍需人工验收；模型画像/属性路由排期 0.11.0。Graph API 写入、节点页面、自由拖拽和专用页面布局仍未实现；真实多模态模型运行与校准另行验收。Release/CLI 状态见[发布手册](RELEASE.md)、[CLI 文档](CLI.md)、对应核验记录。
 
 ## 核心定位（一句话）
 
@@ -32,7 +32,7 @@
 | [verification/v0.9.1-release-candidate-2026-10-05.md](verification/v0.9.1-release-candidate-2026-10-05.md) | v0.9.1 Routing DAG 滚轮平移修复与发布门禁 | 发布候选；远端 CI/Release 以 tag workflow 为准 |
 | [verification/v0.9.2-release-candidate-2026-10-05.md](verification/v0.9.2-release-candidate-2026-10-05.md) | v0.9.2 Tauri 顶级页面 Ctrl+Tab 循环切换与发布门禁 | 发布候选；远端 CI/Release 以 tag workflow 为准 |
 | [verification/v0.9.3-release-candidate-2026-10-05.md](verification/v0.9.3-release-candidate-2026-10-05.md) | v0.9.3 Windows Authenticode 签名门禁、签名顺序与签名清单 | 已随 tag 触发；远端 CI/Release 结果待确认 |
-| [verification/v0.10.0-release-candidate-2026-10-05.md](verification/v0.10.0-release-candidate-2026-10-05.md) | v0.10.0 provider 生命周期、主机命令开关和预发布边界 | 预发布候选；自动化通过，人工真实服务验收待完成 |
+| [verification/v0.10.0-release-candidate-2026-10-05.md](verification/v0.10.0-release-candidate-2026-10-05.md) | v0.10.0 provider 生命周期、主机命令开关和预发布边界 | 预发布候选；自动化与本地 Laya/Standalone 验收通过，其他平台场景待完成 |
 | [verification/typesafe-official-live-2026-09-29.md](verification/typesafe-official-live-2026-09-29.md) | TypeSafe 官方 key 的隔离单次实测，Noul/Choice/Score 与 usage | 当前源码直连 provider；不代表 Standalone/公开入口 E2E |
 | [verification/standalone-lmstudio-e2e-2026-09-29.md](verification/standalone-lmstudio-e2e-2026-09-29.md) | 较早 Standalone 候选的冷启动、缓存、五页 WebView 与 LM Studio 本地 SystemOne UI 路由 trace | 该记录只属于文档顶部候选哈希；真实系统托盘点击和第二次双击聚焦仍待人工确认 |
 | [verification/typesafe-model-discovery-2026-09-29.md](verification/typesafe-model-discovery-2026-09-29.md) | TypeSafe `/v1/models` 实测与 daemon/UI 自动模型发现 | 管理时目录/鉴权检查；不替代推理调用 |

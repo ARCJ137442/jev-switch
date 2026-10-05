@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-05，最新发行候选为 [`v0.10.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.10.0)，并标记为预发布版。本版本加入 provider 级受控模型生命周期、readiness、按候选 on-demand 启动、独立审计、主机命令安全开关和 Provider 高级 UI；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实本地服务、平台进程组、Agent scope 和 Android/cloud 权限仍未完成人工验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-06，最新发行候选为 [`v0.10.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.10.0)，并标记为预发布版。本版本加入 provider 级受控模型生命周期、readiness、按候选 on-demand 启动、独立审计、主机命令安全开关和 Provider 高级 UI；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。Windows Standalone 已用本地 Laya 完成真实请求人工验收；其他本地服务、平台进程组、Agent scope 和 Android/cloud 权限仍未完成人工验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 
