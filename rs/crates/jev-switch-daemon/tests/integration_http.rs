@@ -85,6 +85,7 @@ fn state_with(registry: Registry, config_path: std::path::PathBuf) -> AppState {
         db_conn: Arc::new(Mutex::new(db_conn)),
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
         gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        strip_unknown_fields: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     }
 }
 

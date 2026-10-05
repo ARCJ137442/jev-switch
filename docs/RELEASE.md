@@ -6,9 +6,9 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-04，最新公开发行版候选为 [`v0.8.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.8.0)。本 minor 版本增加 DAG 节点领域模型、只读 Graph API、runtime snapshot 节点投影和 Dashboard 第一阶段布局编辑；同时保留 v0.7.2 的提供商删除级联、统一表单键盘和 ARC UI 收口。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。Graph API 写入、节点页面、自由拖拽和 Routing/Settings/Statistics 布局编辑尚未包含。Android 后续原生路径仍按设备证据验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-05，最新公开发行版候选为 [`v0.9.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.0)。本 minor 版本增加多模态 SystemOne 扩展兼容：local 模式默认保留未知字段，provider 可显式转发扩展，官方 TypeSafe 默认剥离并在响应元数据记录处理结果；同时保留 v0.8.0 的 DAG 节点领域模型、只读 Graph API、runtime snapshot 节点投影和 Dashboard 第一阶段布局编辑。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
-后续 Release 必须由用户确认版本号；tag 与以下四处去掉 `v` 后必须完全一致：
+后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 
 - `ui/package.json` 的 `version`
 - `src-tauri/tauri.conf.json` 的 `version`
@@ -115,7 +115,7 @@ Windows job 缓存 Cargo `target/`，其中也可能留有先前构建的 bundle
 
 Actions → Release → Run workflow（`workflow_dispatch`）。
 构建 Windows 产物 + 验 Dockerfile 能 build，但**不推 ghcr、不建 Release**。
-`version` 输入留空则取 `ui/package.json`，做四处一致性检查。
+`version` 输入留空则取 `ui/package.json`，做五处一致性检查。
 输入通过环境变量传入门禁，不作为 shell 源码拼接；不一致的输入被拒绝。
 
 ---
@@ -178,7 +178,7 @@ pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
 
 | 症状 | 原因 / 处理 |
 |---|---|
-| `meta` 报版本不一致 | 四处版本号没同步，按上面清单改齐重新打 tag |
+| `meta` 报版本不一致 | 五处版本号没同步，按上面清单改齐重新打 tag |
 | `gate` 报 ts-rs 生成物不一致 | 跑 `cargo test --manifest-path rs/Cargo.toml --workspace --features ts-rs` 后提交 `ui/src/generated` |
 | Tauri 找不到 sidecar | `src-tauri/binaries/` 已 gitignore；流水线的「放置 sidecar」步负责生成，本地构建需手动跑（见 `docs/deployment.md` §9.2） |
 | MSI 构建失败提 ICE30 | sidecar 与壳主二进制同名了。必须叫 `jev-switch-daemon-<triple>.exe`（`docs/deployment.md` §9.4-2） |

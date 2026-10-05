@@ -27,18 +27,33 @@ pub struct TypeSafeUpstream {
     id: String,
     base: String,
     api_key: Option<String>,
+    forward_extensions: bool,
     http: Client,
 }
 
 impl TypeSafeUpstream {
     pub fn new(base: String, api_key: Option<String>) -> Result<Self, JevError> {
-        Self::new_with_id("typesafe".into(), base, api_key)
+        Self::new_with_id_and_options("typesafe".into(), base, api_key, false)
     }
 
     pub fn new_with_id(
         id: String,
         base: String,
         api_key: Option<String>,
+    ) -> Result<Self, JevError> {
+        Self::new_with_id_and_options(id, base, api_key, false)
+    }
+
+    /// Construct a TypeSafe-compatible upstream with explicit extension forwarding.
+    ///
+    /// `forward_extensions` is opt-in because the official TypeSafe endpoint is
+    /// text-only. Enabled providers must be a gateway or local implementation
+    /// that documents the extension keys it accepts.
+    pub fn new_with_id_and_options(
+        id: String,
+        base: String,
+        api_key: Option<String>,
+        forward_extensions: bool,
     ) -> Result<Self, JevError> {
         let http = Client::builder()
             .timeout(Duration::from_secs(120))
@@ -52,6 +67,7 @@ impl TypeSafeUpstream {
             id,
             base,
             api_key: api_key.filter(|key| !key.is_empty()),
+            forward_extensions,
             http,
         })
     }
@@ -68,7 +84,9 @@ impl UpstreamAdapter for TypeSafeUpstream {
     }
 
     async fn evaluate(&self, req: JevRequest) -> Result<JevResponse, JevError> {
-        let mut builder = self.http.post(&self.base).json(&req);
+        let extension_keys = extension_keys(&req);
+        let payload = request_payload(&self.id, req, self.forward_extensions)?;
+        let mut builder = self.http.post(&self.base).json(&payload);
         if let Some(key) = self.api_key.as_deref() {
             builder = builder.bearer_auth(key);
         }
@@ -122,11 +140,83 @@ impl UpstreamAdapter for TypeSafeUpstream {
             }
         }
 
-        serde_json::from_value::<JevResponse>(raw).map_err(|e| JevError::BadResponse {
-            upstream_id: self.id.clone(),
-            message: format!("parse TypeSafe SystemOne response: {e}"),
-        })
+        let mut response =
+            serde_json::from_value::<JevResponse>(raw).map_err(|e| JevError::BadResponse {
+                upstream_id: self.id.clone(),
+                message: format!("parse TypeSafe SystemOne response: {e}"),
+            })?;
+        if !extension_keys.is_empty() {
+            response.extra.insert(
+                "jev_switch".into(),
+                serde_json::json!({
+                    "request_extensions": {
+                        "received": extension_keys,
+                        "provider_disposition": if self.forward_extensions { "forwarded" } else { "stripped" },
+                    }
+                }),
+            );
+        }
+        Ok(response)
     }
+}
+
+fn extension_keys(req: &JevRequest) -> Vec<String> {
+    let mut keys = std::collections::BTreeSet::new();
+    keys.extend(req.extra.keys().cloned());
+    if let Some(extensions) = &req.extensions {
+        keys.extend(extensions.keys().cloned());
+    }
+    keys.into_iter().collect()
+}
+
+fn request_payload(
+    upstream_id: &str,
+    req: JevRequest,
+    forward_extensions: bool,
+) -> Result<serde_json::Value, JevError> {
+    let mut extensions = req.extra.clone();
+    for (key, value) in req.extensions.clone().unwrap_or_default() {
+        if extensions.insert(key.clone(), value).is_some() {
+            return Err(JevError::Config {
+                upstream_id: upstream_id.to_string(),
+                message: format!("duplicate request extension key '{key}'"),
+            });
+        }
+    }
+    let mut payload = serde_json::to_value(req).map_err(|error| JevError::Config {
+        upstream_id: upstream_id.to_string(),
+        message: format!("serialize TypeSafe SystemOne request: {error}"),
+    })?;
+    let Some(object) = payload.as_object_mut() else {
+        return Err(JevError::Config {
+            upstream_id: upstream_id.to_string(),
+            message: "serialized TypeSafe request was not an object".into(),
+        });
+    };
+    // Remove every unknown field first. This makes the default path safe even
+    // when a caller sent a provider-specific field directly at the top level.
+    for key in extensions.keys() {
+        object.remove(key);
+    }
+    object.remove("extensions");
+    if !forward_extensions {
+        return Ok(payload);
+    }
+    for (key, value) in extensions {
+        if matches!(key.as_str(), "model" | "state" | "questions" | "extensions") {
+            return Err(JevError::Config {
+                upstream_id: upstream_id.to_string(),
+                message: format!("extension key '{key}' conflicts with the Jev request contract"),
+            });
+        }
+        if object.insert(key.clone(), value).is_some() {
+            return Err(JevError::Config {
+                upstream_id: upstream_id.to_string(),
+                message: format!("extension key '{key}' conflicts with an existing request field"),
+            });
+        }
+    }
+    Ok(payload)
 }
 
 fn has_typesafe_score_legend(answer: &serde_json::Value) -> bool {
@@ -207,6 +297,8 @@ mod tests {
             model: "jev-latest".into(),
             state: json!({"text": "hello"}),
             questions,
+            extensions: Default::default(),
+            extra: Default::default(),
         }
     }
 
@@ -282,6 +374,69 @@ mod tests {
         let requests = server.received_requests().await.unwrap();
         assert_eq!(requests.len(), 1);
         assert!(!requests[0].headers.contains_key("authorization"));
+    }
+
+    #[tokio::test]
+    async fn extension_forwarding_is_opt_in_and_flattens_media_for_compatible_gateways() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/systemone"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"answers": {}})))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let mut request = complete_request();
+        request.extensions.get_or_insert_default().insert(
+            "media".into(),
+            json!([{"type":"image","data":"data:image/png;base64,AA=="}]),
+        );
+        let upstream = TypeSafeUpstream::new_with_id_and_options(
+            "multimodal-gateway".into(),
+            format!("{}/v1/systemone", server.uri()),
+            None,
+            true,
+        )
+        .unwrap();
+        let response = upstream.evaluate(request).await.unwrap();
+        assert_eq!(
+            response.extra["jev_switch"]["request_extensions"]["provider_disposition"],
+            "forwarded"
+        );
+
+        let requests = server.received_requests().await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
+        assert_eq!(body["media"][0]["type"], "image");
+        assert!(body.get("extensions").is_none());
+    }
+
+    #[tokio::test]
+    async fn extension_payload_is_stripped_for_official_compatible_defaults() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v1/systemone"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"answers": {}})))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let mut request = complete_request();
+        request
+            .extensions
+            .get_or_insert_default()
+            .insert("media".into(), json!([]));
+        let upstream =
+            TypeSafeUpstream::new(format!("{}/v1/systemone", server.uri()), None).unwrap();
+        let response = upstream.evaluate(request).await.unwrap();
+        assert_eq!(
+            response.extra["jev_switch"]["request_extensions"]["provider_disposition"],
+            "stripped"
+        );
+
+        let requests = server.received_requests().await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&requests[0].body).unwrap();
+        assert!(body.get("media").is_none());
+        assert!(body.get("extensions").is_none());
     }
 
     #[tokio::test]

@@ -80,6 +80,20 @@ pub struct JevRequest {
     pub state: serde_json::Value,
     /// Record，禁止数组；无 serde default（必填）。
     pub questions: BTreeMap<String, Question>,
+    /// Namespaced provider payloads (for example `media` or `images`).
+    ///
+    /// The gateway keeps this namespace outside the frozen Jev contract. An
+    /// adapter may explicitly opt in to flattening it into its upstream
+    /// request; otherwise it is removed before the request leaves the gateway.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-rs", ts(optional))]
+    pub extensions: Option<BTreeMap<String, serde_json::Value>>,
+    /// Direct unknown top-level fields accepted for compatibility with existing
+    /// SystemOne-compatible multimodal services. This is intentionally hidden
+    /// from the generated UI contract; callers should prefer `extensions`.
+    #[serde(default, flatten)]
+    #[cfg_attr(feature = "ts-rs", ts(skip))]
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 /// 过渡别名：主名 [`JevRequest`]（contracts/01）；deprecated 名保留以降低迁移面。
@@ -1196,5 +1210,30 @@ mod tests {
         let resp: SystemOneResponse = serde_json::from_str(r#"{"answers":{}}"#).unwrap();
         assert_eq!(req.model, "m");
         assert_eq!(resp.upstream_calls, Some(1));
+    }
+
+    #[test]
+    fn request_extensions_are_optional_and_round_trip() {
+        let plain: JevRequest =
+            serde_json::from_str(r#"{"model":"m","state":null,"questions":{}}"#)
+                .unwrap();
+        assert!(plain.extensions.is_none());
+        assert!(serde_json::to_value(&plain).unwrap().get("extensions").is_none());
+
+        let multimodal: JevRequest = serde_json::from_str(
+            r#"{
+                "model":"m",
+                "state":"inspect",
+                "questions":{},
+                "media":[{"type":"image","data":"data:image/png;base64,AA=="}]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            multimodal.extra["media"][0]["type"],
+            serde_json::json!("image")
+        );
+        let round_trip = serde_json::to_value(multimodal).unwrap();
+        assert_eq!(round_trip["media"][0]["type"], "image");
     }
 }

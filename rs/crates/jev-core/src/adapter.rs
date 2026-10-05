@@ -1222,6 +1222,8 @@ mod tests {
             model: model.to_string(),
             state: serde_json::json!("hi"),
             questions: q,
+            extensions: Default::default(),
+            extra: Default::default(),
         }
     }
 

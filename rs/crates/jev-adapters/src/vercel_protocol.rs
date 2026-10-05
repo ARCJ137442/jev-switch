@@ -196,6 +196,8 @@ mod tests {
             model: "typesafe-ai/jev".into(),
             state: serde_json::json!("hi"),
             questions: q,
+            extensions: Default::default(),
+            extra: Default::default(),
         }
     }
 
@@ -253,6 +255,8 @@ mod tests {
             model: "m".into(),
             state: serde_json::Value::Null,
             questions: q,
+            extensions: Default::default(),
+            extra: Default::default(),
         };
         let v = normalize_request_for_vercel(&req).unwrap();
         assert_eq!(v["questions"]["c"]["type"], "choice");
@@ -349,6 +353,8 @@ mod tests {
             model: "m".into(),
             state: serde_json::Value::Null,
             questions: q,
+            extensions: Default::default(),
+            extra: Default::default(),
         };
         assert_eq!(req.questions["c"].question_type_str(), "choice");
 

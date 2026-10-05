@@ -162,6 +162,8 @@ mod tests {
             model: "typesafe-ai/jev".into(),
             state: serde_json::json!("s"),
             questions,
+            extensions: Default::default(),
+            extra: Default::default(),
         };
         let normalized = normalize_request_for_vercel(&req).unwrap();
         assert_eq!(normalized["questions"]["q"]["type"], "boolean");
@@ -219,6 +221,8 @@ mod tests {
             model: "typesafe-ai/jev".into(),
             state: json!({"statement":"The meeting begins at 10 AM."}),
             questions,
+            extensions: Default::default(),
+            extra: Default::default(),
         };
         Mock::given(method("POST"))
             .and(path("/typesafe/v1/systemone"))

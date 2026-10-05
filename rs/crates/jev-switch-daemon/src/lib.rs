@@ -98,6 +98,9 @@ pub struct AppState {
     pub telemetry: telemetry::Telemetry,
     /// Gate public/direct model calls while keeping the control plane available.
     pub gateway_enabled: Arc<std::sync::atomic::AtomicBool>,
+    /// Request policy loaded from config; false preserves unknown fields for
+    /// local SystemOne-compatible services and true strips them at the gateway.
+    pub strip_unknown_fields: Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -140,6 +143,7 @@ fn known_keys_snapshot(state: &AppState) -> Vec<String> {
 /// - 启动即收集已知密钥供 redact
 pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
     let gateway_enabled = config.effective_gateway_enabled();
+    let strip_unknown_fields = config.strip_unknown_fields;
     // 进程启动时刻（status.uptime_s 基准；多次 build_state 只取首次 —— 测试同进程共享）
     admin::PROCESS_START.get_or_init(std::time::Instant::now);
     // SQLite is the runtime authority for providers and routes; the first startup imports
@@ -241,6 +245,7 @@ pub fn build_state(mut config: Config, config_path: PathBuf) -> AppState {
         db_conn: Arc::new(Mutex::new(db_conn)),
         telemetry,
         gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(gateway_enabled)),
+        strip_unknown_fields: Arc::new(std::sync::atomic::AtomicBool::new(strip_unknown_fields)),
     };
     let events = state.events.clone();
     state
@@ -318,10 +323,14 @@ pub(crate) fn build_upstreams(config: &Config) -> Vec<Box<dyn UpstreamAdapter>> 
                 }
             },
             "typesafe" => {
-                match TypeSafeUpstream::new_with_id(
+                let local_compatible_default = config.mode == config::RunMode::Local
+                    && is_loopback_http_endpoint(&provider.base);
+                match TypeSafeUpstream::new_with_id_and_options(
                     id.clone(),
                     provider.base.clone(),
                     config.effective_api_key(&id),
+                    !config.strip_unknown_fields
+                        && (provider.forward_extensions || local_compatible_default),
                 ) {
                     Ok(adapter) => adapters.push(Box::new(adapter)),
                     Err(error) => {
@@ -347,6 +356,20 @@ pub(crate) fn build_upstreams(config: &Config) -> Vec<Box<dyn UpstreamAdapter>> 
         }
     }
     adapters
+}
+
+fn is_loopback_http_endpoint(base: &str) -> bool {
+    let normalized = base.trim().to_ascii_lowercase();
+    [
+        "http://127.0.0.1:",
+        "http://localhost:",
+        "http://[::1]:",
+        "https://127.0.0.1:",
+        "https://localhost:",
+        "https://[::1]:",
+    ]
+    .iter()
+    .any(|prefix| normalized.starts_with(prefix))
 }
 
 /// Add daemon-local timing at the composition boundary without changing the
@@ -711,7 +734,7 @@ async fn systemone_handler(
     // 0. 协议解析：本地 400（criteria 缺失/错形态、未知 type、必填缺失、
     //    questions 非 record…）—— 按 contracts/01 §6 不发上游。
     //    手工 Bytes 提取：axum Json 提取器对 data 类错误回 422，契约要求 400。
-    let req: JevRequest = match serde_json::from_slice(&body) {
+    let mut req: JevRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
         Err(error) => {
             return error_response(
@@ -724,6 +747,14 @@ async fn systemone_handler(
         }
     };
 
+    let extension_keys = request_extension_keys(&req);
+    let extensions_stripped = state
+        .strip_unknown_fields
+        .load(std::sync::atomic::Ordering::SeqCst);
+    if extensions_stripped {
+        req.extensions = None;
+        req.extra.clear();
+    }
     let endpoint_id = req.model.clone();
     let published = state
         .service_endpoints
@@ -747,6 +778,19 @@ async fn systemone_handler(
     let mut result = run_request_with_strategy_traced(&state.registry, req, &keys, strategy).await;
     let elapsed = started.elapsed();
     if let Ok(response) = &mut result {
+        if !extension_keys.is_empty() {
+            let metadata = response
+                .extra
+                .entry("jev_switch".into())
+                .or_insert_with(|| serde_json::json!({}));
+            if !metadata.is_object() {
+                *metadata = serde_json::json!({});
+            }
+            metadata["request_extensions"] = serde_json::json!({
+                "received": extension_keys,
+                "gateway_disposition": if extensions_stripped { "stripped" } else { "preserved" },
+            });
+        }
         if let Some(trace) = response
             .extra
             .get_mut("route_trace")
@@ -758,6 +802,12 @@ async fn systemone_handler(
             );
         }
     } else if let Err(failure) = &mut result {
+        if !extension_keys.is_empty() {
+            failure.route_trace["request_extensions"] = serde_json::json!({
+                "received": extension_keys,
+                "gateway_disposition": if extensions_stripped { "stripped" } else { "preserved" },
+            });
+        }
         if let Some(trace) = failure.route_trace.as_object_mut() {
             trace.insert(
                 "gateway_latency_ms".into(),
@@ -800,6 +850,15 @@ async fn systemone_handler(
         }
     }
     response
+}
+
+fn request_extension_keys(req: &JevRequest) -> Vec<String> {
+    let mut keys = std::collections::BTreeSet::new();
+    keys.extend(req.extra.keys().cloned());
+    if let Some(extensions) = &req.extensions {
+        keys.extend(extensions.keys().cloned());
+    }
+    keys.into_iter().collect()
 }
 
 fn record_request(
@@ -1093,6 +1152,7 @@ mod tests {
                     api_key: Some(format!("test-{account}")),
                     api_key_env: None,
                     enabled: true,
+                    forward_extensions: false,
                 },
             );
         }
@@ -1117,6 +1177,7 @@ mod tests {
                 api_key: None,
                 api_key_env: None,
                 enabled: true,
+                forward_extensions: false,
             },
         );
 
@@ -1324,6 +1385,8 @@ mod tests {
             model: model.to_string(),
             state: serde_json::json!("hi"),
             questions: q,
+            extensions: Default::default(),
+            extra: Default::default(),
         }
     }
 

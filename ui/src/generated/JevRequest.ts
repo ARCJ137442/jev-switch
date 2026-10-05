@@ -17,4 +17,12 @@ state: JsonValue,
 /**
  * Record，禁止数组；无 serde default（必填）。
  */
-questions: { [key in string]: Question }, };
+questions: { [key in string]: Question }, 
+/**
+ * Namespaced provider payloads (for example `media` or `images`).
+ *
+ * The gateway keeps this namespace outside the frozen Jev contract. An
+ * adapter may explicitly opt in to flattening it into its upstream
+ * request; otherwise it is removed before the request leaves the gateway.
+ */
+extensions?: { [key in string]: JsonValue }, };

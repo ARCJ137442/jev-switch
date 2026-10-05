@@ -12,7 +12,8 @@ Jev Switch 是一个轻量的 **Jev 协议模型网关**：把对外服务入口
 
 - **两类调用入口**：对外服务入口由外部模型 ID、上游路由与策略组成；上游接入配置保存地址、凭据和该账号可用的模型。一个上游配置可被多个服务入口复用。
 - **双态运行**：`local` 默认仅监听 loopback 并免调用 token；`cloud` 默认对外监听并要求调用 token，管理操作另走管理员会话。两种模式都可路由到本机、LAN 或云端上游；`local` 不代表离线。详见 [部署说明](docs/deployment.md) 与[当前入口网关计划](docs/design/ENDPOINT-GATEWAY-ALIGNMENT-PLAN.md)。
-- **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。
+- **Jev 原生接口**：`POST /v1/systemone` 使用 Jev 请求/响应形状；Vercel 等适配器负责上游方言转换。网关不加载模型权重。`v0.9.0` 还允许在同一请求形状中承载多模态或供应商自定义扩展，并保留可追溯的网关/提供商处理状态。
+- **多模态兼容边界**：未知顶层字段和显式 `extensions` 在 local 模式默认保留；兼容 provider 可按配置转发 `media`、`images` 等字段，官方 TypeSafe 默认剥离。`strip_unknown_fields` 可全局启用剥离，响应元数据只记录字段名和 disposition，不记录媒体内容。详见[多模态 SystemOne 核验](docs/verification/multimodal-systemone-compatibility-2026-10-05.md)。
 - **当前源码上游覆盖范围**：内置适配器为 Vercel、Laya、TypeSafe SystemOne 与 OpenRouter。TypeSafe 可连接官方 API（默认 `https://api.typesafe.ai/v1/systemone`、模型 `jev-latest`），也可连接提供相同 Jev `/v1/systemone` 请求/响应格式的本地服务；OpenRouter 通过结构化 JSON Chat Completions 做上游转换。这不等于提供普通 OpenAI/Anthropic 对外入口。官方实测与 OpenRouter 边界见[核验记录](docs/verification/typesafe-official-live-2026-09-29.md)和[OpenRouter adapter 记录](docs/verification/openrouter-adapter-2026-09-30.md)。`v0.7.0` 已发布持久 attempt 双视图、路由 Dagre 排布、移动端样例选择和 Android 文件/剪贴板适配；`v0.7.1` 修复跨层连线未使用 Dagre 避让走廊的问题；`v0.7.2` 修复提供商删除级联和统一表单键盘交互；`v0.8.0` 增加只读 Graph API、DAG 节点领域模型和 Dashboard 第一阶段布局编辑。版本与人工验证范围见[发版记录](docs/RELEASE.md)。
 - **可编辑调用路由 DAG**：支持对外入口、路由节点和提供商模型端口之间的多跳与分支，并配置候选优先级和失败处理；简单直连只是 DAG 的一种形式。
 - **演练场横向比较**：可比较多个对外入口、直接上游模型或混合目标；轻点样例可多选，右键/长按可快速独选；结果分别呈现实际路径、耗时、usage 与错误。
@@ -133,7 +134,7 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**正式发行版本截至 2026-10-02：**最新公开发行版为 [`v0.6.3`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.6.3)，包含多跳 `on_error=next` failover 修复和 Android 网关控制修复：WebView 不再直接触发自定义 plugin ACL 命令，通知服务失败不会回滚已绑定的本地 daemon。该版本包含 Vercel 失败→TypeSafe 成功的路由回归覆盖与真实请求证据。统计自适应热力图、真实路由辉光、10%–200% UI 缩放和演练场响应式修订属于 v0.6.2 基线。通用 Rust、UI、Tauri 壳、浏览器行为、Android keystore 判型、Windows 图标资源校验和单实例版本隔离已自动验证；桌面核心路径、官方 TypeSafe 调用及 Android 初步安装/调用的历史人工证据分别按记录标注。原生桌面 WebView、托盘、稳定签名 APK、Android service/tile/通知和跨硬件性能仍需人工验收。
+**当前发布候选（2026-10-05）：**`v0.9.0` 增加多模态 SystemOne 扩展兼容、local 默认保留、provider 级显式转发和剥离可追溯元数据；完整门禁与边界见[0.9.0 发布核验](docs/verification/v0.9.0-release-candidate-2026-10-05.md)。历史版本的桌面、Android、安装器和跨硬件人工证据仍按各自核验记录处理。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 

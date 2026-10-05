@@ -87,6 +87,8 @@ pub struct ProviderView {
     pub base: String,
     pub models: Vec<String>,
     pub enabled: bool,
+    /// Whether this provider is allowed to receive request extensions such as media.
+    pub forward_extensions: bool,
     // 掩码形态 `sk-****a1b2`；无有效 key 时为 `""`（配 `api_key_set=false` 看）。
     pub api_key_masked: String,
     pub api_key_set: bool,
@@ -131,6 +133,10 @@ pub struct ProviderInput {
     // 环境变量名可选；省略表示保留已有配置。
     #[serde(default)]
     pub api_key_env: Option<String>,
+    /// Omitted keeps the current setting; true is required for multimodal gateways.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
+    pub forward_extensions: Option<bool>,
 }
 
 /// `PUT /v1/admin/providers` 请求体。
@@ -270,6 +276,7 @@ fn provider_view(id: &str, p: &ProviderConfig, keys: &[String]) -> ProviderView 
         base: redact(&p.base, keys),
         models: p.models.clone(),
         enabled: p.enabled,
+        forward_extensions: p.forward_extensions,
         api_key_masked,
         api_key_set,
     }
@@ -446,6 +453,10 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
                 api_key,
                 api_key_env,
                 enabled: p.enabled,
+                forward_extensions: p
+                    .forward_extensions
+                    .or_else(|| old.map(|o| o.forward_extensions))
+                    .unwrap_or(false),
             },
         );
     }
@@ -2498,7 +2509,7 @@ priority = 10
             .find(|p| p["id"] == "vercel")
             .expect("vercel in list");
         let obj = vercel.as_object().unwrap();
-        assert_eq!(obj.len(), 9);
+        assert_eq!(obj.len(), 10);
         assert!(obj.get("api_key").is_none(), "键集不得含 api_key");
         // laya 无 key → set=false + 空掩码
         let laya = doc["providers"]

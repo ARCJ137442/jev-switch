@@ -218,6 +218,10 @@ pub struct ProviderConfig {
     pub api_key_env: Option<String>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Flatten request extensions and preserved unknown fields into this upstream request. Keep false
+    /// for official TypeSafe, which currently accepts text/JSON state only.
+    #[serde(default)]
+    pub forward_extensions: bool,
 }
 
 fn default_enabled() -> bool {
@@ -253,6 +257,12 @@ pub struct Config {
     /// Allow private-network peers in local mode when the user explicitly opens LAN access.
     #[serde(default)]
     pub lan_access_enabled: bool,
+    /// Whether to remove unknown top-level SystemOne request fields at the
+    /// gateway boundary. Local mode defaults to false so compatible local
+    /// multimodal services can receive them; adapters still report any
+    /// provider-specific filtering in the response metadata.
+    #[serde(default)]
+    pub strip_unknown_fields: bool,
     /// Whether the Jev call path accepts work. Android defaults to stopped; other targets default on.
     #[serde(default)]
     pub gateway_enabled: Option<bool>,

@@ -256,6 +256,7 @@ async fn endpoint_routes_are_persisted_replaced_and_disabled_at_runtime() {
         db_conn: db.clone(),
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
         gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        strip_unknown_fields: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
     let registry_handle = state.registry.clone();
     let app = build_app(state);
@@ -937,6 +938,7 @@ async fn endpoint_and_global_strategy_settings_drive_real_scheduler_paths() {
         db_conn: db,
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
         gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        strip_unknown_fields: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
     let app = build_app(state);
     let request = r#"{"model":"strategy-public","state":"s","questions":{"q":{"type":"noul","instructions":"test","criteria":{"true":"yes","false":"no"}}}}"#;
@@ -1102,6 +1104,7 @@ async fn managed_tokens_enforce_roles_and_isolate_stats_and_events() {
         db_conn: db.clone(),
         telemetry: jev_switch_daemon::telemetry::Telemetry::new(),
         gateway_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        strip_unknown_fields: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
     *state.auth.mode.write().unwrap() = jev_switch_daemon::config::RunMode::Cloud;
     let app = build_app(state);

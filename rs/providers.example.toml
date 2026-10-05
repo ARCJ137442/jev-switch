@@ -16,6 +16,8 @@
 #   - admin PUT 写回会保留本文件其它段，但**注释不保留**（toml 往返限制）
 #
 # 示例默认启用 Vercel + Laya；另含禁用的 TypeSafe 官方和本地-compatible 配置。
+# 未知请求字段在 local 模式默认保留；改为 true 后，网关会在出站前剥离并在响应元数据中记录。
+strip_unknown_fields = false
 #
 # ── 双态开关（#43 · docs/12 §一）────────────────────────────────────
 # mode 只管鉴权，**不涉及上游拓扑**（拓扑不区分：以内核所在位置访问上游）。
@@ -60,6 +62,8 @@ enabled = true
 kind = "typesafe"
 base = "https://api.typesafe.ai/v1/systemone"
 api_key_env = "TYPESAFE_API_KEY"
+# Keep false: official TypeSafe currently accepts text/JSON state only.
+forward_extensions = false
 enabled = false
 
 # A local model server can use the same adapter when it implements Jev
@@ -67,6 +71,8 @@ enabled = false
 [providers.local-typesafe]
 kind = "typesafe"
 base = "http://127.0.0.1:8000/v1/systemone"
+# loopback + local 模式默认允许扩展；显式配置仍可打开该 provider 的转发许可。
+forward_extensions = false
 enabled = false
 
 # OpenRouter translates Jev decisions through structured JSON chat completions.

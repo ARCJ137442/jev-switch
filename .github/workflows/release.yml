@@ -38,7 +38,7 @@ env:
   SIDECAR_TRIPLE: x86_64-pc-windows-msvc
 
 jobs:
-  # ── 1. 版本一致性门禁（防忘记 bump 四处版本号） ──────────────────
+  # ── 1. 版本一致性门禁（防忘记 bump 五处版本号） ──────────────────
   meta:
     name: 版本门禁
     runs-on: ubuntu-latest
@@ -83,7 +83,7 @@ jobs:
           for pair in "ui:$UI_VER" "tauri.conf:$TAURI_VER" "tauri.android.conf:$ANDROID_VER" "rs/Cargo:$RS_VER" "shell/Cargo:$SHELL_VER"; do
             name="${pair%%:*}"; got="${pair#*:}"
             if [ "$got" != "$VERSION" ]; then
-              echo "::error::$name 版本 $got ≠ 期望 $VERSION — 四处版本号必须同步（见 docs/RELEASE.md）"
+              echo "::error::$name 版本 $got ≠ 期望 $VERSION — 五处版本号必须同步（见 docs/RELEASE.md）"
               fail=1
             fi
           done
@@ -314,12 +314,13 @@ jobs:
           body: |
             ## 版本说明
 
-            本次为 `0.7.1` fix 版本。Android APK 继续使用同一稳定签名，可覆盖安装 v0.7.0；请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
+            本次为 `${{ needs.meta.outputs.version }}` 版本。Android APK 继续使用同一稳定签名；请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
 
-            ## 本版修复
+            ## 本版内容
 
-            - 路由图在 v0.7.0 已用 Dagre 排布节点，但跨层连线仍沿旧单段曲线，可能穿过中间卡片。现在使用 Dagre 的虚拟节点走廊绘制长边，并保留端口位置与手动拖动后的直接连线行为。
-            - 补充跨层边绕过中间卡片的布局回归测试；v0.7.0 的 provider attempt 双视图、Android 原生 JSON/剪贴板桥、移动端样例选择与设置交互继续保留。新 Android 原生路径和桌面视觉效果仍待设备人工验收。
+            - 同一 `POST /v1/systemone` 请求可携带显式 `extensions` 或兼容服务所需的未知顶层字段。
+            - local 模式默认保留扩展；TypeSafe-compatible provider 可显式开启 `forward_extensions`，官方 TypeSafe 默认剥离并在响应元数据中记录处理状态。
+            - v0.8.0 的 Graph API、Dashboard 布局、provider attempt 双视图、Android 原生 JSON/剪贴板桥和既有路由能力继续保留。
 
             ## 安装
 

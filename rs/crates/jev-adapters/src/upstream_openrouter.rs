@@ -215,6 +215,8 @@ mod tests {
                     criteria: None,
                 },
             )]),
+            extensions: Default::default(),
+            extra: Default::default(),
         }
     }
 
