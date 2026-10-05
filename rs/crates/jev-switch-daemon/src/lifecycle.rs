@@ -1049,7 +1049,12 @@ mod tests {
     async fn shell_programs_are_rejected_even_when_the_global_gate_is_open() {
         let manager = LifecycleManager::default();
         let mut provider = provider();
-        provider.lifecycle.program = Some("C:/Windows/System32/cmd.exe".into());
+        provider.lifecycle.program = Some(if cfg!(windows) {
+            "C:/Windows/System32/cmd.exe"
+        } else {
+            "/bin/sh"
+        }
+        .into());
         let mut config = Config::default();
         config.allow_host_commands = true;
         let error = manager
