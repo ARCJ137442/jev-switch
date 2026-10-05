@@ -176,14 +176,14 @@ pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
 
 ### Windows Authenticode 签名 Secrets
 
-Windows SmartScreen 的“发布者：未知”来自没有 Authenticode 签名；自签名证书只能显示一个不受信任的发布者，不能建立公共信誉。要让正式下载包显示可信发布者，需从受信任的代码签名 CA 取得 Windows PFX/P12（OV/EV），并在 GitHub 仓库 `Settings → Secrets and variables → Actions` 配置：
+Windows SmartScreen 的“发布者：未知”来自没有 Authenticode 签名；自签名证书只能显示一个不受信任的发布者，不能建立公共信誉。当前发行流水线默认允许未签名功能验证包；要切换为正式签名门禁，先在仓库 Variables 设置 `WINDOWS_SIGNING_REQUIRED=true`，再从受信任的代码签名 CA 取得 Windows PFX/P12（OV/EV），并在 GitHub 仓库 `Settings → Secrets and variables → Actions` 配置：
 
 | Secret 名称 | 填写内容 |
 |---|---|
 | `WINDOWS_CERTIFICATE_BASE64` | PFX/P12 文件的完整单行 Base64，不要提交原文件或换行 |
 | `WINDOWS_CERTIFICATE_PASSWORD` | PFX 私钥密码 |
 
-tag push 会在构建开始时校验这两个 Secret；缺失或 Base64/PFX 无法解析会直接阻断 Windows job，不会发布未签名安装包。签名使用 `signtool` 的 SHA-256 文件摘要、RFC 3161 时间戳和 `/pa` 验证，覆盖 daemon、Tauri 壳、MSI、NSIS、Standalone；Portable ZIP 在签名完成后压缩。`workflow_dispatch` 干跑允许不配置证书，但产物明确是未签名验证包，不能作为 Release。签名清单会随 Windows artifact/Release 上传，包含文件名、SHA-256、签名状态和证书指纹。
+当 `WINDOWS_SIGNING_REQUIRED=true` 时，tag push 会校验这两个 Secret；缺失或 Base64/PFX 无法解析会直接阻断 Windows job。开关为 false 时仍构建并上传 Windows 包，并随包写入 `windows-signing-status.txt` 明确其未签名。签名使用 `signtool` 的 SHA-256 文件摘要、RFC 3161 时间戳和 `/pa` 验证，覆盖 daemon、Tauri 壳、MSI、NSIS、Standalone；Portable ZIP 在签名完成后压缩。签名清单会随 Windows artifact/Release 上传，包含文件名、SHA-256、签名状态和证书指纹。
 
 如果 Windows job 因缺少 Secret 失败，配置完成后可以直接在该次失败的 Release run 中点击 **Re-run failed jobs**，不需要重建 tag。当前 `v0.9.3` run `37285568031` 的其他 jobs 已通过，Windows 失败只发生在签名证书预检；配置 Secret 后应直接重跑 Windows job。
 
