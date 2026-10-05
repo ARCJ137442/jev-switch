@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.9.3] - 2026-10-05
+
+### Fixed
+
+- Windows 发布流程接入 Authenticode SHA-256 签名、RFC 3161 时间戳和签后 `/pa` 校验。
+- daemon、Tauri 壳、MSI、NSIS、Standalone 及 Portable ZIP 使用同一签名链；Release 附带签名清单。
+- 正式 tag 缺少 Windows PFX 或密码时阻断发布，避免产生“发布者：未知”的正式包；workflow_dispatch 仍可生成明确标注的未签名干跑包。
+
+### Verification
+
+- PowerShell 签名脚本和发布 workflow YAML 静态解析通过。
+- SmartScreen 信誉仍取决于公开 CA 证书与下载历史，不承诺新证书首次下载立即跳过所有提示。
+
+### 用户叙事与对照场景
+
+#### Windows 下载安全提示：从未签名包到可验证发布者
+
+- **起点**：用户下载 Standalone EXE 时看到“发布者：未知”，无法确认文件是否来自 Jev Switch。
+- **问题**：旧流程只构建和上传 EXE，没有 Authenticode 签名，Windows 无法显示受信任发布者。
+- **操作**：Release tag 注入 CA 签发的 PFX，依次签名 daemon、Tauri 壳、安装器和 Standalone，并使用时间戳；签名清单记录证书指纹和文件 SHA-256。
+- **结果**：用户可在文件属性和清单中核对签名、发布者、时间戳与哈希，安装包和独立包共享同一发布身份。
+- **对照**：手动 workflow_dispatch 仍可用于无证书构建验证，但不会冒充正式签名 Release；新证书的 SmartScreen 信誉积累单独处理。
+- **边界**：代码签名证明发布身份和文件完整性，不保证每台机器立即消除 SmartScreen 的下载信誉提示，也不替代 Defender 扫描。
+
 ## [0.9.2] - 2026-10-05
 
 ### Added

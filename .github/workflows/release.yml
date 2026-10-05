@@ -137,12 +137,57 @@ jobs:
       - name: npm ci
         run: npm ci --prefix ui
 
+      # Windows SmartScreen 的发布者身份来自 Authenticode 代码签名，不能由
+      # GitHub Actions 自动生成。正式 tag 必须提供受公开信任链签发的 PFX；
+      # workflow_dispatch 仍允许无证书干跑，但不会被当成可发布包。
+      - name: 准备 Windows Authenticode 签名证书
+        if: github.event_name == 'push'
+        id: signing
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
+            throw 'Missing WINDOWS_CERTIFICATE_BASE64. Configure a publicly trusted Windows code-signing PFX before pushing a release tag.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw 'Missing WINDOWS_CERTIFICATE_PASSWORD. The release tag is intentionally blocked instead of publishing unsigned Windows artifacts.'
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'jev-switch-windows-release.pfx'
+          & .\scripts\prepare-windows-signing.ps1 `
+            -Base64Payload $env:WINDOWS_CERTIFICATE_BASE64 `
+            -OutputPath $certificatePath
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to materialize the Windows signing certificate.' }
+          "WINDOWS_CERTIFICATE_PATH=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          'WINDOWS_SIGNING_ENABLED=true' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          'enabled=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: 标记 Windows 干跑未签名状态
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          'WINDOWS_SIGNING_ENABLED=false' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       # daemon 先构建 → 作为 sidecar 塞进 src-tauri/binaries/
       # （binaries/ 已 gitignore，fresh clone 必须这步，见 docs/deployment.md §9.2）
       # 命名必须带 target-triple（externalBin 约定），且**不可**与壳 bin 同名
       # （WiX ICE30 → MSI 失败，见 docs/deployment.md §9.4-2）
       - name: 构建 daemon（sidecar）
         run: cargo build --release --locked --manifest-path rs/Cargo.toml -p jev-switch-daemon
+
+      - name: 签名 daemon（进入 sidecar 前）
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          & .\scripts\sign-windows-artifacts.ps1 `
+            -Path 'rs/target/release/jev-switch.exe' `
+            -CertificatePath $env:WINDOWS_CERTIFICATE_PATH `
+            -CertificatePassword $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -MetadataPath "windows-signing-${{ needs.meta.outputs.version }}.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows daemon signing failed.' }
 
       - name: 放置 sidecar
         shell: pwsh
@@ -159,11 +204,45 @@ jobs:
       - name: 桌面内核身份与产物解析回归
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
 
-      # 必须在 src-tauri/ 下跑：beforeBuildCommand 的 hook cwd = src-tauri 的父目录
-      # （= 仓库根），故 `npm run build --prefix ui` 才解析正确（docs/deployment.md §9.4-1）
-      - name: Tauri build（nsis + msi）
+      # 先只构建壳，签名后再 bundle。这样 MSI/NSIS 内部的主 EXE 也来自已签名输入。
+      - name: Tauri build 壳（暂不 bundle）
         working-directory: src-tauri
-        run: npx --yes @tauri-apps/cli@2.11.5 build
+        run: npx --yes @tauri-apps/cli@2.11.5 build --no-bundle --ci --no-sign
+
+      - name: 签名 Tauri 壳（bundle 前）
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          & .\scripts\sign-windows-artifacts.ps1 `
+            -Path 'src-tauri/target/release/jev-switch.exe' `
+            -CertificatePath $env:WINDOWS_CERTIFICATE_PATH `
+            -CertificatePassword $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -MetadataPath "windows-signing-${{ needs.meta.outputs.version }}.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Tauri shell signing failed.' }
+
+      # 必须在 src-tauri/ 下跑：bundle 复用上一步已经构建并签名的壳。
+      - name: Tauri bundle（nsis + msi）
+        working-directory: src-tauri
+        run: npx --yes @tauri-apps/cli@2.11.5 bundle --bundles nsis,msi --ci --no-sign
+
+      - name: 签名 Windows 安装器
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $version = '${{ needs.meta.outputs.version }}'
+          $msi = @(Get-ChildItem src-tauri/target/release/bundle/msi -Filter "*_${version}_*.msi" -File)
+          $nsis = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter "*_${version}_*-setup.exe" -File)
+          if ($msi.Count -ne 1 -or $nsis.Count -ne 1) { throw "Expected one MSI and one NSIS executable before signing; found MSI=$($msi.Count), NSIS=$($nsis.Count)." }
+          & .\scripts\sign-windows-artifacts.ps1 `
+            -Path @($msi[0].FullName, $nsis[0].FullName) `
+            -CertificatePath $env:WINDOWS_CERTIFICATE_PATH `
+            -CertificatePassword $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -MetadataPath "windows-signing-${version}.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer signing failed.' }
 
       - name: 组装同批便携运行目录并压缩
         shell: pwsh
@@ -181,15 +260,33 @@ jobs:
           # deliberate no-overwrite guard.
           $portable = "src-tauri/target/release/bundle/portable/jev-switch-${{ needs.meta.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}"
           .\scripts\package-portable.ps1 -Destination $portable -MsiPath $msi[0].FullName -NsisPath $nsis[0].FullName
-          # Keep the user-facing archive name stable and write it outside the cached target tree.
-          $zip = "jev-switch-portable-${{ needs.meta.outputs.version }}-windows-x64.zip"
-          Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $zip -CompressionLevel Optimal
-          Get-FileHash -LiteralPath $zip -Algorithm SHA256
-
           # Build a separate one-file Tauri application from the same verified daemon/UI inputs.
           $standalone = "src-tauri/target/release/bundle/standalone/jev-switch-standalone-${{ needs.meta.outputs.version }}-windows-x64.exe"
           .\scripts\build-standalone.ps1 -PortableDirectory $portable -OutputPath $standalone
+
+          if ($env:WINDOWS_SIGNING_ENABLED -eq 'true') {
+            $signingPassword = $env:WINDOWS_CERTIFICATE_PASSWORD
+            & .\scripts\sign-windows-artifacts.ps1 `
+              -Path $standalone `
+              -CertificatePath $env:WINDOWS_CERTIFICATE_PATH `
+              -CertificatePassword $signingPassword `
+              -MetadataPath "windows-signing-${{ needs.meta.outputs.version }}.json"
+            if ($LASTEXITCODE -ne 0) { throw 'Windows Standalone signing failed.' }
+          }
+
+          # Compress only after every executable and installer has its final signature.
+          $zip = "jev-switch-portable-${{ needs.meta.outputs.version }}-windows-x64.zip"
+          Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $zip -CompressionLevel Optimal
+          Get-FileHash -LiteralPath $zip -Algorithm SHA256
           Get-FileHash -LiteralPath $standalone -Algorithm SHA256
+
+      - name: 上传 Windows 签名清单
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-switch-windows-signing-${{ needs.meta.outputs.version }}
+          path: windows-signing-${{ needs.meta.outputs.version }}.json
+          if-no-files-found: error
 
       - name: 上传安装包
         uses: actions/upload-artifact@v4
@@ -298,7 +395,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: jev-switch-windows-${{ needs.meta.outputs.version }}
+          pattern: jev-switch-windows-*
           merge-multiple: true
           path: dist
 

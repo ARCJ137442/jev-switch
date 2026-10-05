@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-05，最新公开发行版候选为 [`v0.9.2`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.2)。本 patch 版本在 v0.9.1 的多模态 SystemOne 扩展兼容和 Routing DAG 滚轮平移基础上，为 Tauri APP 增加 Ctrl+Tab 顺序切换与 Ctrl+Shift+Tab 逆序切换；浏览器环境、输入控件和只读权限边界保持清晰。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-05，最新公开发行版候选为 [`v0.9.3`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.3)。本 patch 版本在 v0.9.2 的 Tauri 顶级页面快捷切换基础上接入 Windows Authenticode 签名门禁、RFC 3161 时间戳和签名清单；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 
@@ -174,6 +174,19 @@ pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
 
 四项必须属于同一个 keystore。Android job 会先验证 Base64、keystore、alias 和签名，再把 APK 与 manifest 上传；任一项缺失时只跳过 Android 步骤，并不会阻断 Windows Standalone Release。正式签名后建议保存 workflow 输出的 signer SHA-256 指纹，后续版本必须保持一致，才能覆盖安装升级。历史 debug-signed APK 与稳定签名不是同一身份，首次迁移需卸载旧 APK。
 
+### Windows Authenticode 签名 Secrets
+
+Windows SmartScreen 的“发布者：未知”来自没有 Authenticode 签名；自签名证书只能显示一个不受信任的发布者，不能建立公共信誉。要让正式下载包显示可信发布者，需从受信任的代码签名 CA 取得 Windows PFX/P12（OV/EV），并在 GitHub 仓库 `Settings → Secrets and variables → Actions` 配置：
+
+| Secret 名称 | 填写内容 |
+|---|---|
+| `WINDOWS_CERTIFICATE_BASE64` | PFX/P12 文件的完整单行 Base64，不要提交原文件或换行 |
+| `WINDOWS_CERTIFICATE_PASSWORD` | PFX 私钥密码 |
+
+tag push 会在构建开始时校验这两个 Secret；缺失或 Base64/PFX 无法解析会直接阻断 Windows job，不会发布未签名安装包。签名使用 `signtool` 的 SHA-256 文件摘要、RFC 3161 时间戳和 `/pa` 验证，覆盖 daemon、Tauri 壳、MSI、NSIS、Standalone；Portable ZIP 在签名完成后压缩。`workflow_dispatch` 干跑允许不配置证书，但产物明确是未签名验证包，不能作为 Release。签名清单会随 Windows artifact/Release 上传，包含文件名、SHA-256、签名状态和证书指纹。
+
+代码签名不能保证每台机器立即跳过 SmartScreen：新证书和新文件仍可能经历基于下载信誉的“未知应用”提示，用户可核对发布者、Release SHA-256 与签名清单。不要为了消除提示而关闭 Defender 或把自签名证书当成公开信任证书。
+
 ---
 
 ## 失败排查
@@ -186,6 +199,8 @@ pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
 | MSI 构建失败提 ICE30 | sidecar 与壳主二进制同名了。必须叫 `jev-switch-daemon-<triple>.exe`（`docs/deployment.md` §9.4-2） |
 | `beforeBuildCommand` ENOENT | hook 的 cwd 是仓库根，用 `--prefix ui` 而非 `../ui`（`docs/deployment.md` §9.4-1） |
 | ghcr push 403 | 仓库 Actions 权限没给 write（见上节） |
+| Windows tag 被 `WINDOWS_CERTIFICATE_*` 阻断 | 正式发布必须配置 CA 签发的 PFX 与密码；手动 workflow 只用于无签名干跑 |
+| SmartScreen 仍提示未知应用 | 检查 EXE 属性的数字签名、发布者和时间戳；新证书/新下载信誉需要时间积累，签名本身不等于立即消除信誉提示 |
 | `__TAURI_BUNDLE_TYPE` warn | 无 updater 插件的已知无害告警，忽略 |
 
 ---
@@ -195,5 +210,5 @@ pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
 ## 尚未做
 
 - macOS / Linux 桌面打包（v0.4.0 仍只发布 Windows 桌面；Linux 继续提供 headless CLI）
-- 代码签名与公证
+- Windows Authenticode 已接入正式 tag 门禁；macOS 代码签名与公证、Tauri updater 增量更新尚未接入
 - Tauri updater 增量更新

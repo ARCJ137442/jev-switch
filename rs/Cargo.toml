@@ -17,16 +17,16 @@ members = ["crates/*"]
 default-members = ["crates/jev-switch-daemon"]
 
 [workspace.package]
-version = "0.9.2"
+version = "0.9.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ARCJ137442/jev-switch"
 
 [workspace.dependencies]
 # 内部 crate
-jev-protocol = { path = "crates/jev-protocol", version = "0.9.2" }
-jev-core = { path = "crates/jev-core", version = "0.9.2" }
-jev-adapters = { path = "crates/jev-adapters", version = "0.9.2" }
+jev-protocol = { path = "crates/jev-protocol", version = "0.9.3" }
+jev-core = { path = "crates/jev-core", version = "0.9.3" }
+jev-adapters = { path = "crates/jev-adapters", version = "0.9.3" }
 
 # 外部 crate（版本与拆分前 rs 单包保持一致）
 axum = "0.7"
