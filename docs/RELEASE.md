@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-05，最新公开发行版候选为 [`v0.9.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.0)。本 minor 版本增加多模态 SystemOne 扩展兼容：local 模式默认保留未知字段，provider 可显式转发扩展，官方 TypeSafe 默认剥离并在响应元数据记录处理结果；同时保留 v0.8.0 的 DAG 节点领域模型、只读 Graph API、runtime snapshot 节点投影和 Dashboard 第一阶段布局编辑。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-05，最新公开发行版候选为 [`v0.9.1`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.9.1)。本 patch 版本修复 Routing DAG 画布滚轮平移：普通滚轮上下移动，Shift+滚轮左右移动，并保留 Ctrl/⌘ 缩放、节点拖拽、键盘和触摸路径；同时继承 v0.9.0 的多模态 SystemOne 扩展兼容：local 模式默认保留未知字段，provider 可显式转发扩展，官方 TypeSafe 默认剥离并在响应元数据记录处理结果。Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。真实多模态模型推理、图像校准和 Graph API 写入不属于本候选的已验证承诺。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 

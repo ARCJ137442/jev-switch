@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, CornerUpLeft, CornerUpRight, Minus, Plus, Rotat
 import { edgeKey, type Route } from '../../api/admin';
 import { useI18n } from '../../i18n';
 import { EdgeInspector } from './EdgeInspector';
-import { buildDagLayout, corridorKey, nearestPort, nodePorts, routeIdentity, wirePath, type DagEntry, type DagPort, type DagProvider, type Point } from './dag';
+import { buildDagLayout, corridorKey, nearestPort, nodePorts, routeIdentity, wheelPanDelta, wirePath, type DagEntry, type DagPort, type DagProvider, type Point } from './dag';
 import './dag.css';
 import { readRoutingHudAutoHide, SETTINGS_CHANGE_EVENT } from '../../settings/preferences';
 import { edgeActivityVisual, type RouteActivityState } from '../../pages/routingActivity';
@@ -139,10 +139,17 @@ export function DagCanvas(props: Props) {
         setContext({ ...point(event), background: true });
       }}
       onWheel={event => {
-        if (!event.ctrlKey && !event.metaKey) return;
-        event.preventDefault();
         const view = viewport.current;
         if (!view) return;
+        // Let the insert field and HUD controls keep their normal wheel behavior.
+        if ((event.target as HTMLElement).closest('input,select,textarea,button')) return;
+        if (!event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          const delta = wheelPanDelta(event.deltaX, event.deltaY, event.shiftKey);
+          setPan(current => ({ x: current.x + delta.x, y: current.y + delta.y }));
+          return;
+        }
+        event.preventDefault();
         const oldZoom = zoom;
         const nextZoom = Math.min(2.4, Math.max(.4, Math.round((oldZoom * (event.deltaY < 0 ? 1.1 : .9)) * 100) / 100));
         if (nextZoom === oldZoom) return;

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.1] - 2026-10-05
+
+### Fixed
+
+- Routing DAG 画布恢复普通滚轮上下平移。
+- Routing DAG 画布支持 Shift+滚轮左右平移，并保留触控板原生横向滚轮增量。
+- 保留 Ctrl/⌘+滚轮缩放、节点拖拽、键盘操作与触摸双指缩放路径。
+
+### Verification
+
+- UI tests：66 项通过；TypeScript lint 与生产构建通过。
+- 版本字段与锁文件统一为 `0.9.1`。
+
 ## [0.9.0] - 2026-10-05
 
 ### Added

@@ -14,6 +14,15 @@ export interface DagNode extends Point {
 export interface DagPort extends Point { id: string; direction: 'input' | 'output'; model?: string | null }
 export interface DagLayout { nodes: DagNode[]; corridors: Map<string, Point[]> }
 
+/** Convert a wheel gesture into viewport translation while keeping zoom separate. */
+export function wheelPanDelta(deltaX: number, deltaY: number, shiftKey: boolean): Point {
+  if (shiftKey) {
+    const horizontal = deltaX || deltaY;
+    return { x: horizontal === 0 ? 0 : -horizontal, y: 0 };
+  }
+  return { x: deltaX === 0 ? 0 : -deltaX, y: deltaY === 0 ? 0 : -deltaY };
+}
+
 export function corridorKey(left: string, right: string): string {
   return JSON.stringify([left, right]);
 }

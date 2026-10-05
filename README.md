@@ -134,7 +134,7 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**当前发布候选（2026-10-05）：**`v0.9.0` 增加多模态 SystemOne 扩展兼容、local 默认保留、provider 级显式转发和剥离可追溯元数据；完整门禁与边界见[0.9.0 发布核验](docs/verification/v0.9.0-release-candidate-2026-10-05.md)。历史版本的桌面、Android、安装器和跨硬件人工证据仍按各自核验记录处理。
+**当前发布候选（2026-10-05）：**`v0.9.1` 在 v0.9.0 多模态 SystemOne 扩展兼容基础上修复 Routing DAG 画布滚轮平移：普通滚轮上下移动，Shift+滚轮左右移动；完整门禁与边界见[0.9.1 发布核验](docs/verification/v0.9.1-release-candidate-2026-10-05.md)。历史版本的桌面、Android、安装器和跨硬件人工证据仍按各自核验记录处理。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 

@@ -1,9 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadTs } from './load-ts.mjs';
-const { buildDag, buildDagLayout, corridorKey, nodePorts, nearestPort, routeIdentity, routeDocumentSignature, wirePath } = await loadTs('../src/components/routing/dag.ts');
+const { buildDag, buildDagLayout, corridorKey, nodePorts, nearestPort, routeIdentity, routeDocumentSignature, wheelPanDelta, wirePath } = await loadTs('../src/components/routing/dag.ts');
 const { DocumentHistory } = await loadTs('../src/components/routing/documentHistory.ts');
 const route = (left, right, model) => ({ left, right, upstream_model: model, match: 'exact', priority: 10, sticky: 'session', on_error: 'next' });
+
+test('wheel gestures pan the routing canvas vertically and with Shift horizontally', () => {
+  assert.deepEqual(wheelPanDelta(0, 120, false), { x: 0, y: -120 });
+  assert.deepEqual(wheelPanDelta(0, 120, true), { x: -120, y: 0 });
+  assert.deepEqual(wheelPanDelta(18, 120, true), { x: -18, y: 0 }, 'native horizontal delta wins when present');
+  assert.deepEqual(wheelPanDelta(-24, 40, false), { x: 24, y: -40 });
+});
 
 test('multi-hop branches have left-to-right columns and separate same-address account cards', () => {
   const routes = [route('public', 'fallback'), route('fallback', 'personal', 'M1'), route('fallback', 'personal', 'M2'), route('public', 'team', 'M1')];
