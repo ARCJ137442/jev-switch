@@ -147,7 +147,7 @@ jobs:
       # GitHub Actions 自动生成。正式 tag 必须提供受公开信任链签发的 PFX；
       # workflow_dispatch 仍允许无证书干跑，但不会被当成可发布包。
       - name: 准备 Windows Authenticode 签名证书
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && needs.meta.outputs.prerelease != 'true'
         id: signing
         shell: pwsh
         env:
@@ -170,10 +170,16 @@ jobs:
           'enabled=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: 标记 Windows 干跑未签名状态
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || needs.meta.outputs.prerelease == 'true'
         shell: pwsh
         run: |
           'WINDOWS_SIGNING_ENABLED=false' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: 标记预发布 Windows 包未签名
+        if: needs.meta.outputs.prerelease == 'true'
+        shell: pwsh
+        run: |
+          'Windows Authenticode signing is intentionally skipped for the v0.10.0 pre-release; this artifact is for functional testing only.' | Out-File -FilePath windows-signing-status.txt -Encoding utf8
 
       # daemon 先构建 → 作为 sidecar 塞进 src-tauri/binaries/
       # （binaries/ 已 gitignore，fresh clone 必须这步，见 docs/deployment.md §9.2）
@@ -303,6 +309,7 @@ jobs:
             src-tauri/target/release/bundle/nsis/jev-switch_${{ needs.meta.outputs.version }}_x64-setup.exe
             jev-switch-portable-*-windows-x64.zip
             src-tauri/target/release/bundle/standalone/jev-switch-standalone-*-windows-x64.exe
+            windows-signing-status.txt
           if-no-files-found: error
 
   # ── 4. Headless CLI（Linux/Windows；Termux 使用设备本机 cargo install） ──
@@ -429,7 +436,7 @@ jobs:
           body: |
             ## 版本说明
 
-             本次为 `${{ needs.meta.outputs.version }}` 版本。该版本按当前版本策略标记为预发布候选；Android APK 继续使用同一稳定签名，请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
+             本次为 `${{ needs.meta.outputs.version }}` 版本。该版本按当前版本策略标记为预发布候选；本预发布的 Windows 包仅用于功能验证，随包 `windows-signing-status.txt` 明确记录未使用 Authenticode。Android APK 继续使用同一稳定签名，请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
 
             ## 本版内容
 
