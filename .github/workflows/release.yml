@@ -430,33 +430,25 @@ jobs:
           body: |
             ## 版本说明
 
-             本次为 `${{ needs.meta.outputs.version }}` 版本。该版本按当前版本策略标记为预发布候选；本预发布的 Windows 包仅用于功能验证，随包 `windows-signing-status.txt` 明确记录未使用 Authenticode。Android APK 继续使用同一稳定签名，请核对随包 JSON 中的 commit、版本码与 APK SHA-256。
+            本次为 `${{ needs.meta.outputs.version }}` 正式版本。Windows 资产随包提供 `windows-signing-status.txt`；若仓库变量 `WINDOWS_SIGNING_REQUIRED` 未开启，该清单会明确标记 Windows 包未使用 Authenticode。Android APK（如签名 Secrets 已配置）随包提供 commit、版本码、签名指纹和 SHA-256 manifest。
 
             ## 本版内容
 
-            - 同一 `POST /v1/systemone` 请求可携带显式 `extensions` 或兼容服务所需的未知顶层字段。
-            - local 模式默认保留扩展；TypeSafe-compatible provider 可显式开启 `forward_extensions`，官方 TypeSafe 默认剥离并在响应元数据中记录处理状态。
-            - v0.8.0 的 Graph API、Dashboard 布局、provider attempt 双视图、Android 原生 JSON/剪贴板桥和既有路由能力继续保留。
+            - 提供商高级配置支持受控服务的启动、停止、状态探查、readiness、超时、进程策略和生命周期审计。
+            - Providers 页面保留每个提供商的服务启停面板状态，面板打开时自动探测服务状态；每个提供商可独立关闭 API 自动探测。
+            - Laya、StartLux 和 OneJev 的外部脚本生命周期已完成多轮状态、启动、就绪、停止验证；云端 provider 继续保持手工管理。
+            - 公开本地服务脚本指南包含脱敏示例、逐项环境变量说明、UI 配置步骤、跨平台实现原理和故障排查 FAQ。
+            - 既有路由 DAG、路由活动、统计、演练场、Android 和稳定品牌图标能力保持兼容。
 
             ## 用户叙事与对照场景
 
-            ### 顶级页面快捷切换：像浏览器标签一样比较页面
+            ### 本地服务启停：从手工记命令到可回溯的生命周期
 
-            用户在 Jev Switch 中反复比较 Dashboard、Providers、Routing 和 Playground，需要连续查看多个顶级页面。鼠标往返顶栏会打断对照节奏，而普通浏览器的 Ctrl+Tab 又不应被网页版本抢走。现在 Tauri APP 中按 Ctrl+Tab 顺序切换、Ctrl+Shift+Tab 逆序切换；焦点位于输入控件或可编辑区域时快捷键让位。对照场景是：Tauri APP 接管页面循环，普通浏览器保留浏览器标签切换；只读用户只循环访问可见页面。
+            用户为本地模型服务分别维护启动、停止和状态脚本，过去需要离开控制台手工执行，也难以判断“进程存在”是否等于“API 已就绪”。现在在 Providers 的服务启停面板登记通用命令，Jev Switch 只负责安全执行、readiness 探测、状态反馈和审计；脚本仍由用户按自己的模型运行时维护。对照场景是云端 provider：没有可控服务配置时，仍只做 API 探测，不会尝试主机命令。
 
-            ### 多模态与滚轮交互的连续体验
+            ### 多轮启停：从一次成功到可重复恢复
 
-            v0.9.x 还让本地多模态 provider 通过同一个 `/v1/systemone` 入口承载媒体扩展，并让 Routing DAG 普通滚轮上下平移、Shift+滚轮左右平移。媒体转发与视觉质量、滚轮手感与硬件设备分别验证，避免把协议兼容或输入便利误写成模型质量承诺。
-
-            ## 用户叙事与对照场景
-
-            ### 多模态兼容：同一个 Jev 入口承载图片决策
-
-            用户已经有本地 OneJev 图片决策服务，但下游只会调用 `/v1/systemone`。问题在于官方 TypeSafe 是文本/JSON 边界，把 Base64 塞进 `state` 无法表达媒体语义。用户把媒体放入 `extensions.media` 并为本地兼容 provider 开启 `forward_extensions`，Jev Switch 继续提供同一个入口，同时在 route trace 中记录字段名和 forwarded/stripped 状态。与官方 TypeSafe 对照时，协议不变但媒体被明确剥离；视觉质量与概率校准仍单独验收。
-
-            ### Routing DAG 滚轮平移：从拖拽浏览到滚轮浏览
-
-            当路由图变成长地图，用户原本只能拖拽空白区域移动视口。现在普通滚轮上下平移，Shift+滚轮左右平移，触控板 `deltaX` 优先；Ctrl/⌘+滚轮仍缩放，拖拽节点仍改布局。对照可见滚轮改变“看哪里”、缩放改变“看多大”、拖拽改变“图怎么组织”；输入控件与触摸路径保留原行为。原生硬件手感和多模态模型质量仍需相应设备/模型验证。
+            Laya、StartLux 和 OneJev 分别经历状态→启动→就绪→停止循环；失败时界面保留错误码、请求 ID 和下一步检查方向，避免把“启动器进程退出”误报为“服务运行中”。脚本的路径、权重和运行时依赖不写入公开发布页，统一放在脱敏指南的占位符中。
 
             ## 安装
 

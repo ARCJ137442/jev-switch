@@ -231,13 +231,21 @@
 
 **验收：**删除仍被路由直接引用的 provider 后，配置、可执行路由和页面状态一致；保留的别名分支仍能到达其他 provider。各表单可用 `Ctrl/Cmd+Enter` 提交，单行输入可继续用 `Enter` 或 `Tab` 导航，多行内容不会被截断或误提交。
 
-### 本地模型 provider 快速启停（0.10.x 后端主线，UI/平台验收未完成）
+### 本地模型 provider 快速启停（0.10.x 后端主线，Windows Laya/StartLux 已验收）
 
 - [x] 将需求收敛为独立的[本地模型提供商生命周期计划](LOCAL-MODEL-LIFECYCLE-PLAN.md)：provider `enabled`、`controllable`、实际服务状态和 `process_policy` 四维分离，支持结构化启动/停止/状态命令、启动策略、readiness 检查和 toast 反馈；云端 provider 默认属于不可控服务。
 - [x] 规定命令只允许参数化 argv，不执行任意 shell；API 地址、逗号/JSON 模型列表和经确认的 API key 以临时 allowlist 环境变量注入，日志/历史/调试输出全部脱敏。
 - [x] 规定全局 `allow_host_commands` 默认关闭，开启时使用 5 秒警告；LAN/cloud 仅管理员可配置/执行，Android local 可在 APP 内明确放行，停止只处理本应用拥有的 PID/进程组或显式停止命令，不按端口/进程名误杀用户服务。
 - [x] 新增[配置能力注册表与 Agent API 计划](CONFIG-CAPABILITY-REGISTRY-PLAN.md)：人类配置入口共享 Agent discovery、类型校验、权限 scope、审计、错误码和 schema migration，lifecycle 执行要求独立的 `provider:lifecycle:execute`/`host_commands:enable` 权限。
-- [x] `0.10.x` 已将 lifecycle schema、Provider 脱敏摘要、`GET /v1/admin/capabilities`、独立 lifecycle 读写/执行 API、结构化 argv、readiness、`startup_check`/`on_demand`、provider 互斥、持久所有权快照、独立审计表、主机命令开关和 Provider 高级 UI 加入 daemon/UI；已通过 workspace/ts-rs/UI 门禁，scope 写入、完整进程组策略、真实 Laya/StartLux/OpenJev 与平台验收尚未完成。
+- [x] `0.10.x` 已将 lifecycle schema、Provider 脱敏摘要、`GET /v1/admin/capabilities`、独立 lifecycle 读写/执行 API、结构化 argv、readiness、`startup_check`/`on_demand`、provider 互斥、持久所有权快照、独立审计表、主机命令开关和 Provider 高级 UI 加入 daemon/UI；已通过 workspace/ts-rs/UI 门禁。细粒度 Agent scope、完整进程组策略、OpenJev/OneJev 和 Android/cloud 平台验收仍未完成；Windows Laya/StartLux 已通过本机 EXE API 验收。
+- [x] 2026-10-06 修复启停面板的失败引导：未保存的 `controllable`/命令编辑会显示“未保存”并阻止启动/停止，保存前做绝对路径与必填校验；daemon 错误体保留 `code`、`detail`、`remediation`，UI 展示具体原因和请求 ID，不再把生命周期错误压缩成无意义的 `HTTP 400`。Rust 生命周期测试、ts-rs 类型生成、UI lint/build/test 均通过；该修复尚未进入已发布的 v0.10.0 资产。
+- [x] 2026-10-06 增加独立的 `allow_shell_commands` 二值安全开关：默认关闭，必须先开启主机命令再经过第二个 5 秒确认；开启后才允许显式登记的 PowerShell/cmd 等解释器作为生命周期程序。Jev Decision Lab 的 Laya 启动器与状态探查命令已登记到本地 Laya provider；启动会执行 lab 的内存/GPU 预检，当前机器因超过 75% 内存门槛而拒绝启动，错误已保留在 daemon 日志。
+- [x] 2026-10-06 收紧提供商配置 API：普通 `/v1/admin/providers` 不再接受整表 `PUT`；日常客户端使用单 provider `PUT/DELETE /v1/admin/providers/:id`，批量变更只走显式确认的 TOML/JSON 导入，避免空请求体覆盖全部提供商。
+- [x] 本地服务控制实现保持模型无关：Jev Switch 生命周期 API 只处理已登记的 start/stop/status 命令；Laya、StartLux、OneJev 的启动器、资源门禁、PID 管理和健康检查均由用户私有的本地服务脚本提供。脚本规范记入 `docs/design/LOCAL-MODEL-SERVICE-SCRIPTS.md`。
+- [x] lifecycle `running` 以 provider readiness 为依据，不再把子启动器仍存活当作服务健康；启动器可以启动 detached 模型进程，在 provider HTTP readiness 成功后退出。进程退出而 readiness 未就绪时状态为失败，互斥锁按执行结果释放；页面重新打开会恢复查询 `starting/stopping` 状态并轮询终态。
+- [x] Windows Standalone v0.10.1 本机构建并冷启动健康检查通过；API 配置 Laya、StartLux、OneJev 三套脚本。Laya 与 StartLux 在资源足够时分别通过启动、HTTP/readiness、实际 Jev 请求和停止；高负载时资源门禁会明确拒绝。OneJev 已支持通过脚本私有配置提供 qev、GGUF 和 projector，完整推理验收仍待在该私有配置下完成。
+- [x] Laya 连续三轮“状态→启动→状态→停止”回归通过：每轮启动返回 `running/ready`、健康接口可达，停止返回 `stopped/not_ready`，停止后 `18765` 不监听；修复了状态脚本失败分支隐式返回退出码 `0`导致的假运行状态。
+- [x] 2026-10-07 维护者人工 UI 验收确认 Laya 多次启停可用；该证据与上述 API 自动回归分开记录。
 
 ### 2026-10-05 jev-decision-lab 模型画像与属性路由输入（排期 0.11.0，尚未实现）
 
@@ -248,7 +256,7 @@
 - [ ] 实现 profile evidence、入口 requirements、硬过滤纯函数、软排序、trace 解释和 Agent capability 映射。
 - [x] 0.10.x 生命周期 schema、SQLite 迁移、daemon API、进程所有权快照和 readiness 核心已落地；剩余进程组/UI/Agent scope 工作归入生命周期计划。
 - [ ] 实现 Providers 高级配置面板、敏感参数模态警告、状态徽标、检查/启动/停止按钮和中英文文案。
-- [ ] 补齐 Windows StartLux/OpenJev/Laya、Unix process group、端口冲突、超时、旧进程和 Android/cloud 禁用矩阵，并进行人工验收。
+- [ ] 补齐 Windows OpenJev/OneJev、Unix process group、端口冲突/旧进程矩阵和 Android/cloud 禁用矩阵，并进行人工验收；Laya/StartLux 的基础启动、就绪、实际请求和停止已通过本机 EXE API。
 
 **当前边界：**计划落盘不等于完整产品能力。没有 lifecycle 配置的 provider 继续按现有纯人工方式管理；0.10.x 后端能力尚未进入 `v0.9.3` Release，模型画像/属性路由不进入 0.10.x。
 

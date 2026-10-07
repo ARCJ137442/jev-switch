@@ -26,7 +26,7 @@ class LayaRuntimeConfigTests(unittest.TestCase):
         self.assertEqual(resolved["HF_HOME"], "/models/hf")
         self.assertEqual(resolved["HUGGINGFACE_HUB_CACHE"], "/models/hf-cache")
         self.assertEqual(resolved["TMP"], "/tmp/jev")
-        self.assertEqual(resolve_snapshot({"JEV_LAYA_SNAPSHOT": "~/laya-snapshot"}), Path.home() / "laya-snapshot")
+        self.assertEqual(resolve_snapshot({"LOCAL_LAYA_SNAPSHOT": "~/laya-snapshot"}), Path.home() / "laya-snapshot")
 
 
 if __name__ == "__main__":

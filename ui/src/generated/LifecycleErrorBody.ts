@@ -4,4 +4,4 @@
  * Lifecycle endpoints use a stable, machine-readable error surface so an
  * Agent can distinguish a disabled host-command gate from a readiness failure.
  */
-export type LifecycleErrorBody = { code: string, message: string, remediation: string, };
+export type LifecycleErrorBody = { code: string, message: string, remediation: string, detail?: string | null, };

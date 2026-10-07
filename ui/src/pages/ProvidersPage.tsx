@@ -4,7 +4,8 @@ import {
   getAdminMode,
   listProviders,
   mutateMockExternally,
-  putProviders,
+  putProvider,
+  deleteProvider,
   type AdminProvider,
   type AdminProviderWrite,
   type ProvidersResponse,
@@ -53,8 +54,8 @@ export function ProvidersPage() {
     fetchSnapshot: listProviders,
     applySnapshot: (snap) => setProviders(snap.providers),
     getCurrent: () => ({ providers: providersRef.current.map((p) => ({ ...p })) }),
-    pushSnapshot: async (snap) => {
-      await putProviders(snap.providers.map(toWrite));
+    pushSnapshot: async () => {
+      throw new Error(t('providers.batchWriteRequiresImport' as MessageKey));
     },
     pollMs: 5000,
   });
@@ -84,8 +85,8 @@ export function ProvidersPage() {
     }
   }, []);
 
-  const commit = async (writes: AdminProviderWrite[]) => {
-    const res = await putProviders(writes);
+  const commit = async (write: AdminProviderWrite) => {
+    const res = await putProvider(write);
     setProviders(res.providers);
     noteBaseline(res);
     return res;
@@ -98,7 +99,7 @@ export function ProvidersPage() {
     setBusyId(p.id);
     setProviders(optimistic); // 即时反馈
     try {
-      await commit(optimistic.map(toWrite));
+      await commit(toWrite(optimistic.find((item) => item.id === p.id)!));
     } catch {
       setProviders(prev); // 回滚
       toast('danger', t('prov.saveFailed'));
@@ -111,12 +112,9 @@ export function ProvidersPage() {
   const onReplaceKey = async (p: AdminProvider, apiKey: string) => {
     setBusyId(p.id);
     try {
-      const writes = providersRef.current.map((x) => {
-        const w = toWrite(x);
-        if (x.id === p.id) w.api_key = apiKey;
-        return w;
-      });
-      await commit(writes);
+      const w = toWrite(p);
+      w.api_key = apiKey;
+      await commit(w);
       toast('ok', t('prov.keySaved'));
     } catch (e) {
       toast('danger', t('prov.keySaveFailed'));
@@ -129,12 +127,9 @@ export function ProvidersPage() {
   const onClearKey = async (p: AdminProvider) => {
     setBusyId(p.id);
     try {
-      const writes = providersRef.current.map((x) => {
-        const w = toWrite(x);
-        if (x.id === p.id) w.api_key = '';
-        return w;
-      });
-      await commit(writes);
+      const w = toWrite(p);
+      w.api_key = '';
+      await commit(w);
       toast('ok', t('providers.keyCleared' as MessageKey));
     } catch {
       toast('danger', t('providers.keyClearFailed' as MessageKey));
@@ -152,11 +147,7 @@ export function ProvidersPage() {
   }) => {
     setBusyId(p.id);
     try {
-      const writes = providersRef.current.map((x) => ({
-        ...toWrite(x),
-        ...(x.id === p.id ? fields : {}),
-      }));
-      await commit(writes);
+      await commit({ ...toWrite(p), ...fields });
       toast('ok', t('providers.configSaved' as MessageKey));
     } catch (e) {
       toast('danger', t('providers.configSaveFailed' as MessageKey));
@@ -173,7 +164,9 @@ export function ProvidersPage() {
     setBusyId(p.id);
     setProviders(optimistic);
     try {
-      await commit(optimistic.map(toWrite));
+      const res = await deleteProvider(p.id);
+      setProviders(res.providers);
+      noteBaseline(res);
       toast('ok', t('prov.deleted', { id: p.id }));
     } catch {
       setProviders(prev);
@@ -189,7 +182,10 @@ export function ProvidersPage() {
     if (prev.some((x) => x.id === provider.id)) {
       throw new Error(t('prov.idExists', { id: provider.id }));
     }
-    await commit([...prev.map(toWrite), provider]);
+    await commit(provider);
+    const next = await listProviders();
+    setProviders(next.providers);
+    noteBaseline(next);
     toast('ok', t('prov.added', { id: provider.id }));
     setShowAdd(false);
   };

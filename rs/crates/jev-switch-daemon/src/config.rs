@@ -397,6 +397,10 @@ pub struct Config {
     /// Global host-command gate for provider lifecycle and Agent execution; default off.
     #[serde(default)]
     pub allow_host_commands: bool,
+    /// Separate opt-in for shell interpreters used by explicitly registered lifecycle commands.
+    /// This remains inert unless `allow_host_commands` is also enabled.
+    #[serde(default)]
+    pub allow_shell_commands: bool,
 }
 
 impl Config {

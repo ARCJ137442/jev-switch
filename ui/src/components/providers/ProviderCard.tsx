@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import type { AdminProvider, ProbeResponse } from '../../api/admin';
+import { useEffect, useState } from 'react';
+import { probeProvider, type AdminProvider, type ProbeResponse } from '../../api/admin';
 import { KeyForm } from './KeyForm';
 import { ProviderConfigForm, type ProviderConfigFields } from './ProviderConfigForm';
 import { ProbeButton } from './ProbeButton';
 import { ProviderLifecyclePanel } from './ProviderLifecyclePanel';
 import { useI18n, type MessageKey } from '../../i18n';
 import type { ProviderAvailability } from '../../pages/providerAvailability';
+import { readAutoProviderProbe, readProviderAutoProbe, SETTINGS_CHANGE_EVENT, writeProviderAutoProbe } from '../../settings/preferences';
 
 interface Props {
   provider: AdminProvider;
@@ -90,7 +91,11 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
   const [hist, setHist] = useState<ReadonlyArray<{ ms: number; ok: boolean }>>([]);
   const [showKeyForm, setShowKeyForm] = useState(false);
   const [showConfigForm, setShowConfigForm] = useState(false);
-  const [showLifecycle, setShowLifecycle] = useState(false);
+  const [showLifecycle, setShowLifecycle] = useState(() => {
+    try { return localStorage.getItem(`jev_provider_lifecycle_open:${provider.id}`) === 'true'; } catch { return false; }
+  });
+  const [autoProbe, setAutoProbe] = useState(() => readProviderAutoProbe(provider.id));
+  const [globalAutoProbe, setGlobalAutoProbe] = useState(readAutoProviderProbe);
   const [confirmClearKey, setConfirmClearKey] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -98,6 +103,38 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
     setProbe(r);
     setHist((h) => [...h.slice(-23), { ms: r.latency_ms, ok: r.ok }]);
   };
+
+  useEffect(() => {
+    writeProviderAutoProbe(provider.id, autoProbe);
+  }, [autoProbe, provider.id]);
+
+  useEffect(() => {
+    const sync = () => setGlobalAutoProbe(readAutoProviderProbe());
+    window.addEventListener(SETTINGS_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(SETTINGS_CHANGE_EVENT, sync);
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem(`jev_provider_lifecycle_open:${provider.id}`, String(showLifecycle)); } catch { /* storage is optional */ }
+  }, [provider.id, showLifecycle]);
+
+  useEffect(() => {
+    if (!globalAutoProbe || !autoProbe || !provider.enabled) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const run = async () => {
+      try {
+        const result = await probeProvider(provider.id);
+        if (!cancelled) onProbe(result);
+      } catch (error) {
+        if (!cancelled) onProbe({ ok: false, latency_ms: 0, status: 0, error: (error as Error).message });
+      } finally {
+        if (!cancelled) timer = window.setTimeout(() => void run(), 30000);
+      }
+    };
+    void run();
+    return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [autoProbe, globalAutoProbe, provider.enabled, provider.id]);
 
   const { t } = useI18n();
   const connectivity = connectionOf(provider, probe);
@@ -159,6 +196,10 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
         </span>
         <span className="flex shrink-0 items-center gap-2.5">
           <ProbeButton providerId={provider.id} onResult={onProbe} />
+          <label className="flex items-center gap-1 text-xs" title={t('providers.autoProbeHint' as MessageKey)}>
+            <input type="checkbox" checked={autoProbe} onChange={(event) => setAutoProbe(event.target.checked)} />
+            {t('providers.autoProbe' as MessageKey)}
+          </label>
           <label
             className="flex cursor-pointer items-center gap-1.5"
             title={t('card.toggleTip')}
@@ -305,7 +346,7 @@ export function ProviderCard({ provider, availability, busy, onToggle, onReplace
 
       {showConfigForm && <ProviderConfigForm provider={provider} busy={busy} onSave={(fields) => onUpdate(provider, fields)} onCancel={() => setShowConfigForm(false)} />}
 
-      {showLifecycle && <ProviderLifecyclePanel provider={provider} busy={busy} />}
+      {showLifecycle && <ProviderLifecyclePanel provider={provider} busy={busy} autoProbe={globalAutoProbe && autoProbe} />}
 
       {/* Replace key 内联表单（仅密文输入） */}
       {showKeyForm && (

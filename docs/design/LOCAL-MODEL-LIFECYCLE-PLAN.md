@@ -1,6 +1,6 @@
 # 本地模型提供商生命周期计划
 
-**状态：**0.10.x 已实现 provider 级结构化 argv、双重 host-command/controllable 门控、readiness、startup_check/on_demand 前置、provider 互斥、生命周期所有权快照、独立审计表、admin lifecycle domain API、主机命令安全开关和 Provider 高级 UI；细粒度 Agent scope、跨 daemon 的安全进程组回收、真实本地服务和平台验收仍未完成。  
+**状态：**0.10.x 已实现 provider 级结构化 argv、双重 host-command/controllable 门控、readiness、startup_check/on_demand 前置、provider 互斥、生命周期所有权快照、独立审计表、admin lifecycle domain API、主机命令安全开关和 Provider 高级 UI；Windows Laya/StartLux 已通过本机 EXE API 的启动、就绪、实际请求和停止验收。细粒度 Agent scope、跨 daemon 的安全进程组回收、OneJev/OpenJev 与其他平台验收仍未完成。
 **适用版本：**`0.10.x` 生命周期主线；模型画像/属性路由移至 `0.11.0`，不属于 `v0.9.3` 能力。  
 **目标：**在保持 Jev-Switch 作为路由网关的边界下，为已登记的本地模型提供商增加可控的启动、停止和状态检查能力。
 
@@ -105,6 +105,8 @@ UI 可以提供 `${JEV_PROVIDER_BASE_URL}` 等占位符便利，但 daemon 必�
 
 这是本地代码执行能力，配置界面必须明确显示风险：命令可以读取本机文件、启动后台进程或访问环境变量。保存/首次执行以下任一情况时需要模态确认：
 
+模型运行时的差异由外部服务脚本承担，Jev Switch 不内置 Laya、StartLux、OneJev 的专用启动器。脚本规范与本机验证见 [`LOCAL-MODEL-SERVICE-SCRIPTS.md`](LOCAL-MODEL-SERVICE-SCRIPTS.md)。
+
 - 命令使用 `${JEV_PROVIDER_API_KEY}` 或等价敏感变量。
 - 命令程序来自 PATH 而不是用户选择的绝对路径。
 - `working_dir` 位于用户配置目录之外。
@@ -134,7 +136,7 @@ UI 可以提供 `${JEV_PROVIDER_BASE_URL}` 等占位符便利，但 daemon 必�
 
 ## API 草案
 
-保持现有 `PUT /v1/admin/providers` 的 provider 核心快照兼容，生命周期配置通过独立资源管理，避免 key 和命令字段混入普通 provider 视图：
+Provider 日常配置使用单资源 `PUT/DELETE /v1/admin/providers/{id}`；整表批量替换不作为普通接口暴露，生命周期配置通过独立资源管理，避免 key 和命令字段混入普通 provider 视图：
 
 ```text
 GET  /v1/admin/providers/{id}/lifecycle

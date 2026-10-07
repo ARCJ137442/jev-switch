@@ -10,7 +10,7 @@ use crate::config::{Config, ProcessPolicy, ProviderConfig};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::RwLock;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -66,25 +66,44 @@ enum ProbeState {
     Unknown,
 }
 
+enum AttachedProcessSnapshot {
+    Running { pid: Option<u32>, execution_id: String },
+    Exited(Option<String>),
+    Error { pid: Option<u32>, execution_id: String },
+}
+
 static EXECUTION_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[derive(Debug, Clone)]
+struct OperationInfo {
+    action: String,
+    execution_id: Option<String>,
+}
 
 #[derive(Clone, Default)]
 pub struct LifecycleManager {
     processes: Arc<Mutex<HashMap<String, ManagedProcess>>>,
-    operations: Arc<Mutex<HashSet<String>>>,
+    operations: Arc<Mutex<HashMap<String, OperationInfo>>>,
+    last_errors: Arc<Mutex<HashMap<String, String>>>,
     database: Arc<Mutex<Option<Arc<Mutex<Connection>>>>>,
     runtime_config: Arc<RwLock<Option<Config>>>,
 }
 
 struct OperationLease {
     provider_id: String,
-    operations: Arc<Mutex<HashSet<String>>>,
+    execution_id: Option<String>,
+    operations: Arc<Mutex<HashMap<String, OperationInfo>>>,
 }
 
 impl Drop for OperationLease {
     fn drop(&mut self) {
         if let Ok(mut operations) = self.operations.lock() {
-            operations.remove(&self.provider_id);
+            let should_remove = operations
+                .get(&self.provider_id)
+                .is_some_and(|operation| operation.execution_id == self.execution_id);
+            if should_remove {
+                operations.remove(&self.provider_id);
+            }
         }
     }
 }
@@ -142,27 +161,93 @@ impl LifecycleManager {
             );
         }
 
-        if let Some(status) = self.attached_status(provider_id, provider, configured) {
+        if let Some(operation) = self
+            .operations
+            .lock()
+            .expect("lifecycle operation lock")
+            .get(provider_id)
+            .cloned()
+        {
+            let (state, message) = if operation.action == "stop" {
+                ("stopping", "lifecycle_stop_in_progress")
+            } else {
+                ("starting", "lifecycle_start_in_progress")
+            };
+            return status_value(
+                provider_id,
+                state,
+                "pending",
+                true,
+                configured,
+                false,
+                None,
+                operation.execution_id,
+                Some(message),
+            );
+        }
+
+        if let Some(status) = self
+            .attached_status(provider_id, provider, configured, config)
+            .await
+        {
             return status;
         }
 
         if let Some(record) = self.load_process_record(provider_id) {
             if record.state == "running" && record.process_policy == "persistent" {
                 if process_identity_matches(&record) {
+                    let (probe, message) = self.probe(provider_id, provider, config).await;
+                    if probe == ProbeState::Ready {
+                        self.clear_last_error(provider_id);
+                        return status_value(
+                            provider_id,
+                            "running",
+                            "ready",
+                            true,
+                            configured,
+                            true,
+                            record.pid,
+                            Some(record.execution_id),
+                            message.as_deref(),
+                        );
+                    }
+                    return status_value(
+                        provider_id,
+                        if self.last_error(provider_id).is_some() {
+                            "failed"
+                        } else {
+                            "starting"
+                        },
+                        "pending",
+                        true,
+                        configured,
+                        true,
+                        record.pid,
+                        Some(record.execution_id),
+                        self.last_error(provider_id)
+                            .as_deref()
+                            .or(message.as_deref())
+                            .or(Some("readiness_pending")),
+                    );
+                }
+                // A stale PID must never be killed or treated as owned. Keep the
+                // record for diagnostics but make the ownership loss explicit.
+                // A healthy provider is still actually running even when its
+                // detached launcher PID can no longer be verified.
+                let (probe, message) = self.probe(provider_id, provider, config).await;
+                if probe == ProbeState::Ready {
                     return status_value(
                         provider_id,
                         "running",
                         "ready",
                         true,
                         configured,
-                        true,
-                        record.pid,
-                        Some(record.execution_id),
+                        false,
                         None,
+                        Some(record.execution_id),
+                        Some("ownership_unverified"),
                     );
                 }
-                // A stale PID must never be killed or treated as owned. Keep the
-                // record for diagnostics but make the ownership loss explicit.
                 return status_value(
                     provider_id,
                     "unknown",
@@ -172,7 +257,7 @@ impl LifecycleManager {
                     false,
                     record.pid,
                     Some(record.execution_id),
-                    Some("ownership_unverified"),
+                    message.as_deref().or(Some("ownership_unverified")),
                 );
             }
         }
@@ -224,28 +309,37 @@ impl LifecycleManager {
                     Some("readiness_not_configured"),
                 )
             }
-            (ProbeState::Stopped, message) => status_value(
-                provider_id,
-                "stopped",
-                "not_ready",
-                true,
-                configured,
-                false,
-                None,
-                None,
-                message.as_deref(),
-            ),
-            (ProbeState::Unknown, message) => status_value(
-                provider_id,
-                "unknown",
-                "unknown",
-                true,
-                configured,
-                false,
-                None,
-                None,
-                message.as_deref().or(Some("readiness_unknown")),
-            ),
+            (ProbeState::Stopped, message) => {
+                let error = self.last_error(provider_id);
+                status_value(
+                    provider_id,
+                    if error.is_some() { "failed" } else { "stopped" },
+                    "not_ready",
+                    true,
+                    configured,
+                    false,
+                    None,
+                    None,
+                    error.as_deref().or(message.as_deref()),
+                )
+            }
+            (ProbeState::Unknown, message) => {
+                let error = self.last_error(provider_id);
+                status_value(
+                    provider_id,
+                    if error.is_some() { "failed" } else { "unknown" },
+                    "unknown",
+                    true,
+                    configured,
+                    false,
+                    None,
+                    None,
+                    error
+                        .as_deref()
+                        .or(message.as_deref())
+                        .or(Some("readiness_unknown")),
+                )
+            }
         }
     }
 
@@ -256,7 +350,6 @@ impl LifecycleManager {
         config: &Config,
     ) -> Result<LifecycleStatus, String> {
         ensure_allowed(provider_id, provider, config)?;
-        let _lease = self.acquire(provider_id)?;
         let current = self.status(provider_id, provider, config).await;
         if matches!(current.state.as_str(), "running" | "starting") {
             return Ok(current);
@@ -267,6 +360,8 @@ impl LifecycleManager {
             .as_deref()
             .ok_or_else(|| "command_not_configured".to_string())?;
         let execution_id = format!("lifecycle-{}-{}", provider_id, uuid_like());
+        let _lease = self.acquire(provider_id, "start", Some(execution_id.clone()))?;
+        self.clear_last_error(provider_id);
         let expanded_args = expand_args(&lifecycle.args, provider_id, provider)?;
         let command_hash = command_hash(program, &expanded_args);
         let mut command = build_command(program, &lifecycle.args, provider_id, provider, config)?;
@@ -303,6 +398,7 @@ impl LifecycleManager {
         match self.wait_until_ready(provider_id, provider, config).await {
             Ok(()) => {
                 self.update_process_state(provider_id, "running");
+                self.clear_last_error(provider_id);
                 self.record_event(
                     provider_id,
                     Some(&execution_id),
@@ -329,6 +425,7 @@ impl LifecycleManager {
             Err(reason) => {
                 self.kill_attached(provider_id);
                 self.remove_process_record(provider_id);
+                self.set_last_error(provider_id, &reason);
                 self.record_event(
                     provider_id,
                     Some(&execution_id),
@@ -352,8 +449,68 @@ impl LifecycleManager {
         config: &Config,
     ) -> Result<LifecycleStatus, String> {
         ensure_allowed(provider_id, provider, config)?;
-        let _lease = self.acquire(provider_id)?;
         let started_at = unix_ms();
+        let execution_id = format!("lifecycle-{}-{}", provider_id, uuid_like());
+        let _lease = self.acquire(provider_id, "stop", Some(execution_id.clone()))?;
+        self.clear_last_error(provider_id);
+        // An explicit stop command is authoritative. This matters for shell
+        // launchers that own a child server process; killing only the wrapper
+        // would leave the actual model server running.
+        if let Some(program) = provider.lifecycle.stop_program.as_deref() {
+            let mut command =
+                build_command(program, &provider.lifecycle.stop_args, provider_id, provider, config)?;
+            if let Some(dir) = &provider.lifecycle.working_dir {
+                command.current_dir(dir);
+            }
+            let command_hash = command_hash(program, &provider.lifecycle.stop_args);
+            let status = tokio::time::timeout(
+                command_timeout(provider.lifecycle.timeout_ms),
+                command.status(),
+            )
+            .await
+            .map_err(|_| "command_timeout".to_string())?
+            .map_err(|error| format!("command_failed: {error}"))?;
+            if !status.success() {
+                let message = format!("command_failed: exit {}", status.code().unwrap_or(-1));
+                self.set_last_error(provider_id, &message);
+                self.record_event(
+                    provider_id,
+                    Some(&execution_id),
+                    "stop",
+                    "failed",
+                    "failure",
+                    started_at,
+                    None,
+                    Some(&command_hash),
+                    Some(&message),
+                );
+                return Err(message);
+            }
+            self.kill_attached(provider_id);
+            self.remove_process_record(provider_id);
+            self.record_event(
+                provider_id,
+                Some(&execution_id),
+                "stop",
+                "stopped",
+                "success",
+                started_at,
+                None,
+                Some(&command_hash),
+                None,
+            );
+            return Ok(status_value(
+                provider_id,
+                "stopped",
+                "not_ready",
+                true,
+                true,
+                false,
+                None,
+                None,
+                None,
+            ));
+        }
         if provider.lifecycle.process_policy != ProcessPolicy::External {
             let managed = self
                 .processes
@@ -366,7 +523,9 @@ impl LifecycleManager {
                         .lock()
                         .expect("lifecycle process lock")
                         .insert(provider_id.to_string(), process);
-                    return Err(format!("command_failed: {error}"));
+                    let message = format!("command_failed: {error}");
+                    self.set_last_error(provider_id, &message);
+                    return Err(message);
                 }
                 self.remove_process_record(provider_id);
                 self.record_event(
@@ -410,9 +569,10 @@ impl LifecycleManager {
             .map_err(|error| format!("command_failed: {error}"))?;
         if !status.success() {
             let message = format!("command_failed: exit {}", status.code().unwrap_or(-1));
+            self.set_last_error(provider_id, &message);
             self.record_event(
                 provider_id,
-                None,
+                Some(&execution_id),
                 "stop",
                 "failed",
                 "failure",
@@ -426,7 +586,7 @@ impl LifecycleManager {
         self.remove_process_record(provider_id);
         self.record_event(
             provider_id,
-            None,
+            Some(&execution_id),
             "stop",
             "stopped",
             "success",
@@ -485,63 +645,112 @@ impl LifecycleManager {
         }
     }
 
-    fn acquire(&self, provider_id: &str) -> Result<OperationLease, String> {
+    fn acquire(
+        &self,
+        provider_id: &str,
+        action: &str,
+        execution_id: Option<String>,
+    ) -> Result<OperationLease, String> {
         let mut operations = self.operations.lock().expect("lifecycle operation lock");
-        if !operations.insert(provider_id.to_string()) {
+        if operations.contains_key(provider_id) {
             return Err("lifecycle_operation_in_progress".into());
         }
+        operations.insert(
+            provider_id.to_string(),
+            OperationInfo {
+                action: action.to_string(),
+                execution_id: execution_id.clone(),
+            },
+        );
         Ok(OperationLease {
             provider_id: provider_id.to_string(),
+            execution_id,
             operations: self.operations.clone(),
         })
     }
 
-    fn attached_status(
+    async fn attached_status(
         &self,
         provider_id: &str,
         provider: &ProviderConfig,
         configured: bool,
+        config: &Config,
     ) -> Option<LifecycleStatus> {
-        let mut processes = self.processes.lock().expect("lifecycle process lock");
-        let process = processes.get_mut(provider_id)?;
-        match process.child.try_wait() {
-            Ok(None) => Some(status_value(
-                provider_id,
-                "running",
-                "ready",
-                true,
-                configured,
-                true,
-                process.pid,
-                Some(process.execution_id.clone()),
-                None,
-            )),
-            Ok(Some(status)) => {
-                let code = status.code().map(|code| code.to_string());
-                processes.remove(provider_id);
-                drop(processes);
-                self.remove_process_record(provider_id);
+        let snapshot = {
+            let mut processes = self.processes.lock().expect("lifecycle process lock");
+            let process = processes.get_mut(provider_id)?;
+            match process.child.try_wait() {
+                Ok(None) => AttachedProcessSnapshot::Running {
+                    pid: process.pid,
+                    execution_id: process.execution_id.clone(),
+                },
+                Ok(Some(status)) => {
+                    let code = status.code().map(|code| code.to_string());
+                    processes.remove(provider_id);
+                    AttachedProcessSnapshot::Exited(code)
+                }
+                Err(_) => AttachedProcessSnapshot::Error {
+                    pid: process.pid,
+                    execution_id: process.execution_id.clone(),
+                },
+            }
+        };
+
+        match snapshot {
+            AttachedProcessSnapshot::Running { pid, execution_id } => {
+                let (probe, message) = self.probe(provider_id, provider, config).await;
                 Some(status_value(
                     provider_id,
-                    "stopped",
-                    "not_ready",
-                    provider.lifecycle.controllable,
+                    if probe == ProbeState::Ready { "running" } else { "starting" },
+                    if probe == ProbeState::Ready { "ready" } else { "pending" },
+                    true,
                     configured,
-                    false,
-                    None,
-                    None,
-                    code.as_deref(),
+                    true,
+                    pid,
+                    Some(execution_id),
+                    message.as_deref().or_else(|| {
+                        (probe != ProbeState::Ready).then_some("readiness_pending")
+                    }),
                 ))
             }
-            Err(_) => Some(status_value(
+            AttachedProcessSnapshot::Exited(code) => {
+                self.remove_process_record(provider_id);
+                let (probe, message) = self.probe(provider_id, provider, config).await;
+                if probe == ProbeState::Ready {
+                    Some(status_value(
+                        provider_id,
+                        "running",
+                        "ready",
+                        provider.lifecycle.controllable,
+                        configured,
+                        false,
+                        None,
+                        None,
+                        message.as_deref(),
+                    ))
+                } else {
+                    Some(status_value(
+                        provider_id,
+                        "stopped",
+                        "not_ready",
+                        provider.lifecycle.controllable,
+                        configured,
+                        false,
+                        None,
+                        None,
+                        message.as_deref().or(code.as_deref()),
+                    ))
+                }
+            }
+            AttachedProcessSnapshot::Error { pid, execution_id } => Some(status_value(
                 provider_id,
                 "unknown",
                 "unknown",
                 true,
                 configured,
                 true,
-                process.pid,
-                Some(process.execution_id.clone()),
+                pid,
+                Some(execution_id),
                 Some("process_status_failed"),
             )),
         }
@@ -555,19 +764,25 @@ impl LifecycleManager {
     ) -> Result<(), String> {
         let deadline = tokio::time::Instant::now() + readiness_timeout(provider);
         loop {
-            let running = {
+            let process_exit = {
                 let mut processes = self.processes.lock().expect("lifecycle process lock");
                 let Some(process) = processes.get_mut(provider_id) else {
                     return Err("process_lost".into());
                 };
                 match process.child.try_wait() {
-                    Ok(None) => true,
-                    Ok(Some(_)) => false,
+                    Ok(None) => None,
+                    Ok(Some(status)) => Some(status.code().unwrap_or(-1)),
                     Err(_) => return Err("process_status_failed".into()),
                 }
             };
-            if !running {
-                return Err("readiness_process_exited".into());
+            if let Some(exit_code) = process_exit {
+                // A registered launcher may intentionally detach the real
+                // model service. Its exit is only successful if the provider
+                // readiness check confirms that the detached service is up.
+                return match self.probe(provider_id, provider, config).await {
+                    (ProbeState::Ready, _) => Ok(()),
+                    _ => Err(format!("readiness_process_exited:exit={exit_code}")),
+                };
             }
             match self.probe(provider_id, provider, config).await {
                 (ProbeState::Ready, _) => return Ok(()),
@@ -704,6 +919,25 @@ impl LifecycleManager {
                 [provider_id],
             );
         };
+    }
+
+    fn set_last_error(&self, provider_id: &str, message: &str) {
+        if let Ok(mut errors) = self.last_errors.lock() {
+            errors.insert(provider_id.to_string(), stable_message(message));
+        }
+    }
+
+    fn clear_last_error(&self, provider_id: &str) {
+        if let Ok(mut errors) = self.last_errors.lock() {
+            errors.remove(provider_id);
+        }
+    }
+
+    fn last_error(&self, provider_id: &str) -> Option<String> {
+        self.last_errors
+            .lock()
+            .ok()
+            .and_then(|errors| errors.get(provider_id).cloned())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -891,7 +1125,7 @@ fn build_command(
     if !executable.is_absolute() {
         return Err("program_path_must_be_absolute".into());
     }
-    if executable
+    let is_shell = executable
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| {
@@ -899,8 +1133,8 @@ fn build_command(
                 name.to_ascii_lowercase().as_str(),
                 "cmd.exe" | "powershell.exe" | "pwsh.exe" | "sh" | "bash" | "zsh"
             )
-        })
-    {
+        });
+    if is_shell && !config.allow_shell_commands {
         return Err("shell_execution_not_allowed".into());
     }
     let expanded_args = expand_args(args, provider_id, provider)?;
@@ -1037,6 +1271,26 @@ mod tests {
         assert_eq!(error, "host_commands_disabled");
     }
 
+    #[tokio::test]
+    async fn status_reports_in_flight_operation_after_page_reload() {
+        let manager = LifecycleManager::default();
+        let mut config = Config::default();
+        config.allow_host_commands = true;
+        let execution_id = "lifecycle-laya-test".to_string();
+        let lease = manager
+            .acquire("laya", "start", Some(execution_id.clone()))
+            .expect("test operation should be acquired");
+
+        let status = manager.status("laya", &provider(), &config).await;
+        assert_eq!(status.state, "starting");
+        assert_eq!(status.readiness, "pending");
+        assert_eq!(status.execution_id.as_deref(), Some(execution_id.as_str()));
+
+        drop(lease);
+        let status = manager.status("laya", &provider(), &config).await;
+        assert_ne!(status.state, "starting");
+    }
+
     #[test]
     fn unknown_placeholder_is_rejected_without_shell_parsing() {
         let provider = provider();
@@ -1046,7 +1300,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn shell_programs_are_rejected_even_when_the_global_gate_is_open() {
+    async fn shell_programs_are_rejected_by_default_even_when_the_global_gate_is_open() {
         let manager = LifecycleManager::default();
         let mut provider = provider();
         provider.lifecycle.program = Some(if cfg!(windows) {
@@ -1062,6 +1316,21 @@ mod tests {
             .await
             .expect_err("shell entrypoints must never be used as lifecycle programs");
         assert_eq!(error, "shell_execution_not_allowed");
+    }
+
+    #[test]
+    fn explicitly_allowed_shell_programs_use_structured_arguments() {
+        let mut config = Config::default();
+        config.allow_host_commands = true;
+        config.allow_shell_commands = true;
+        let provider = provider();
+        let program = if cfg!(windows) {
+            "C:/Windows/System32/cmd.exe"
+        } else {
+            "/bin/sh"
+        };
+        build_command(program, &["/C".into(), "echo Jev".into()], "local", &provider, &config)
+            .expect("an explicit shell opt-in should allow the registered interpreter");
     }
 
     #[tokio::test]

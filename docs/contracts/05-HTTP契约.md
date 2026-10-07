@@ -112,17 +112,19 @@ Authorization: Bearer <admin-token>
 
 **禁止**字段 `api_key` 明文。
 
-### `PUT /v1/admin/providers`
+### `PUT /v1/admin/providers/{id}`
 
 ```json
-{ "providers": [ { "id": "vercel", "kind": "…", "base": "…", "enabled": true, "api_key": "…" } ] }
+{ "id": "vercel", "kind": "…", "base": "…", "enabled": true, "api_key": "…" }
 ```
 
 `kind` 当前接受 `vercel`、`laya`、`typesafe`、`openrouter`。TypeSafe 官方地址是完整 endpoint `https://api.typesafe.ai/v1/systemone`，Bearer key 由 daemon 添加；官方模型示例为 `jev-latest`。OpenRouter 使用完整 chat endpoint `https://openrouter.ai/api/v1/chat/completions`，daemon 将 Jev 请求转换为结构化 JSON chat 请求，再严格解析回 Jev answers；这不表示对外入口兼容一般 OpenAI/Anthropic Chat API。本地 TypeSafe kind 也必须提供相同 Jev `POST /v1/systemone` wire format。
 
-Provider 响应另含非敏感 `lifecycle` 摘要：`controllable`、`process_policy`、`mode`、`configured`、`service_state` 和有界超时。普通 provider 列表不返回命令正文或任何 API key；专用 lifecycle 资源在 admin 权限下返回结构化命令配置（仍不返回 key），供 UI/Agent 配置使用。`PUT` 中可选 `lifecycle` 字段省略时保留现有配置。
+对 `/v1/admin/providers` 发送 `PUT` 会返回 `405`；集合资源只读。客户端必须使用单资源 `PUT/DELETE /v1/admin/providers/{id}`，避免空数组或不完整快照覆盖全部 provider。
 
-写入后落盘 toml（0600）；响应回 **masked**，不回明文。`api_key` 省略表示保留已有密钥，空串表示清除；`api_key_env` 省略表示保留已有环境变量名。整表中移除已有 provider 时，会在同一运行时快照写入中移除其直接引用以及因此无法再解析到任何现存 provider 的别名分支，并热替换内存路由；历史调用记录保留。
+Provider 响应另含非敏感 `lifecycle` 摘要：`controllable`、`process_policy`、`mode`、`configured`、`service_state` 和有界超时。普通 provider 列表不返回命令正文或任何 API key；专用 lifecycle 资源在 admin 权限下返回结构化命令配置（仍不返回 key），供 UI/Agent 配置使用。单资源 `PUT` 中可选 `lifecycle` 字段省略时保留现有配置；`DELETE /v1/admin/providers/{id}` 删除单个 provider 并原子清理失效路由。
+
+写入后更新 SQLite 运行时快照；响应回 **masked**，不回明文。`api_key` 省略表示保留已有密钥，空串表示清除；`api_key_env` 省略表示保留已有环境变量名。删除单个 provider 时，会在同一运行时快照写入中移除其直接引用以及因此无法再解析到任何现存 provider 的别名分支，并热替换内存路由；历史调用记录保留。整表批量替换不提供普通 HTTP 方法；需要批量变更时使用带 `confirm=true` 的显式 TOML/JSON 导入端点。
 
 ### `GET /v1/admin/capabilities`
 
@@ -137,10 +139,10 @@ POST /v1/admin/providers/{id}/lifecycle/status
 POST /v1/admin/providers/{id}/lifecycle/start
 POST /v1/admin/providers/{id}/lifecycle/stop
 GET  /v1/admin/host-commands
-PUT  /v1/admin/host-commands   {"enabled": boolean}
+PUT  /v1/admin/host-commands   {"enabled": boolean, "shell_enabled"?: boolean}
 ```
 
-这些端点受现有 admin 会话门保护；桌面 LAN 开放时只有 loopback 走本机所有者直通，其他 LAN/cloud 请求需管理员会话或 admin token。执行同时要求全局 `allow_host_commands=true` 与 provider `lifecycle.controllable=true`，使用结构化 `program`/`args`，不经过 shell。`start` 只有 readiness 成功才返回 `running`；unknown、超时、命令失败均返回稳定的 `code/message/remediation` 错误。`startup_check` 与 `on_demand` 只在明确 `stopped` 或请求前置时触发，生命周期所有权和审计独立存储，不进入调用历史；细粒度 Agent scope、跨 daemon 进程组回收、UI 和平台验收仍在后续阶段。
+这些端点受现有 admin 会话门保护；桌面 LAN 开放时只有 loopback 走本机所有者直通，其他 LAN/cloud 请求需管理员会话或 admin token。执行同时要求全局 `allow_host_commands=true` 与 provider `lifecycle.controllable=true`；Shell 解释器还要求独立的 `allow_shell_commands=true`，默认关闭并单独确认。非 Shell 程序使用结构化 `program`/`args`；Shell 允许后也只执行显式登记的解释器和参数。`start` 只有 readiness 成功才返回 `running`；unknown、超时、命令失败均返回稳定的 `code/message/remediation` 错误。`startup_check` 与 `on_demand` 只在明确 `stopped` 或请求前置时触发，生命周期所有权和审计独立存储，不进入调用历史；细粒度 Agent scope、跨 daemon 进程组回收、UI 和平台验收仍在后续阶段。
 
 ### `GET/PUT /v1/admin/routes`
 

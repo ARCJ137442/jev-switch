@@ -3,7 +3,7 @@
 //! 端点：
 //! - `GET  /v1/admin/providers` → `{providers:[{id,kind,base,enabled,api_key_masked,api_key_set}]}`
 //!   **只出掩码**（`sk-****a1b2` 形态），无任何读回明文的字段/路径（红线 2/3）
-//! - `PUT  /v1/admin/providers` → 整表替换 + 落盘（0600）；删除 provider 时级联移除
+//! - `PUT/DELETE /v1/admin/providers/{id}` → 单 provider 原子写入/删除；批量变更只走显式确认导入
 //!   已失去上游终点的路由分支；响应回 masked（红线 7）。
 //!   `api_key` 省略 = 保留原 key；显式空串 = 清除（回退 `api_key_env`）
 //! - `GET  /v1/admin/routes` → `{routes:[RouteEdge]}`（运行时边表 —— 含旧 `[router]`
@@ -119,7 +119,7 @@ pub struct ProviderLifecycleView {
     pub readiness_timeout_ms: u64,
 }
 
-/// `GET /v1/admin/providers` / `PUT` 响应体。
+/// `GET /v1/admin/providers` 响应体。
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(
     feature = "ts-rs",
@@ -130,7 +130,7 @@ pub struct ProvidersDoc {
     pub providers: Vec<ProviderView>,
 }
 
-/// `PUT /v1/admin/providers` 单项入参（**仅写入用，永不作响应**）。
+/// 单 provider 写入入参（**仅写入用，永不作响应**）。
 /// 不 derive `Serialize` —— 从结构上杜绝「明文 key 被序列化出去」的路径。
 /// `api_key` 省略时保留原 key，空串表示清除并回退 `api_key_env`；`api_key_env` 省略时保留已有值。
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -168,7 +168,7 @@ pub struct ProviderInput {
     pub lifecycle: Option<ProviderLifecycleConfig>,
 }
 
-/// `PUT /v1/admin/providers` 请求体。
+/// Internal compatibility body for the atomic provider replacement helper.
 #[derive(Debug, Clone, serde::Deserialize)]
 #[cfg_attr(
     feature = "ts-rs",
@@ -221,6 +221,9 @@ pub struct LifecycleErrorBody {
     pub code: String,
     pub message: String,
     pub remediation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -246,6 +249,7 @@ pub struct ProviderLifecycleDoc {
 )]
 pub struct HostCommandControlResponse {
     pub enabled: bool,
+    pub shell_enabled: bool,
     pub requires_confirmation: bool,
 }
 
@@ -276,6 +280,17 @@ pub async fn get_capabilities() -> Json<CapabilitiesDoc> {
                 schema_version: 1,
             },
             ConfigCapability {
+                key: "security.allow_shell_commands".into(),
+                resource: "instance".into(),
+                read_scope: "config:read".into(),
+                write_scope: Some("shell_commands:enable".into()),
+                execute_scope: None,
+                risk: "shell_command".into(),
+                confirmation: Some("cooldown_5s".into()),
+                audit: true,
+                schema_version: 1,
+            },
+            ConfigCapability {
                 key: "providers.lifecycle.service".into(),
                 resource: "provider".into(),
                 read_scope: "config:read".into(),
@@ -294,6 +309,7 @@ pub async fn get_host_commands(State(state): State<AppState>) -> Response {
     match load_config(&state) {
         Ok(config) => Json(HostCommandControlResponse {
             enabled: config.allow_host_commands,
+            shell_enabled: config.allow_shell_commands,
             requires_confirmation: true,
         })
         .into_response(),
@@ -305,6 +321,8 @@ pub async fn put_host_commands(State(state): State<AppState>, body: Bytes) -> Re
     #[derive(serde::Deserialize)]
     struct Input {
         enabled: bool,
+        #[serde(default)]
+        shell_enabled: Option<bool>,
     }
     let input: Input = match serde_json::from_slice(&body) {
         Ok(input) => input,
@@ -321,6 +339,9 @@ pub async fn put_host_commands(State(state): State<AppState>, body: Bytes) -> Re
         Err(response) => return response,
     };
     config.allow_host_commands = input.enabled;
+    if let Some(shell_enabled) = input.shell_enabled {
+        config.allow_shell_commands = shell_enabled;
+    }
     {
         let conn = match state.db_conn.lock() {
             Ok(conn) => conn,
@@ -343,6 +364,7 @@ pub async fn put_host_commands(State(state): State<AppState>, body: Bytes) -> Re
     state.lifecycle.configure(&config);
     Json(HostCommandControlResponse {
         enabled: input.enabled,
+        shell_enabled: config.allow_shell_commands,
         requires_confirmation: true,
     })
     .into_response()
@@ -569,8 +591,20 @@ fn err(state: &AppState, status: StatusCode, msg: impl Into<String>) -> Response
 }
 
 fn lifecycle_error(state: &AppState, status: StatusCode, raw: &str) -> Response {
-    let code = raw.split(':').next().unwrap_or(raw).trim().to_string();
+    let (raw_code, raw_detail) = raw
+        .split_once(':')
+        .map(|(code, detail)| (code, Some(detail.trim().to_string())))
+        .unwrap_or((raw, None));
+    let code = raw_code.trim().to_string();
     let (message, remediation) = match code.as_str() {
+        "invalid_lifecycle_body" => (
+            "The lifecycle configuration could not be read.",
+            "Check that the form contains valid values, then save again.",
+        ),
+        "invalid_lifecycle_configuration" => (
+            "The lifecycle configuration is invalid.",
+            "Correct the highlighted configuration and save it before running a service action.",
+        ),
         "host_commands_disabled" => (
             "Host command execution is disabled for this instance.",
             "An administrator must enable host commands after the safety confirmation.",
@@ -582,6 +616,54 @@ fn lifecycle_error(state: &AppState, status: StatusCode, raw: &str) -> Response 
         "command_not_configured" => (
             "The requested lifecycle command is not configured.",
             "Configure the provider-level command or leave the action under manual control.",
+        ),
+        "stop_not_configured" => (
+            "No stop command is configured for this provider.",
+            "Configure an explicit stop command for services that start child processes, or switch to a managed executable with a verified process policy.",
+        ),
+        "command_failed" => (
+            "The lifecycle command could not be started or completed.",
+            "Check the executable path, arguments, working directory, and the service's own logs.",
+        ),
+        "program_path_must_be_absolute" => (
+            "The lifecycle program path must be absolute.",
+            "Use a full path such as C:\\Tools\\Laya\\laya.exe or /usr/local/bin/laya.",
+        ),
+        "shell_execution_not_allowed" => (
+            "Shell lifecycle commands are disabled for this instance.",
+            "Enable shell lifecycle commands in Settings after the separate safety confirmation, or point the configuration at the real executable.",
+        ),
+        "secrets_unavailable" => (
+            "The provider API key is not available for this command.",
+            "Configure the provider key or turn off API key injection before starting the service.",
+        ),
+        "secret_placeholder_requires_environment" => (
+            "API keys cannot be inserted into command arguments.",
+            "Use the injected JEV_PROVIDER_API_KEY environment variable only when you trust the command.",
+        ),
+        "unknown_lifecycle_placeholder" => (
+            "The lifecycle command contains an unknown placeholder.",
+            "Remove the placeholder or use one of the documented JEV_PROVIDER_* variables.",
+        ),
+        "command_timeout" | "status_command_timeout" => (
+            "The lifecycle command exceeded its time limit.",
+            "Check the command and service logs, then increase the timeout only when necessary.",
+        ),
+        "status_command_failed" => (
+            "The provider status command could not be executed.",
+            "Check the status program path and arguments, and use exit code 0 for running or 3 for stopped.",
+        ),
+        "process_lost" | "readiness_process_exited" => (
+            "The service process exited before it became ready.",
+            "Run the same command manually, inspect its logs, and verify the provider health address.",
+        ),
+        "process_status_failed" => (
+            "The service process status could not be read.",
+            "Check local process permissions and the configured process policy.",
+        ),
+        "readiness_not_configured" => (
+            "The service has no usable readiness check.",
+            "Configure a status command or a provider address whose /health endpoint can be checked.",
         ),
         "readiness_timeout" => (
             "The service command started but did not become ready before the bounded timeout.",
@@ -604,6 +686,7 @@ fn lifecycle_error(state: &AppState, status: StatusCode, raw: &str) -> Response 
         code,
         message: message.into(),
         remediation: remediation.into(),
+        detail: raw_detail.filter(|detail| !detail.is_empty()),
     };
     let mut response = (status, Json(body)).into_response();
     if let Ok(request_id) = HeaderValue::from_str(&format!("lifecycle-{}", lifecycle_request_id()))
@@ -786,7 +869,7 @@ pub async fn get_providers(State(state): State<AppState>) -> Response {
 ///
 /// 逐项语义（H3 交接备注①）：`api_key` **省略 = 保留原 key**、`""` = 清除、
 /// 非空 = 替换；`api_key_env` 同理（省略保留）。入参未列出的 provider 被移除。
-pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Response {
+pub(crate) async fn replace_providers_snapshot(State(state): State<AppState>, body: Bytes) -> Response {
     let input: PutProvidersBody = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => {
@@ -961,6 +1044,114 @@ pub async fn put_providers(State(state): State<AppState>, body: Bytes) -> Respon
     }
     let keys = known_keys_snapshot(&state);
     Json(providers_doc(&cfg, &keys)).into_response()
+}
+
+fn provider_input_from_config(id: &str, provider: &ProviderConfig) -> ProviderInput {
+    ProviderInput {
+        id: id.to_string(),
+        name: provider.name.clone(),
+        account: provider.account.clone(),
+        kind: provider.kind.clone(),
+        base: provider.base.clone(),
+        enabled: provider.enabled,
+        models: provider.models.clone(),
+        api_key: None,
+        api_key_env: None,
+        forward_extensions: Some(provider.forward_extensions),
+        lifecycle: Some(provider.lifecycle.clone()),
+    }
+}
+
+fn provider_table_body(providers: Vec<ProviderInput>) -> Vec<u8> {
+    let values: Vec<serde_json::Value> = providers
+        .into_iter()
+        .map(|provider| {
+            let mut value = serde_json::Map::new();
+            value.insert("id".into(), serde_json::json!(provider.id));
+            value.insert("name".into(), serde_json::json!(provider.name));
+            value.insert("account".into(), serde_json::json!(provider.account));
+            value.insert("kind".into(), serde_json::json!(provider.kind));
+            value.insert("base".into(), serde_json::json!(provider.base));
+            value.insert("enabled".into(), serde_json::json!(provider.enabled));
+            value.insert("models".into(), serde_json::json!(provider.models));
+            if let Some(api_key) = provider.api_key {
+                value.insert("api_key".into(), serde_json::json!(api_key));
+            }
+            if let Some(api_key_env) = provider.api_key_env {
+                value.insert("api_key_env".into(), serde_json::json!(api_key_env));
+            }
+            value.insert(
+                "forward_extensions".into(),
+                serde_json::json!(provider.forward_extensions),
+            );
+            value.insert("lifecycle".into(), serde_json::json!(provider.lifecycle));
+            serde_json::Value::Object(value)
+        })
+        .collect();
+    serde_json::to_vec(&serde_json::json!({ "providers": values }))
+        .expect("provider update request must serialize")
+}
+
+/// Update exactly one provider. The implementation internally reuses the
+/// validated table transaction, but the public API never accepts a replacement
+/// provider list.
+pub async fn put_provider(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    body: Bytes,
+) -> Response {
+    let mut input: ProviderInput = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(error) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid body: {error}")),
+    };
+    if input.id != id {
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "provider path id and body id must match",
+        );
+    }
+    let config = match load_config(&state) {
+        Ok(config) => config,
+        Err(response) => return response,
+    };
+    let mut providers: Vec<ProviderInput> = config
+        .providers
+        .iter()
+        .map(|(provider_id, provider)| provider_input_from_config(provider_id, provider))
+        .collect();
+    if let Some(existing) = providers.iter_mut().find(|provider| provider.id == id) {
+        input.api_key = None;
+        input.api_key_env = None;
+        *existing = input;
+    } else {
+        providers.push(input);
+    }
+    let body = provider_table_body(providers);
+    replace_providers_snapshot(State(state), Bytes::from(body)).await
+}
+
+/// Delete exactly one provider. Batch replacement is deliberately not exposed
+/// as an ordinary admin API; explicit JSON/TOML import remains the batch path.
+pub async fn delete_provider(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let config = match load_config(&state) {
+        Ok(config) => config,
+        Err(response) => return response,
+    };
+    if !config.providers.contains_key(&id) {
+        return err(&state, StatusCode::NOT_FOUND, format!("provider '{id}' not found"));
+    }
+    let providers = config
+        .providers
+        .iter()
+        .filter(|(provider_id, _)| *provider_id != &id)
+        .map(|(provider_id, provider)| provider_input_from_config(provider_id, provider))
+        .collect();
+    let body = provider_table_body(providers);
+    replace_providers_snapshot(State(state), Bytes::from(body)).await
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1330,6 +1521,7 @@ pub async fn import_runtime_config(State(state): State<AppState>, body: Bytes) -
     let snapshot = crate::db::RuntimeConfigSnapshot {
         providers: config.providers.clone(),
         allow_host_commands: config.allow_host_commands,
+        allow_shell_commands: config.allow_shell_commands,
         nodes: match crate::db::derive_runtime_nodes(&conn, &routes, &config.providers) {
             Ok(nodes) => nodes,
             Err(error) => {
@@ -1556,6 +1748,7 @@ pub async fn import_runtime_config_json(State(state): State<AppState>, body: Byt
     let snapshot = crate::db::RuntimeConfigSnapshot {
         providers: config.providers.clone(),
         allow_host_commands: config.allow_host_commands,
+        allow_shell_commands: config.allow_shell_commands,
         nodes: match crate::db::derive_runtime_nodes(&conn, &routes, &config.providers) {
             Ok(nodes) => nodes,
             Err(error) => {
@@ -3553,11 +3746,8 @@ enabled = true
         let (app, state) = app_at(path.clone());
 
         // 只翻 enabled、不带 api_key → 原 key 保留
-        let body = r#"{"providers":[
-            {"id":"vercel","kind":"vercel","base":"https://example.invalid/v4/eval","enabled":false},
-            {"id":"laya","kind":"laya","base":"http://127.0.0.1:18765/v1/systemone","enabled":true}
-        ]}"#;
-        let (status, resp) = send(app, "PUT", "/v1/admin/providers", Some(body.into())).await;
+        let body = r#"{"id":"vercel","kind":"vercel","base":"https://example.invalid/v4/eval","enabled":false}"#;
+        let (status, resp) = send(app, "PUT", "/v1/admin/providers/vercel", Some(body.into())).await;
         assert_eq!(status, 200, "{resp}");
         // 响应 masked、enabled 已翻转
         assert!(!resp.contains(FAKE_KEY), "PUT 响应不得 echo 明文: {resp}");
@@ -3608,11 +3798,8 @@ enabled = true
             send(app.clone(), "PUT", "/v1/admin/routes", Some(graph.into())).await;
         assert_eq!(route_status, 200, "{route_response}");
 
-        let body = r#"{"providers":[
-            {"id":"laya","kind":"laya","base":"http://127.0.0.1:18765/v1/systemone","enabled":true}
-        ]}"#;
         let (status, response) =
-            send(app.clone(), "PUT", "/v1/admin/providers", Some(body.into())).await;
+            send(app.clone(), "DELETE", "/v1/admin/providers/vercel", None).await;
         assert_eq!(status, 200, "{response}");
 
         let (routes_status, routes_body) = send(app.clone(), "GET", "/v1/admin/routes", None).await;
@@ -3720,14 +3907,11 @@ enabled = true
     async fn provider_lifecycle_summary_round_trips_without_exposing_commands() {
         let path = temp_config("lifecycle-summary", CFG_WITH_KEY);
         let (app, _) = app_at(path.clone());
-        let body = r#"{"providers":[
-            {"id":"vercel","kind":"vercel","base":"https://example.invalid/v4/eval","enabled":true,
+        let body = r#"{"id":"vercel","kind":"vercel","base":"https://example.invalid/v4/eval","enabled":true,
              "lifecycle":{"controllable":true,"process_policy":"persistent","mode":"startup_check",
-               "program":"C:/Tools/OpenJev/openjev.exe","args":["--port","11436"]}},
-            {"id":"laya","kind":"laya","base":"http://127.0.0.1:18765/v1/systemone","enabled":true}
-        ]}"#;
+               "program":"C:/Tools/OpenJev/openjev.exe","args":["--port","11436"]}}"#;
         let (put_status, _) =
-            send(app.clone(), "PUT", "/v1/admin/providers", Some(body.into())).await;
+            send(app.clone(), "PUT", "/v1/admin/providers/vercel", Some(body.into())).await;
         assert_eq!(put_status, 200);
         let (get_status, response) = send(app, "GET", "/v1/admin/providers", None).await;
         assert_eq!(get_status, 200);
@@ -3773,37 +3957,77 @@ enabled = true
     }
 
     #[tokio::test]
+    async fn lifecycle_errors_expose_machine_code_detail_and_remediation() {
+        let path = temp_config("lifecycle-error", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let invalid = r#"{
+            "controllable":true,
+            "process_policy":"persistent",
+            "mode":"automatic",
+            "args":[]
+        }"#;
+        let (status, body) = send(
+            app,
+            "PUT",
+            "/v1/admin/providers/vercel/lifecycle",
+            Some(invalid.into()),
+        )
+        .await;
+        assert_eq!(status, 400, "{body}");
+        let error: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(error["code"], "invalid_lifecycle_configuration");
+        assert_eq!(
+            error["detail"],
+            "mode must be manual, startup_check, or on_demand"
+        );
+        assert!(error["remediation"].as_str().unwrap().contains("save"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
     async fn put_providers_rejects_duplicate_and_empty_fields() {
         let path = temp_config("put-bad", CFG_WITH_KEY);
         let (app, state) = app_at(path.clone());
 
-        let dup = r#"{"providers":[
-            {"id":"a","kind":"k","base":"b","enabled":true},
-            {"id":"a","kind":"k","base":"b","enabled":true}
-        ]}"#;
-        let (status, resp) = send(app, "PUT", "/v1/admin/providers", Some(dup.into())).await;
+        let dup = r#"{"id":"a","kind":"k","base":"b","enabled":true}"#;
+        let (status, resp) = send(app, "PUT", "/v1/admin/providers/a", Some(dup.into())).await;
         assert_eq!(status, 400, "{resp}");
 
-        let unsupported = r#"{"providers":[{"id":"a","kind":"vercel-gateway","base":"https://example.invalid","enabled":true}]}"#;
+        let unsupported = r#"{"id":"a","kind":"vercel-gateway","base":"https://example.invalid","enabled":true}"#;
         let (status, resp) = send(
             build_app(state.clone()),
             "PUT",
-            "/v1/admin/providers",
+            "/v1/admin/providers/a",
             Some(unsupported.into()),
         )
         .await;
         assert_eq!(status, 400, "{resp}");
         assert!(resp.contains("vercel"), "{resp}");
 
-        let empty_id = r#"{"providers":[{"id":"","kind":"k","base":"b","enabled":true}]}"#;
+        let empty_id = r#"{"id":"","kind":"k","base":"b","enabled":true}"#;
         let (status, resp) = send(
             build_app(state.clone()),
             "PUT",
-            "/v1/admin/providers",
+            "/v1/admin/providers/a",
             Some(empty_id.into()),
         )
         .await;
         assert_eq!(status, 400, "{resp}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[tokio::test]
+    async fn provider_collection_put_is_not_a_public_batch_write_endpoint() {
+        let path = temp_config("provider-batch-disabled", CFG_WITH_KEY);
+        let (app, _) = app_at(path.clone());
+        let (status, body) = send(
+            app,
+            "PUT",
+            "/v1/admin/providers",
+            Some(r#"{"providers":[]}"#.into()),
+        )
+        .await;
+        assert_eq!(status, 405, "{body}");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

@@ -78,7 +78,7 @@ def apply_environment(
 def resolve_snapshot(env: Mapping[str, str] | None = None) -> Path:
     """Resolve the local Laya snapshot without contacting Hugging Face."""
     source = os.environ if env is None else env
-    explicit = source.get("JEV_LAYA_SNAPSHOT")
+    explicit = source.get("LOCAL_LAYA_SNAPSHOT")
     if explicit:
         return Path(explicit).expanduser()
     cache = source.get("HUGGINGFACE_HUB_CACHE")

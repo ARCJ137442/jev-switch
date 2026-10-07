@@ -2,6 +2,6 @@
 import type { ProviderInput } from "./ProviderInput";
 
 /**
- * `PUT /v1/admin/providers` 请求体。
+ * Internal compatibility body for the atomic provider replacement helper.
  */
 export type PutProvidersBody = { providers: Array<ProviderInput>, };

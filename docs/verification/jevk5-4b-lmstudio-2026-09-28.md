@@ -4,7 +4,7 @@
 
 ## 目的与边界
 
-本轮验证本地已有 `G:\Downloads\jevk5-4b-v0.3-Q4_K_M.gguf` 是否能经 LM Studio 进入 Jev Switch。LM Studio 当前版本没有旧版 llama.cpp `/tokenize`、`/completion` 原生 logits 接口，因此新增了 bridge 的 `--backend lmstudio` 模式：通过 OpenAI Chat API 加 assistant prefill 取得单个选项字母。
+本轮验证本地已有 JevK5-4B Q4_K_M 权重是否能经 LM Studio 进入 Jev Switch。权重位置使用本机私有配置，不在公开记录中展开。LM Studio 当前版本没有旧版 llama.cpp `/tokenize`、`/completion` 原生 logits 接口，因此新增了 bridge 的 `--backend lmstudio` 模式：通过 OpenAI Chat API 加 assistant prefill 取得单个选项字母。
 
 这条兼容路径只提供 greedy Top-1 和 one-hot 概率，`confidence=1.0` 明确标记为未校准；它不是 JevK5 原生 option-logit 结果，不能与 9B raw-logit benchmark 的概率、ECE 或风险覆盖率混算。
 

@@ -3,6 +3,13 @@
 # Start the loopback services before using this profile:
 #   JevK5 GGUF TypeSafe bridge: 127.0.0.1:8766
 #   Laya multi-model SystemOne service: 127.0.0.1:18765
+#   LM Studio OpenAI-compatible broker: 127.0.0.1:1234
+#
+# This profile is the inventory of local models already measured in
+# jev-decision-lab. A disabled entry is intentional: it records the model and
+# its adapter shape without claiming that a matching service is currently
+# loaded. Enable one only after the corresponding bridge/runtime is started and
+# probed from the Providers page.
 #
 # This file contains no API keys and is separate from the default providers file.
 mode = "local"
@@ -20,6 +27,63 @@ base = "http://127.0.0.1:18765/v1/systemone"
 models = ["laya-router"]
 enabled = true
 
+# Direct llama.cpp bridges used by the canonical Jev Decision Lab runs.
+# They are disabled here because their model servers are intentionally
+# on-demand and their memory footprint is above the resident-service budget.
+[providers.startlux-local]
+kind = "typesafe"
+base = "http://127.0.0.1:18760/v1/systemone"
+models = ["startlux-decision-9b"]
+enabled = false
+
+[providers.jevk5-gguf-local]
+kind = "typesafe"
+base = "http://127.0.0.1:18763/v1/systemone"
+models = ["jevk5-4b-local"]
+enabled = false
+
+# LM Studio JevK5 bridge. It discovers the loaded Q4/Q5 instance at runtime;
+# only one checkpoint may be loaded at a time on this machine.
+[providers.jevk5-lmstudio]
+kind = "typesafe"
+base = "http://127.0.0.1:8783/v1/systemone"
+models = ["jevk5-4b-lmstudio", "jevk5-9b-lmstudio"]
+enabled = false
+
+[providers.kev-08b]
+kind = "typesafe"
+base = "http://127.0.0.1:8808/v1/systemone"
+models = ["kev-latest"]
+enabled = false
+
+# General LM Studio checkpoints use a Jev-shaped local bridge. The bridge may
+# itself call LM Studio's OpenAI endpoint; Jev-Switch only sees `/v1/systemone`.
+# Probabilities are bridge values unless the checkpoint exposes native Jev logits.
+[providers.local-jev-bridge]
+kind = "typesafe"
+base = "http://127.0.0.1:8765/v1/systemone"
+models = [
+  "startlux-9b-q4",
+  "jevk5-4b-q4",
+  "qwen35-4b",
+  "glm46v-flash",
+  "gpt-oss-20b",
+  "qwen35-9b",
+  "ornith-1.0-9b",
+  "qwen38-27b-iq3s",
+]
+enabled = false
+
+# OneJev-9B is a third-party multimodal SystemOne-compatible service. Keep it
+# separate from the text-only LM Studio entries so extensions/media forwarding
+# is explicit and auditable.
+[providers.onejev-9b]
+kind = "typesafe"
+base = "http://127.0.0.1:18801/v1/systemone"
+models = ["OmniJev_OneJev-9B-Q4_K_M"]
+forward_extensions = true
+enabled = false
+
 [[routes]]
 left = "jevk5-local"
 match = "exact"
@@ -35,3 +99,117 @@ upstream_model = "laya-router"
 priority = 20
 on_error = "next"
 
+[[routes]]
+left = "startlux"
+match = "exact"
+right = "startlux-local"
+upstream_model = "startlux-decision-9b"
+priority = 25
+on_error = "next"
+
+[[routes]]
+left = "jevk5-4b-gguf-local"
+match = "exact"
+right = "jevk5-gguf-local"
+upstream_model = "jevk5-4b-local"
+priority = 30
+on_error = "next"
+
+[[routes]]
+left = "jevk5-4b-lmstudio"
+match = "exact"
+right = "jevk5-lmstudio"
+upstream_model = "jevk5-4b-lmstudio"
+priority = 31
+on_error = "next"
+
+[[routes]]
+left = "jevk5-9b-lmstudio"
+match = "exact"
+right = "jevk5-lmstudio"
+upstream_model = "jevk5-9b-lmstudio"
+priority = 32
+on_error = "next"
+
+[[routes]]
+left = "kev08-local"
+match = "exact"
+right = "kev-08b"
+upstream_model = "kev-latest"
+priority = 35
+on_error = "next"
+
+# The following public IDs are intentionally disabled until their provider is
+# enabled and probed. Keeping the routes here makes the eventual switch a
+# one-line enablement rather than another hand-written integration.
+[[routes]]
+left = "startlux-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "startlux-9b-q4"
+priority = 40
+on_error = "next"
+
+[[routes]]
+left = "jevk5-4b-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "jevk5-4b-q4"
+priority = 50
+on_error = "next"
+
+[[routes]]
+left = "qwen35-4b-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "qwen35-4b"
+priority = 60
+on_error = "next"
+
+[[routes]]
+left = "glm46v-flash-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "glm46v-flash"
+priority = 70
+on_error = "next"
+
+[[routes]]
+left = "gpt-oss-20b-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "gpt-oss-20b"
+priority = 80
+on_error = "next"
+
+[[routes]]
+left = "qwen35-9b-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "qwen35-9b"
+priority = 90
+on_error = "next"
+
+[[routes]]
+left = "ornith-1-0-9b-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "ornith-1.0-9b"
+priority = 100
+on_error = "next"
+
+[[routes]]
+left = "qwen38-27b-iq3s-local"
+match = "exact"
+right = "local-jev-bridge"
+upstream_model = "qwen38-27b-iq3s"
+priority = 110
+on_error = "next"
+
+[[routes]]
+left = "onejev-9b-local"
+match = "exact"
+right = "onejev-9b"
+upstream_model = "OmniJev_OneJev-9B-Q4_K_M"
+priority = 120
+on_error = "next"

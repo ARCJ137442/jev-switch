@@ -108,7 +108,7 @@ pub trait UpstreamAdapter: Send + Sync {
 - [ ] `POST /v1/systemone` → `SystemOneResponse`
 - [ ] `GET /v1/models` → **定死一种**形状（建议 OpenAI 风 `object/data`，或 `{models,upstreams}`，二选一写进契约并生成 TS）
 - [ ] `GET /health`
-- [ ] 配置管理 API（新增，供 UI）：`GET/PUT /v1/admin/providers`、`GET/PUT /v1/admin/routes` —— 仅 localhost
+- [ ] 配置管理 API（新增，供 UI）：`GET /v1/admin/providers`、`PUT/DELETE /v1/admin/providers/{id}`、`GET/PUT /v1/admin/routes` —— 仅 localhost；禁止普通客户端整表 provider 替换
 - [ ] 错误体统一 `{error, upstream, retryable}`
 - [ ] CORS：M1 起 origin 白名单，禁止长期 `very_permissive()`
 

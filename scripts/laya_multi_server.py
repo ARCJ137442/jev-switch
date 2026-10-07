@@ -56,7 +56,7 @@ import laya
 from laya import Router
 
 # 本机完整快照（三个 safetensors 齐全；revision 漂移不影响——路径直载零网络）。
-# Linux/WSL 默认使用 ~/.cache/huggingface；JEV_LAYA_SNAPSHOT 可覆盖为任意绝对路径。
+# Linux/WSL 默认使用 ~/.cache/huggingface；LOCAL_LAYA_SNAPSHOT 可覆盖为任意绝对路径。
 SNAP = str(resolve_snapshot())
 
 logging.basicConfig(level=logging.INFO,
@@ -97,7 +97,7 @@ def init_router(device: str) -> None:
     if not snapshot.is_dir():
         raise RuntimeError(
             f"Laya snapshot not found: {snapshot}. "
-            "Set JEV_LAYA_SNAPSHOT to a local model snapshot directory."
+            "Set LOCAL_LAYA_SNAPSHOT to a local model snapshot directory."
         )
     log.info("using Laya snapshot: %s", snapshot)
     models = {

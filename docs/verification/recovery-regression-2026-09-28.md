@@ -29,7 +29,7 @@ LM Studio 进程已恢复但没有自动加载模型。核对时 Windows 可用�
 
 - WSL 已安装 FastJev `0.2.0` editable 包，`fastjev-serve --help` 可用；Linux CUDA `llama_cpp_python` wheel 下载在恢复时多次超时，因此 GGUF 后端尚未安装，也未启动 FastJev 服务。继续安装时应使用 IDM 下载 wheel 后离线安装。
 - Kev-4B 尚无本地 Transformers 权重。所需 Qwen3.5-4B-Base 两个 shard 合计 `9,319,828,056` bytes，且 C 盘仅剩约 `30 MB`；下载必须将 Hugging Face cache 指向 E/G 盘。
-- `G:\Downloads\Qwen_Qwen3.5-4B-Q4_K_M_3.gguf` 是普通 Qwen3.5-4B Q4_K_M，不能用于加载 Kev-4B 的 PEFT adapter；`未确认 549795.crdownload` 是 JevK5-9B GGUF 的硬链接，也不是 Kev-4B。
+- 本机下载目录中的 `Qwen_Qwen3.5-4B-Q4_K_M_3.gguf` 是普通 Qwen3.5-4B Q4_K_M，不能用于加载 Kev-4B 的 PEFT adapter；另一个未确认的临时下载文件是 JevK5-9B GGUF 的硬链接，也不是 Kev-4B。具体文件名和路径属于本机私有环境，不纳入公开记录。
 
 证据输出：
 

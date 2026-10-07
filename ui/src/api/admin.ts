@@ -7,6 +7,7 @@ import type { ProviderLifecycleView } from '../generated/ProviderLifecycleView';
 import type { ProviderLifecycleConfig } from '../generated/ProviderLifecycleConfig';
 import type { ProviderLifecycleDoc } from '../generated/ProviderLifecycleDoc';
 import type { LifecycleStatus } from '../generated/LifecycleStatus';
+import type { LifecycleErrorBody } from '../generated/LifecycleErrorBody';
 import type { HostCommandControlResponse as GeneratedHostCommandControlResponse } from '../generated/HostCommandControlResponse';
 import type { ProviderInput } from '../generated/ProviderInput';
 import type { ProbeResult } from '../generated/ProbeResult';
@@ -26,7 +27,7 @@ import { isProviderKind } from './providerKinds';
  * - 回退 mock：构建期 `VITE_ADMIN_MODE=mock`，或运行时 `setAdminMode('mock')`（调试用，fixtures 保留）
  * - 响应永远只有 api_key_masked，UI 无读回明文（契约 04 §2 红线）
  * - A7 接口备注（已核对）：
- *   1. PUT providers 省略/null `api_key` = 保留；空串 = 清除；**整表替换**（未列出者删除）。删除 provider 会同步清理失效路由分支
+ *   1. Provider 日常变更使用单资源 `PUT/DELETE /v1/admin/providers/{id}`；批量 TOML/JSON 替换只走显式确认导入。
  *   2. PUT 响应：providers/routes 均 200 回显 masked 全表（与 GET 同形）
  *   3. 环 400 文案 = `路由配置存在环 (cycle): …`（含「环」，下方 catch 已命中）
  */
@@ -53,7 +54,7 @@ export interface ProvidersResponse {
   providers: AdminProvider[];
 }
 
-/** PUT /v1/admin/providers 条目 — api_key 仅写入时携带；省略/null = 保留、空串 = 清除、非空 = 替换（A7 已核对）；整表替换语义见文件头 */
+/** 单 provider 写入条目 — api_key 仅写入时携带；省略/null = 保留、空串 = 清除。 */
 export type AdminProviderWrite = Omit<ProviderInput, 'models' | 'api_key' | 'api_key_env'> &
   Partial<Pick<ProviderInput, 'models' | 'api_key' | 'api_key_env'>>;
 
@@ -158,20 +159,46 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     body = null;
   }
   if (!res.ok) {
-    const message =
-      body !== null && typeof body === 'object' && 'error' in body
+    const lifecycle = isLifecycleErrorBody(body) ? body : null;
+    const message = lifecycle
+      ? lifecycle.message
+      : body !== null && typeof body === 'object' && 'error' in body
         ? String((body as { error: unknown }).error)
         : `HTTP ${res.status}`;
     const requestId = res.headers.get('x-jev-request-id') ?? undefined;
     if ((res.status === 401 || res.status === 403) && !callToken && adminSession) {
       // cloud 态会话缺失/过期 → 全局登录小窗（Shell 注册）；页面照常拿到异常
       authErrorHandler?.(res.status);
-      throw new AdminApiError(message, res.status, undefined, requestId);
+      throw new AdminApiError(
+        message,
+        res.status,
+        undefined,
+        requestId,
+        lifecycle?.code,
+        lifecycle?.remediation,
+        lifecycle?.detail ?? undefined,
+      );
     }
-    throw new AdminApiError(message, res.status, undefined, requestId);
+    throw new AdminApiError(
+      message,
+      res.status,
+      undefined,
+      requestId,
+      lifecycle?.code,
+      lifecycle?.remediation,
+      lifecycle?.detail ?? undefined,
+    );
   }
   if (body === null) throw new Error(`bad JSON (status ${res.status})`);
   return body as T;
+}
+
+function isLifecycleErrorBody(value: unknown): value is LifecycleErrorBody {
+  if (value === null || typeof value !== 'object') return false;
+  const body = value as Partial<LifecycleErrorBody>;
+  return typeof body.code === 'string'
+    && typeof body.message === 'string'
+    && typeof body.remediation === 'string';
 }
 
 /** Shared authenticated transport for management features and upstream rehearsal. */
@@ -185,9 +212,10 @@ function cloneProviders(list: AdminProvider[]): AdminProvider[] {
   return list.map((p) => ({ ...p, models: [...(p.models ?? [])] }));
 }
 
-/** mock 内存态（PUT 整表替换语义，写入即刷新） */
+/** mock 内存态（单 provider 写入语义，写入即刷新） */
 let mockProviders: AdminProvider[] = cloneProviders(PROVIDERS_FIXTURE.providers);
 let mockHostCommandsEnabled = false;
+let mockShellCommandsEnabled = false;
 const mockLifecycleConfig = new Map<string, ProviderLifecycleConfig>();
 
 /** 契约 04 redact 形态：前缀 3 字符 + **** + 末 4 */
@@ -281,11 +309,34 @@ export async function putProviders(list: AdminProviderWrite[]): Promise<Provider
     await delay(150);
     return mockPut(list);
   }
-  return request<ProvidersResponse>('/v1/admin/providers', {
+  throw new AdminApiError(
+    tI18n('providers.batchWriteRequiresImport'),
+    405,
+    undefined,
+    undefined,
+    'provider_batch_write_disabled',
+    'Use the explicit TOML/JSON import flow for an intentional batch replacement.',
+  );
+}
+
+export async function putProvider(provider: AdminProviderWrite): Promise<ProvidersResponse> {
+  assertProvidersShape([provider]);
+  if (adminMode === 'mock') return mockPut([provider]);
+  await request<ProvidersResponse>(`/v1/admin/providers/${encodeURIComponent(provider.id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ providers: list }),
+    body: JSON.stringify(provider),
   });
+  return request<ProvidersResponse>('/v1/admin/providers');
+}
+
+export async function deleteProvider(id: string): Promise<ProvidersResponse> {
+  if (adminMode === 'mock') {
+    mockProviders = mockProviders.filter((provider) => provider.id !== id);
+    return { providers: cloneProviders(mockProviders) };
+  }
+  await request<ProvidersResponse>(`/v1/admin/providers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  return request<ProvidersResponse>('/v1/admin/providers');
 }
 
 export async function probeProvider(id: string): Promise<ProbeResponse> {
@@ -382,20 +433,21 @@ export async function stopProviderService(id: string): Promise<LifecycleStatus> 
 }
 
 export async function getHostCommands(): Promise<HostCommandControlResponse> {
-  if (adminMode === 'mock') return { enabled: mockHostCommandsEnabled, requires_confirmation: true };
+  if (adminMode === 'mock') return { enabled: mockHostCommandsEnabled, shell_enabled: mockShellCommandsEnabled, requires_confirmation: true };
   return request<HostCommandControlResponse>('/v1/admin/host-commands');
 }
 
-export async function putHostCommands(enabled: boolean): Promise<HostCommandControlResponse> {
+export async function putHostCommands(enabled: boolean, shellEnabled?: boolean): Promise<HostCommandControlResponse> {
   if (adminMode === 'mock') {
     await delay(100);
     mockHostCommandsEnabled = enabled;
-    return { enabled, requires_confirmation: true };
+    if (typeof shellEnabled === 'boolean') mockShellCommandsEnabled = shellEnabled;
+    return { enabled, shell_enabled: mockShellCommandsEnabled, requires_confirmation: true };
   }
   return request<HostCommandControlResponse>('/v1/admin/host-commands', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ enabled, ...(typeof shellEnabled === 'boolean' ? { shell_enabled: shellEnabled } : {}) }),
   });
 }
 
@@ -495,12 +547,26 @@ export class AdminApiError extends Error {
   readonly status: number;
   readonly cycleEdges?: string[];
   readonly requestId?: string;
-  constructor(message: string, status: number, cycleEdges?: string[], requestId?: string) {
+  readonly code?: string;
+  readonly remediation?: string;
+  readonly detail?: string;
+  constructor(
+    message: string,
+    status: number,
+    cycleEdges?: string[],
+    requestId?: string,
+    code?: string,
+    remediation?: string,
+    detail?: string,
+  ) {
     super(message);
     this.name = 'AdminApiError';
     this.status = status;
     this.cycleEdges = cycleEdges;
     this.requestId = requestId;
+    this.code = code;
+    this.remediation = remediation;
+    this.detail = detail;
   }
 }
 

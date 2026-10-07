@@ -18,7 +18,7 @@ import { useI18n, type MessageKey } from '../../i18n';
 import { SearchMark } from './SearchMark';
 import { settingMatches } from './settingsSearch';
 
-type DialogState = { type: 'mode'; mode: AdminStatus['mode'] } | { type: 'password' } | { type: 'lan-warning' } | { type: 'host-warning' } | null;
+type DialogState = { type: 'mode'; mode: AdminStatus['mode'] } | { type: 'password' } | { type: 'lan-warning' } | { type: 'host-warning' } | { type: 'shell-warning' } | null;
 
 interface InstanceSettingsProps {
   status: AdminStatus | null;
@@ -45,7 +45,9 @@ export function InstanceSettings({
   const [lanAccessEnabled, setLanAccessEnabled] = useState<boolean | null>(null);
   const [lanCountdown, setLanCountdown] = useState(5);
   const [hostCommandsEnabled, setHostCommandsEnabled] = useState<boolean | null>(null);
+  const [shellCommandsEnabled, setShellCommandsEnabled] = useState<boolean | null>(null);
   const [hostCountdown, setHostCountdown] = useState(5);
+  const [shellCountdown, setShellCountdown] = useState(5);
   const [secret, setSecret] = useState('');
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,18 +66,20 @@ export function InstanceSettings({
   useEffect(() => {
     let active = true;
     getHostCommands()
-      .then((result) => { if (active) setHostCommandsEnabled(result.enabled); })
-      .catch(() => { if (active) setHostCommandsEnabled(false); });
+      .then((result) => { if (active) { setHostCommandsEnabled(result.enabled); setShellCommandsEnabled(result.shell_enabled); } })
+      .catch(() => { if (active) { setHostCommandsEnabled(false); setShellCommandsEnabled(false); } });
     return () => { active = false; };
   }, [status?.mode]);
 
   useEffect(() => {
-    if (dialog?.type !== 'lan-warning' && dialog?.type !== 'host-warning') return;
+    if (dialog?.type !== 'lan-warning' && dialog?.type !== 'host-warning' && dialog?.type !== 'shell-warning') return;
     setLanCountdown(5);
     setHostCountdown(5);
+    setShellCountdown(5);
     const timer = window.setInterval(() => setLanCountdown((value) => Math.max(0, value - 1)), 1000);
     const hostTimer = window.setInterval(() => setHostCountdown((value) => Math.max(0, value - 1)), 1000);
-    return () => { window.clearInterval(timer); window.clearInterval(hostTimer); };
+    const shellTimer = window.setInterval(() => setShellCountdown((value) => Math.max(0, value - 1)), 1000);
+    return () => { window.clearInterval(timer); window.clearInterval(hostTimer); window.clearInterval(shellTimer); };
   }, [dialog]);
 
   useEffect(() => {
@@ -96,7 +100,7 @@ export function InstanceSettings({
   const showLan = settingMatches(searchQuery, 'lan local network 局域网 访问', copy('instance.lanTitle'), copy('instance.lanToggle'), copy('instance.lanHint'));
   const showPassword = settingMatches(searchQuery, 'password admin 密码 管理员', copy('instance.passwordSection'), copy('instance.passwordHint'));
   const showListen = settingMatches(searchQuery, 'listen address port 监听 地址 端口', copy('instance.listenTitle'), copy('instance.listenHint'));
-  const showHostCommands = settingMatches(searchQuery, 'host command local model service 主机命令 本地模型 启停', copy('instance.hostCommandsTitle'), copy('instance.hostCommandsHint'));
+  const showHostCommands = settingMatches(searchQuery, 'host command shell local model service 主机命令 shell 本地模型 启停', copy('instance.hostCommandsTitle'), copy('instance.hostCommandsHint'), copy('instance.shellCommandsTitle'), copy('instance.shellCommandsHint'));
 
   const openDialog = (next: Exclude<DialogState, null>) => {
     setSecret('');
@@ -154,6 +158,14 @@ export function InstanceSettings({
         toast('warn', copy('instance.hostCommandsEnabled'));
         return;
       }
+      if (dialog.type === 'shell-warning') {
+        if (shellCountdown > 0) return;
+        const result = await putHostCommands(hostCommandsEnabled === true, true);
+        setShellCommandsEnabled(result.shell_enabled);
+        setDialog(null);
+        toast('warn', copy('instance.shellCommandsEnabled'));
+        return;
+      }
       if (dialog.type === 'password') {
         const result = await putPassword(secret);
         clearAdminSession();
@@ -209,7 +221,7 @@ export function InstanceSettings({
         toast('danger', copy('instance.modeFailed', { reason }));
       } else if (dialog.type === 'lan-warning') {
         toast('danger', copy('instance.lanFailed', { reason }));
-      } else if (dialog.type === 'host-warning') {
+      } else if (dialog.type === 'host-warning' || dialog.type === 'shell-warning') {
         toast('danger', copy('instance.hostCommandsFailed', { reason }));
       } else {
         toast('danger', copy('instance.passwordFailed', { reason }));
@@ -254,11 +266,26 @@ export function InstanceSettings({
     if (busy) return;
     setBusy(true);
     try {
-      const result = await putHostCommands(false);
+      const result = await putHostCommands(false, false);
       setHostCommandsEnabled(result.enabled);
+      setShellCommandsEnabled(result.shell_enabled);
       toast('ok', copy('instance.hostCommandsDisabled'));
     } catch (error) {
       toast('danger', copy('instance.hostCommandsFailed', { reason: (error as Error).message }));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disableShellCommands = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await putHostCommands(hostCommandsEnabled === true, false);
+      setShellCommandsEnabled(result.shell_enabled);
+      toast('ok', copy('instance.shellCommandsDisabled'));
+    } catch (error) {
+      toast('danger', copy('instance.shellCommandsFailed', { reason: (error as Error).message }));
     } finally {
       setBusy(false);
     }
@@ -422,6 +449,7 @@ export function InstanceSettings({
                 <h2 className="font-semibold" style={{ fontSize: 'var(--text-base)' }}>{display('instance.hostCommandsTitle')}</h2>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{display('instance.hostCommandsHint')}</p>
               </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 aria-pressed={hostCommandsEnabled === true}
@@ -431,8 +459,19 @@ export function InstanceSettings({
               >
                 {display('instance.hostCommandsToggle')}
               </button>
+              <button
+                type="button"
+                aria-pressed={shellCommandsEnabled === true}
+                disabled={busy || hostCommandsEnabled !== true || shellCommandsEnabled === null}
+                onClick={() => { if (shellCommandsEnabled) void disableShellCommands(); else openDialog({ type: 'shell-warning' }); }}
+                style={{ ...button, background: shellCommandsEnabled ? 'var(--accent)' : 'var(--surface-hover)', borderColor: shellCommandsEnabled ? 'var(--accent)' : 'var(--border)', color: shellCommandsEnabled ? '#fff' : 'var(--text)' }}
+              >
+                {display('instance.shellCommandsToggle')}
+              </button>
+              </div>
             </div>
             <p className="text-xs" style={{ color: hostCommandsEnabled ? 'var(--warning)' : 'var(--text-muted)' }}>{hostCommandsEnabled ? copy('instance.hostCommandsEnabledState') : copy('instance.hostCommandsDisabledState')}</p>
+            <p className="text-xs" style={{ color: shellCommandsEnabled ? 'var(--warning)' : 'var(--text-muted)' }}>{shellCommandsEnabled ? copy('instance.shellCommandsEnabledState') : copy('instance.shellCommandsDisabledState')}</p>
           </section>}
 
           {status?.env_override_active && (
@@ -460,6 +499,8 @@ export function InstanceSettings({
                     ? copy('instance.lanWarningTitle')
                     : dialog.type === 'host-warning'
                       ? copy('instance.hostCommandsWarningTitle')
+                    : dialog.type === 'shell-warning'
+                      ? copy('instance.shellCommandsWarningTitle')
                     : copy(status?.password_set ? 'instance.changePassword' : 'instance.passwordActionTitle')}
               </h2>
               <p className="mt-2" style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
@@ -471,6 +512,8 @@ export function InstanceSettings({
                     ? copy('instance.lanWarningBody')
                     : dialog.type === 'host-warning'
                       ? copy('instance.hostCommandsWarningBody')
+                    : dialog.type === 'shell-warning'
+                      ? copy('instance.shellCommandsWarningBody')
                     : copy('instance.passwordActionBody')}
               </p>
               {needsAuthentication && (
@@ -504,10 +547,10 @@ export function InstanceSettings({
               <button type="button" disabled={busy} onClick={closeDialog} style={button}>{copy('instance.cancel')}</button>
               <button
                 type="submit"
-                disabled={busy || (dialog.type === 'lan-warning' && lanCountdown > 0) || (dialog.type === 'host-warning' && hostCountdown > 0) || ((needsPassword || needsAuthentication || dialog.type === 'password') && !secret.trim())}
+                disabled={busy || (dialog.type === 'lan-warning' && lanCountdown > 0) || (dialog.type === 'host-warning' && hostCountdown > 0) || (dialog.type === 'shell-warning' && shellCountdown > 0) || ((needsPassword || needsAuthentication || dialog.type === 'password') && !secret.trim())}
                 style={{ ...button, background: 'var(--accent)', borderColor: 'var(--accent)', color: '#fff' }}
               >
-                {busy ? copy('instance.saving') : dialog.type === 'mode' ? copy('instance.confirm') : dialog.type === 'lan-warning' ? copy(lanCountdown > 0 ? 'instance.lanWait' : 'instance.lanConfirm', { seconds: lanCountdown }) : dialog.type === 'host-warning' ? copy(hostCountdown > 0 ? 'instance.hostCommandsWait' : 'instance.hostCommandsConfirm', { seconds: hostCountdown }) : copy(status?.password_set ? 'instance.changePassword' : 'instance.setPassword')}
+                {busy ? copy('instance.saving') : dialog.type === 'mode' ? copy('instance.confirm') : dialog.type === 'lan-warning' ? copy(lanCountdown > 0 ? 'instance.lanWait' : 'instance.lanConfirm', { seconds: lanCountdown }) : dialog.type === 'host-warning' ? copy(hostCountdown > 0 ? 'instance.hostCommandsWait' : 'instance.hostCommandsConfirm', { seconds: hostCountdown }) : dialog.type === 'shell-warning' ? copy(shellCountdown > 0 ? 'instance.shellCommandsWait' : 'instance.shellCommandsConfirm', { seconds: shellCountdown }) : copy(status?.password_set ? 'instance.changePassword' : 'instance.setPassword')}
               </button>
             </div>
           </form>

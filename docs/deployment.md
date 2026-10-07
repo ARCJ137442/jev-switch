@@ -37,7 +37,7 @@ Rust 构建会先按锁文件检查本机 BuildKit 依赖缓存；完整时直�
 
 本仓库的 `scripts/laya_multi_server.py` 可作为 Jev-Switch 的本地 Laya 上游。它要求运行环境已经安装 Laya、PyTorch、FastAPI 和 Uvicorn，并从本地 Hugging Face 快照加载权重；启动过程不会为了补齐模型而联网。路径解析由 `scripts/laya_runtime_config.py` 负责：
 
-1. `JEV_LAYA_SNAPSHOT`（若设置）是最高优先级，直接指向完整快照目录；
+1. `LOCAL_LAYA_SNAPSHOT`（若设置）是最高优先级，直接指向完整快照目录；
 2. 否则使用 `HUGGINGFACE_HUB_CACHE`；
 3. 再否则使用 `HF_HOME` 下的 `hub`；Linux/WSL 默认是 `~/.cache/huggingface`，不会假定 Windows 的 `E:` 盘。
 
@@ -50,11 +50,11 @@ python scripts/test_laya_runtime_config.py
 确认快照已准备好后启动服务：
 
 ```bash
-export JEV_LAYA_SNAPSHOT="$HOME/.cache/huggingface/hub/models--convaiinnovations--laya/snapshots/1c5edc17a7acd8701df6fc341c0d179f1c62c982"
+export LOCAL_LAYA_SNAPSHOT="$HOME/.cache/huggingface/hub/models--convaiinnovations--laya/snapshots/<REVISION>"
 python scripts/laya_multi_server.py --host 127.0.0.1 --port 18765 --device cpu
 ```
 
-然后把 Switch 的 Laya provider 地址配置为 `http://127.0.0.1:18765/v1/systemone`，并确认 `GET /health` 与 `GET /v1/models` 成功。容器或跨主机部署时，`127.0.0.1` 仍指向 **daemon 所在机器**；需要按实际拓扑改成容器服务名或 LAN 地址。`JEV_LAYA_SNAPSHOT`、`HF_HOME` 和 `HUGGINGFACE_HUB_CACHE` 都属于运行环境变量，不应写入仓库或提交真实机器路径。
+然后把 Switch 的 Laya provider 地址配置为 `http://127.0.0.1:18765/v1/systemone`，并确认 `GET /health` 与 `GET /v1/models` 成功。容器或跨主机部署时，`127.0.0.1` 仍指向 **daemon 所在机器**；需要按实际拓扑改成容器服务名或 LAN 地址。`LOCAL_LAYA_SNAPSHOT`、`HF_HOME` 和 `HUGGINGFACE_HUB_CACHE` 都由外部 Laya 启动脚本/运行环境管理，Jev Switch 不注入这些变量。
 
 Unix daemon 同时处理 SIGINT 和 SIGTERM。Docker/Compose 停机时先关闭监听，已受理请求继续完成；连接排空上限为 10 秒，超时后取消未完成连接。Compose 设置 `stop_grace_period: 15s`，给内核排空和退出留出时间；直接使用 `docker run` 时可设置 `--stop-timeout 15`。此行为不承诺撤销上游已经执行的计算或费用。
 

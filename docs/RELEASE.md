@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-06，最新发行候选为 [`v0.10.0`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.10.0)，并标记为预发布版。本版本加入 provider 级受控模型生命周期、readiness、按候选 on-demand 启动、独立审计、主机命令安全开关和 Provider 高级 UI；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与稳定签名 Android APK。Windows Standalone 已用本地 Laya 完成真实请求人工验收；其他本地服务、平台进程组、Agent scope 和 Android/cloud 权限仍未完成人工验收。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-07，最新正式版为 [`v0.10.1`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.10.1)。本版本加入 provider 级受控模型生命周期、readiness、按候选 on-demand 启动、独立审计、主机命令安全开关、提供商自动探测和公开脚本配置指南；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与可用时的稳定签名 Android APK。Windows Standalone 已用本地 Laya、StartLux 和 OneJev 完成生命周期人工验收；Android、云端权限和 Agent scope 仍以各自证据为准。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 
@@ -160,7 +160,7 @@ Android Release 是可选资产；Windows Standalone/Portable、MSI、NSIS、CLI
 
 ```powershell
 pwsh -NoProfile -File scripts/android/generate-release-keystore.ps1 `
-  -OutputDirectory 'D:\jev-switch-release-signing'
+  -OutputDirectory '<PROTECTED_SIGNING_DIR>'
 ```
 
 脚本会交互读取 keystore 和 key 密码，默认 alias 为 `jev-switch-release`，生成 JKS 格式的 `jev-switch-release.jks` 与单行 Base64 文件 `jev-switch-release.jks.base64`。将原始 `.jks` 和密码保留在离线/受保护位置；不要提交 Git、上传 issue、写入日志或粘贴到聊天。然后在 GitHub 仓库 `Settings → Secrets and variables → Actions → New repository secret` 创建以下四项：

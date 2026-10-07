@@ -1,4 +1,5 @@
 export const AUTO_PROVIDER_PROBE_KEY = 'jev_auto_provider_probe';
+export const PROVIDER_AUTO_PROBE_PREFIX = 'jev_provider_auto_probe:';
 export const SHOW_STATUS_BAR_KEY = 'jev_show_status_bar';
 export const UI_SCALE_KEY = 'jev_ui_scale';
 export const ROUTING_HUD_AUTO_HIDE_KEY = 'jev_routing_hud_auto_hide';
@@ -56,6 +57,25 @@ export function writeAutoProviderProbe(enabled: boolean, target?: Pick<Storage, 
   const storage = target ?? (typeof localStorage === 'undefined' ? undefined : localStorage);
   try {
     storage?.setItem(AUTO_PROVIDER_PROBE_KEY, String(enabled));
+  } catch {
+    // Keep the in-memory preference for this page session if storage is unavailable.
+  }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SETTINGS_CHANGE_EVENT));
+}
+
+export function readProviderAutoProbe(providerId: string, storage?: Pick<Storage, 'getItem'>): boolean {
+  try {
+    const value = (storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage))?.getItem(`${PROVIDER_AUTO_PROBE_PREFIX}${providerId}`);
+    return value !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function writeProviderAutoProbe(providerId: string, enabled: boolean, target?: Pick<Storage, 'setItem'>): void {
+  const storage = target ?? (typeof localStorage === 'undefined' ? undefined : localStorage);
+  try {
+    storage?.setItem(`${PROVIDER_AUTO_PROBE_PREFIX}${providerId}`, String(enabled));
   } catch {
     // Keep the in-memory preference for this page session if storage is unavailable.
   }

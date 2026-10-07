@@ -18,7 +18,7 @@ import { AccessDashboard } from '../components/access/AccessDashboard';
 import { useAuth } from '../auth/AuthContext';
 import { RuntimeTelemetry } from '../components/dashboard/RuntimeTelemetry';
 import { probeProvidersConcurrently, type ProviderHealth } from './dashboardHealth';
-import { readAutoProviderProbe, SETTINGS_CHANGE_EVENT, toggleFromStorage } from '../settings/preferences';
+import { PROVIDER_AUTO_PROBE_PREFIX, readAutoProviderProbe, readProviderAutoProbe, SETTINGS_CHANGE_EVENT, toggleFromStorage } from '../settings/preferences';
 import { GatewayServiceControl } from '../components/dashboard/GatewayServiceControl';
 import { DashboardLayoutEditor } from '../components/dashboard/DashboardLayoutEditor';
 import { readDashboardLayout, type DashboardLayoutDocument } from '../components/dashboard/layout';
@@ -73,6 +73,7 @@ export function DashboardPage() {
   const [routes, setRoutes] = useState<Route[] | null>(null);
   const [health, setHealth] = useState<Record<string, ProviderHealth>>({});
   const [autoProbe, setAutoProbe] = useState(readAutoProviderProbe);
+  const [probePreferenceRevision, setProbePreferenceRevision] = useState(0);
   const [loadError, setLoadError] = useState<'auth' | 'failed' | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [activeRequests, setActiveRequests] = useState<number | null>(null);
@@ -93,10 +94,14 @@ export function DashboardPage() {
   };
 
   useEffect(() => {
-    const update = () => setAutoProbe(readAutoProviderProbe());
+    const update = () => {
+      setAutoProbe(readAutoProviderProbe());
+      setProbePreferenceRevision((value) => value + 1);
+    };
     const onStorage = (event: StorageEvent) => {
       const enabled = toggleFromStorage(event);
       if (enabled !== null) setAutoProbe(enabled);
+      if (event.key?.startsWith(PROVIDER_AUTO_PROBE_PREFIX)) setProbePreferenceRevision((value) => value + 1);
     };
     window.addEventListener(SETTINGS_CHANGE_EVENT, update);
     window.addEventListener('storage', onStorage);
@@ -153,7 +158,10 @@ export function DashboardPage() {
       if (cancelled || inFlight) return;
       inFlight = true;
       try {
-        const nextHealth = await probeProvidersConcurrently(providers, probeProvider);
+        const nextHealth = await probeProvidersConcurrently(
+          providers.filter((provider) => readProviderAutoProbe(provider.id)),
+          probeProvider,
+        );
         if (!cancelled) setHealth(nextHealth);
       } finally {
         inFlight = false;
@@ -165,7 +173,7 @@ export function DashboardPage() {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [autoProbe, providers]);
+  }, [autoProbe, probePreferenceRevision, providers]);
 
   const daemonUp = server.status === 'ok';
   const runtimeUp = gatewayRunning ?? daemonUp;

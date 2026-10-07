@@ -7,7 +7,7 @@
 //! - `POST /v1/systemone` — 主入口：Jev 协议请求
 //! - `GET  /health`        — liveness（**双态皆放行** —— 探活需要）
 //! - `GET  /v1/models`     — 列出可达 model + upstream + capability
-//! - `GET/PUT /v1/admin/providers`、`GET/PUT /v1/admin/routes`、
+//! - `GET /v1/admin/providers`、`PUT/DELETE /v1/admin/providers/:id`、`GET/PUT /v1/admin/routes`、
 //!   `POST /v1/admin/providers/{id}/probe` — Admin（A7）
 //! - `POST /v1/admin/login` — #43 cloud 态管理登录（换短时会话 token；门外免会话）
 //! - `PUT  /v1/admin/mode`  — mode 热切（零重启；门外密码激活见 admin 模块）
@@ -553,7 +553,11 @@ pub fn build_app(state: AppState) -> Router {
     let admin_routes = Router::new()
         .route(
             "/v1/admin/providers",
-            get(admin::get_providers).put(admin::put_providers),
+            get(admin::get_providers),
+        )
+        .route(
+            "/v1/admin/providers/:id",
+            put(admin::put_provider).delete(admin::delete_provider),
         )
         .route(
             "/v1/admin/routes",

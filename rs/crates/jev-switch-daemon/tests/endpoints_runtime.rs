@@ -635,13 +635,7 @@ async fn endpoint_writes_reject_invalid_graphs_without_changing_runtime_or_stora
     .await;
     assert_eq!(status, 404);
 
-    let (status, body) = send(
-        app.clone(),
-        "PUT",
-        "/v1/admin/providers",
-        r#"{"providers":[]}"#,
-    )
-    .await;
+    let (status, body) = send(app.clone(), "DELETE", "/v1/admin/providers/fake", "").await;
     assert_eq!(
         status, 200,
         "deleting a provider must prune its route branches atomically: {body}"
@@ -915,6 +909,7 @@ async fn endpoint_and_global_strategy_settings_drive_real_scheduler_paths() {
                 .unwrap()
                 .providers,
             allow_host_commands: false,
+            allow_shell_commands: false,
             nodes: vec![],
             routes: vec![],
             source_toml_fingerprint: "test".into(),
@@ -1065,6 +1060,7 @@ async fn managed_tokens_enforce_roles_and_isolate_stats_and_events() {
                 .unwrap()
                 .providers,
             allow_host_commands: false,
+            allow_shell_commands: false,
             nodes: vec![],
             routes: vec![],
             source_toml_fingerprint: "test".into(),

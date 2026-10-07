@@ -2,6 +2,6 @@
 import type { ProviderView } from "./ProviderView";
 
 /**
- * `GET /v1/admin/providers` / `PUT` 响应体。
+ * `GET /v1/admin/providers` 响应体。
  */
 export type ProvidersDoc = { providers: Array<ProviderView>, };
