@@ -1,6 +1,6 @@
 # 本地模型提供商生命周期计划
 
-**状态：**0.10.x 已实现 provider 级结构化 argv、双重 host-command/controllable 门控、readiness、startup_check/on_demand 前置、provider 互斥、生命周期所有权快照、独立审计表、admin lifecycle domain API、主机命令安全开关和 Provider 高级 UI；Windows Laya/StartLux 已通过本机 EXE API 的启动、就绪、实际请求和停止验收。细粒度 Agent scope、跨 daemon 的安全进程组回收、OneJev/OpenJev 与其他平台验收仍未完成。
+**状态：**0.10.x 已实现 provider 级结构化 argv、双重 host-command/controllable 门控、readiness、startup_check/on_demand 前置、provider 互斥、生命周期所有权快照、独立审计表、admin lifecycle domain API、主机命令安全开关和 Provider 高级 UI；Windows Laya、StartLux、OneJev 已通过本机 EXE API 的启动、就绪和停止验收。细粒度 Agent scope、跨 daemon 的安全进程组回收、OpenJev 与其他平台验收仍未完成。
 **适用版本：**`0.10.x` 生命周期主线；模型画像/属性路由移至 `0.11.0`，不属于 `v0.9.3` 能力。  
 **目标：**在保持 Jev-Switch 作为路由网关的边界下，为已登记的本地模型提供商增加可控的启动、停止和状态检查能力。
 

@@ -22,9 +22,9 @@
 | 文件 | 内容 | 状态 |
 |---|---|---|
 | **[../ROADMAP.md](../ROADMAP.md)** | **未来功能方向、优先级和可验收边界** | OpenRouter 已发布；其他方向按表内状态推进 |
-| [design/LOCAL-MODEL-SERVICE-SCRIPTS.md](design/LOCAL-MODEL-SERVICE-SCRIPTS.md) | 对外可移植的本地模型生命周期脚本规范、状态码、UI 配置步骤、跨平台原理和故障排查 | Laya/StartLux 已完成 Windows 本机 API 验收；OneJev 需由用户私有配置 qev 和模型文件 |
+| [design/LOCAL-MODEL-SERVICE-SCRIPTS.md](design/LOCAL-MODEL-SERVICE-SCRIPTS.md) | 对外可移植的本地模型生命周期脚本规范、状态码、UI 配置步骤、跨平台原理和故障排查 | Laya/StartLux/OneJev 已完成 Windows 本机生命周期验收；OneJev 仍需由用户私有配置 qev 和模型文件 |
 | [design/ROADMAP-EXECUTION-PLANS.md](design/ROADMAP-EXECUTION-PLANS.md) | 基于当前源码的近期路线图执行拆解、文件入口、ICE 和验收门槛 | 计划草案；不代表 Release 承诺 |
-| [design/LOCAL-MODEL-LIFECYCLE-PLAN.md](design/LOCAL-MODEL-LIFECYCLE-PLAN.md) | 本地模型 provider 的受控启动/停止/状态检查、敏感环境变量和进程所有权设计 | 0.10.x 后端 readiness/候选门控/审计、主机开关和 Provider UI 已实现；Windows Laya/StartLux 已验收，scope、进程组、OneJev/OpenJev 和其他平台仍未完成 |
+| [design/LOCAL-MODEL-LIFECYCLE-PLAN.md](design/LOCAL-MODEL-LIFECYCLE-PLAN.md) | 本地模型 provider 的受控启动/停止/状态检查、敏感环境变量和进程所有权设计 | 0.10.x 后端 readiness/候选门控/审计、主机开关和 Provider UI 已实现；Windows Laya/StartLux/OneJev 已验收，scope、进程组、OpenJev 和其他平台仍未完成 |
 | [design/CONFIG-CAPABILITY-REGISTRY-PLAN.md](design/CONFIG-CAPABILITY-REGISTRY-PLAN.md) | 人类配置入口与 Agent API 的统一 capability、权限、版本迁移和审计契约 | capability discovery、lifecycle 领域读写/执行和独立审计已实现；通用 PATCH/细粒度 scope 未实现 |
 | [design/MODEL-PROFILES-ATTRIBUTE-ROUTING-PLAN.md](design/MODEL-PROFILES-ATTRIBUTE-ROUTING-PLAN.md) | 模型画像、自动/人工证据、隐私/模态硬过滤、软排序与入口需求声明 | 已排到 0.11.0；需求已归档，尚未实现 |
 | [verification/typesafe-systemone-adapter-2026-09-28.md](verification/typesafe-systemone-adapter-2026-09-28.md) | TypeSafe 官方与本地-compatible SystemOne adapter 的当前实现、wiremock 证据和边界 | 源码/离线契约验证；不代表已发布或已做真实官方推理 |
