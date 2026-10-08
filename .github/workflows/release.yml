@@ -103,7 +103,7 @@ jobs:
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
-          if [ "$VERSION" = "0.10.0" ]; then
+          if [ "$VERSION" = "0.10.2" ] || [[ "$VERSION" == *-* ]]; then
             echo "prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
@@ -430,7 +430,7 @@ jobs:
           body: |
             ## 版本说明
 
-            本次为 `${{ needs.meta.outputs.version }}` 正式版本。Windows 资产随包提供 `windows-signing-status.txt`；若仓库变量 `WINDOWS_SIGNING_REQUIRED` 未开启，该清单会明确标记 Windows 包未使用 Authenticode。Android APK（如签名 Secrets 已配置）随包提供 commit、版本码、签名指纹和 SHA-256 manifest。
+            本次为 `${{ needs.meta.outputs.version }}` ${{ needs.meta.outputs.prerelease == 'true' && '预发布预览版' || '正式版本' }}。Windows 资产随包提供 `windows-signing-status.txt`；若仓库变量 `WINDOWS_SIGNING_REQUIRED` 未开启，该清单会明确标记 Windows 包未使用 Authenticode。Android APK（如签名 Secrets 已配置）随包提供 commit、版本码、签名指纹和 SHA-256 manifest。
 
             ## 本版内容
 

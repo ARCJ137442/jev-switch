@@ -159,7 +159,7 @@ export const zh: Record<keyof typeof en, string> = {
   'rt.title': '路由表',
   'rt.empty': '暂无 routes — 点击添加行或一键导入 example',
   'rt.del': '删',
-  'rt.footer': '变更 400ms debounce 后 PUT /v1/admin/routes · 环 → 标红拒绝',
+  'rt.footer': '变更 400ms debounce 后提交原子路由事务 · 环 → 标红拒绝',
   'rt.dup': '重复路由 — 相同的 left → right 组合已存在',
 
   /* edge inspector */

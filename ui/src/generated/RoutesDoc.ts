@@ -2,6 +2,6 @@
 import type { RouteEdge } from "./RouteEdge";
 
 /**
- * `GET/PUT /v1/admin/routes` 共用体（`RouteEdge` = jev-core 导出，一份真值）。
+ * `GET /v1/admin/routes` 响应（`RouteEdge` = jev-core 导出，一份真值）。
  */
 export type RoutesDoc = { routes: Array<RouteEdge>, };

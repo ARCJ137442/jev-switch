@@ -7,7 +7,7 @@
 //! - `POST /v1/systemone` — 主入口：Jev 协议请求
 //! - `GET  /health`        — liveness（**双态皆放行** —— 探活需要）
 //! - `GET  /v1/models`     — 列出可达 model + upstream + capability
-//! - `GET /v1/admin/providers`、`PUT/DELETE /v1/admin/providers/:id`、`GET/PUT /v1/admin/routes`、
+//! - `GET /v1/admin/providers`、`PUT/DELETE /v1/admin/providers/:id`、`GET /v1/admin/routes`、
 //!   `POST /v1/admin/providers/{id}/probe` — Admin（A7）
 //! - `POST /v1/admin/login` — #43 cloud 态管理登录（换短时会话 token；门外免会话）
 //! - `PUT  /v1/admin/mode`  — mode 热切（零重启；门外密码激活见 admin 模块）
@@ -76,7 +76,7 @@ use tower_http::{
 pub struct AppState {
     /// A5 装配：能力注册制 —— 上游经 `Registry::register(Box<dyn UpstreamAdapter>)`
     /// 挂载，`/v1/models` 能力从 trait 取（`capabilities_of` 硬编码已删）。
-    /// A7：admin `PUT /v1/admin/routes` 经 `Registry::replace_edges` 热替换边表。
+    /// Admin route transactions hot-replace the edge set through `Registry::replace_edges`.
     pub registry: Arc<Registry>,
     /// 配置文件真值路径（`JEV_SWITCH_CONFIG` 解析结果；admin 读改写同一文件）。
     pub config_path: PathBuf,
@@ -551,17 +551,15 @@ pub fn build_app(state: AppState) -> Router {
     // admin 会话门（cloud；local loopback 直通、非 loopback 403）——
     // mode / listen 热切端点在此门内（cloud 翻转需会话，防匿名拆锁）
     let admin_routes = Router::new()
-        .route(
-            "/v1/admin/providers",
-            get(admin::get_providers),
-        )
+        .route("/v1/admin/providers", get(admin::get_providers))
         .route(
             "/v1/admin/providers/:id",
             put(admin::put_provider).delete(admin::delete_provider),
         )
+        .route("/v1/admin/routes", get(admin::get_routes))
         .route(
-            "/v1/admin/routes",
-            get(admin::get_routes).put(admin::put_routes),
+            "/v1/admin/routes/transaction",
+            post(admin::route_transaction),
         )
         .route("/v1/admin/graph", get(admin::get_graph))
         .route("/v1/admin/capabilities", get(admin::get_capabilities))

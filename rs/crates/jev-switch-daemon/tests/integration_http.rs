@@ -144,18 +144,19 @@ async fn android_webview_origin_can_read_health_and_preflight_admin_requests() {
         .unwrap();
     assert_eq!(preflight.status().as_u16(), 200);
     assert_eq!(
-        preflight.headers().get("access-control-allow-origin").unwrap(),
-        "http://tauri.localhost"
-    );
-    assert!(
         preflight
             .headers()
-            .get("access-control-allow-headers")
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("authorization")
+            .get("access-control-allow-origin")
+            .unwrap(),
+        "http://tauri.localhost"
     );
+    assert!(preflight
+        .headers()
+        .get("access-control-allow-headers")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .contains("authorization"));
 }
 
 fn edge(left: &str, right: &str, priority: i32) -> RouteEdge {

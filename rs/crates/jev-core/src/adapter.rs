@@ -141,9 +141,11 @@ Registry（contracts/02 §2：register / invoke 传参永久冻结）
 pub struct Registry {
     router: Router,
     retry: RetryPolicy,
-    route_activity_observer: std::sync::RwLock<Option<Arc<dyn Fn(RouteActivity) + Send + Sync>>>,
+    route_activity_observer: RouteActivityObserver,
     route_activity_sequence: AtomicU64,
 }
+
+type RouteActivityObserver = std::sync::RwLock<Option<Arc<dyn Fn(RouteActivity) + Send + Sync>>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteActivityPhase {
@@ -504,7 +506,10 @@ impl Registry {
             // upstream_model 改写后发上游
             let mut attempt_req = req.clone();
             attempt_req.model = item.candidate.upstream_model.clone();
-            let activity_id = self.route_activity_sequence.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+            let activity_id = self
+                .route_activity_sequence
+                .fetch_add(1, Ordering::Relaxed)
+                .wrapping_add(1);
             self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Started);
 
             // ── 同候选内：退避重试（A6）──
@@ -522,14 +527,20 @@ impl Registry {
                 }));
                 let started_at = std::time::Instant::now();
                 let result = upstream.evaluate(attempt_req.clone()).await;
-                route_attempts.last_mut().expect("attempt was recorded")["latency_ms"] =
-                    serde_json::json!(started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64);
+                route_attempts.last_mut().expect("attempt was recorded")["latency_ms"] = serde_json::json!(
+                    started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+                );
                 match result {
                     Ok(mut resp) => {
                         route_attempts.last_mut().expect("attempt was recorded")["outcome"] =
                             serde_json::json!("succeeded");
                         resp.upstream_calls = Some(upstream_calls); // 如实 = 实发次数
-                        self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: true });
+                        self.emit_route_activity(
+                            activity_id,
+                            &req.model,
+                            item,
+                            RouteActivityPhase::Finished { success: true },
+                        );
                         resp.extra.insert(
                             "route_trace".into(),
                             serde_json::json!({
@@ -560,7 +571,12 @@ impl Registry {
                         );
                         // on_error=fail：第一次错误即返回（不同候选也不换、同候选也不重试）
                         if item.on_error == OnError::Fail {
-                            self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: false });
+                            self.emit_route_activity(
+                                activity_id,
+                                &req.model,
+                                item,
+                                RouteActivityPhase::Finished { success: false },
+                            );
                             return Err(InvocationFailure::new(
                                 &req.model,
                                 route_attempts,
@@ -570,14 +586,24 @@ impl Registry {
                         }
                         // 可重试 && 同候选还有预算 → 退避后再试**同一**候选
                         if e.retryable() && attempt < self.retry.max_attempts {
-                            self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Retrying { attempt });
+                            self.emit_route_activity(
+                                activity_id,
+                                &req.model,
+                                item,
+                                RouteActivityPhase::Retrying { attempt },
+                            );
                             let delay = self.retry.backoff_after(attempt);
                             if !delay.is_zero() {
                                 tokio::time::sleep(delay).await;
                             }
                             continue;
                         }
-                        self.emit_route_activity(activity_id, &req.model, item, RouteActivityPhase::Finished { success: false });
+                        self.emit_route_activity(
+                            activity_id,
+                            &req.model,
+                            item,
+                            RouteActivityPhase::Finished { success: false },
+                        );
                         last_err = Some(e);
                         break; // on_error=next：重试耗尽或不可重试，都交给下一候选
                     }
@@ -680,7 +706,10 @@ impl Registry {
             })?;
         let mut upstream_req = req.clone();
         upstream_req.model = item.candidate.upstream_model.clone();
-        let activity_id = self.route_activity_sequence.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+        let activity_id = self
+            .route_activity_sequence
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1);
         self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Started);
         let mut attempts = Vec::new();
         let mut upstream_calls = 0;
@@ -689,8 +718,9 @@ impl Registry {
             attempts.push(serde_json::json!({"provider_id":item.candidate.upstream_id,"upstream_model":item.candidate.upstream_model,"hops":item.candidate.hops,"priority":item.candidate.priority,"attempt":attempt,"outcome":"in_flight"}));
             let started_at = std::time::Instant::now();
             let result = upstream.evaluate(upstream_req.clone()).await;
-            attempts.last_mut().expect("attempt was recorded")["latency_ms"] =
-                serde_json::json!(started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64);
+            attempts.last_mut().expect("attempt was recorded")["latency_ms"] = serde_json::json!(
+                started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+            );
             match result {
                 Ok(mut response) => {
                     attempts.last_mut().expect("attempt was recorded")["outcome"] =
@@ -808,7 +838,10 @@ impl Registry {
             }
             let mut upstream_req = req.clone();
             upstream_req.model = item.candidate.upstream_model.clone();
-            let activity_id = self.route_activity_sequence.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+            let activity_id = self
+                .route_activity_sequence
+                .fetch_add(1, Ordering::Relaxed)
+                .wrapping_add(1);
             self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Started);
             let dispatched = started_calls.clone();
             let attempt_log = attempts.clone();
@@ -836,7 +869,10 @@ impl Registry {
                             == Some(u64::from(attempt_id))
                     })
                 {
-                    entry["latency_ms"] = serde_json::json!(started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64);
+                    entry["latency_ms"] =
+                        serde_json::json!(
+                            started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+                        );
                     match &result {
                         Ok(_) => entry["outcome"] = serde_json::json!("succeeded"),
                         Err(error) => {
@@ -860,14 +896,26 @@ impl Registry {
         let raced = tokio::time::timeout(duration, async {
             let mut last_error = None;
             while let Some(joined) = tasks.join_next().await {
-                let Ok((item, activity_id, result)) = joined else { continue };
+                let Ok((item, activity_id, result)) = joined else {
+                    continue;
+                };
                 match result {
                     Ok(response) => {
-                        self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Finished { success: true });
+                        self.emit_route_activity(
+                            activity_id,
+                            &req.model,
+                            &item,
+                            RouteActivityPhase::Finished { success: true },
+                        );
                         return Ok((response, item));
                     }
                     Err(error) => {
-                        self.emit_route_activity(activity_id, &req.model, &item, RouteActivityPhase::Finished { success: false });
+                        self.emit_route_activity(
+                            activity_id,
+                            &req.model,
+                            &item,
+                            RouteActivityPhase::Finished { success: false },
+                        );
                         last_error = Some(error)
                     }
                 }
@@ -1230,7 +1278,10 @@ mod tests {
     #[tokio::test]
     async fn route_activity_emits_correlated_started_retry_and_finished_events_with_exact_edges() {
         let mut registry = Registry::with_retry(
-            vec![edge("public", "fallback", 10), edge("fallback", "provider-a", 10)],
+            vec![
+                edge("public", "fallback", 10),
+                edge("fallback", "provider-a", 10),
+            ],
             RetryPolicy::new(2, std::time::Duration::ZERO),
         );
         let (upstream, _) = fake("provider-a", &[QuestionType::Noul], Mode::Err429OnceThenOk);
@@ -1254,8 +1305,13 @@ mod tests {
         assert_eq!(events.len(), 3);
         assert_eq!(events[0].phase, RouteActivityPhase::Started);
         assert_eq!(events[1].phase, RouteActivityPhase::Retrying { attempt: 1 });
-        assert_eq!(events[2].phase, RouteActivityPhase::Finished { success: true });
-        assert!(events.iter().all(|event| event.activity_id == events[0].activity_id));
+        assert_eq!(
+            events[2].phase,
+            RouteActivityPhase::Finished { success: true }
+        );
+        assert!(events
+            .iter()
+            .all(|event| event.activity_id == events[0].activity_id));
         assert!(events.iter().all(|event| event.route_edges.len() == 2));
         assert_eq!(events[0].route_edges[0].left, "public");
         assert_eq!(events[0].route_edges[0].right, "fallback");
@@ -1625,7 +1681,10 @@ mod tests {
             response.extra["route_trace"]["attempts"][0]["upstream_status"],
             401
         );
-        for attempt in response.extra["route_trace"]["attempts"].as_array().unwrap() {
+        for attempt in response.extra["route_trace"]["attempts"]
+            .as_array()
+            .unwrap()
+        {
             assert!(attempt["latency_ms"].as_u64().is_some());
         }
 
@@ -1668,7 +1727,14 @@ mod tests {
 
     #[tokio::test]
     async fn on_error_policy_matrix_preserves_actual_calls_and_status_across_http_classes() {
-        for (status, retryable) in [(400, false), (401, false), (402, false), (429, false), (429, true), (503, true)] {
+        for (status, retryable) in [
+            (400, false),
+            (401, false),
+            (402, false),
+            (429, false),
+            (429, true),
+            (503, true),
+        ] {
             for policy in [OnError::Next, OnError::Fail] {
                 let mut first = edge("jev", "first", 0);
                 first.on_error = policy;
@@ -1676,26 +1742,55 @@ mod tests {
                     vec![first, edge("jev", "second", 1)],
                     RetryPolicy::no_retry(),
                 );
-                let (first, first_handle) = fake("first", &[QuestionType::Noul], Mode::HttpStatus(status, retryable));
+                let (first, first_handle) = fake(
+                    "first",
+                    &[QuestionType::Noul],
+                    Mode::HttpStatus(status, retryable),
+                );
                 let (second, second_handle) = fake("second", &[QuestionType::Noul], Mode::Ok);
                 registry.register(first);
                 registry.register(second);
-                let result = registry.invoke_with_strategy_traced(
-                    noul_request("jev"), plain_ctx(), RoutingStrategy::Failover,
-                ).await;
-                assert_eq!(first_handle.calls.load(Ordering::SeqCst), 1, "status {status} policy {policy:?}");
+                let result = registry
+                    .invoke_with_strategy_traced(
+                        noul_request("jev"),
+                        plain_ctx(),
+                        RoutingStrategy::Failover,
+                    )
+                    .await;
+                assert_eq!(
+                    first_handle.calls.load(Ordering::SeqCst),
+                    1,
+                    "status {status} policy {policy:?}"
+                );
                 if policy == OnError::Next {
-                    let response = result.expect("next must advance after any upstream HTTP failure");
+                    let response =
+                        result.expect("next must advance after any upstream HTTP failure");
                     assert_eq!(second_handle.calls.load(Ordering::SeqCst), 1);
                     assert_eq!(response.upstream_calls, Some(2));
-                    assert_eq!(response.extra["route_trace"]["attempts"][0]["upstream_status"], status);
-                    assert_eq!(response.extra["route_trace"]["attempts"][0]["retry_decision"], "next_candidate");
-                    assert_eq!(response.extra["route_trace"]["attempts"][1]["outcome"], "succeeded");
+                    assert_eq!(
+                        response.extra["route_trace"]["attempts"][0]["upstream_status"],
+                        status
+                    );
+                    assert_eq!(
+                        response.extra["route_trace"]["attempts"][0]["retry_decision"],
+                        "next_candidate"
+                    );
+                    assert_eq!(
+                        response.extra["route_trace"]["attempts"][1]["outcome"],
+                        "succeeded"
+                    );
                 } else {
-                    let failure = result.expect_err("fail must stop after the first provider error");
+                    let failure =
+                        result.expect_err("fail must stop after the first provider error");
                     assert_eq!(second_handle.calls.load(Ordering::SeqCst), 0);
-                    assert_eq!(failure.route_trace["attempts"][0]["upstream_status"], status);
-                    assert_eq!(failure.route_trace["attempts"][0]["retry_decision"], "stop_by_candidate_policy");
+                    assert_eq!(
+                        failure.route_trace["attempts"][0]["upstream_status"],
+                        status
+                    );
+                    assert_eq!(
+                        failure.route_trace["attempts"][0]["retry_decision"],
+                        "stop_by_candidate_policy"
+                    );
                 }
             }
         }
@@ -1741,7 +1836,7 @@ mod tests {
         let resp = a
             .incoming(br#"{"answers":{}}"#, &ctx)
             .expect("valid jev response");
-        assert!(matches!(resp.answers.get("q"), None)); // answers 空
+        assert!(!resp.answers.contains_key("q")); // answers 空
         let _: &Answer = &Answer::Noul(NoulAnswer {
             kind: NoulKind::Noul,
             noul: None,

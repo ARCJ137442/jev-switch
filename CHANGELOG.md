@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.10.2] - 2026-10-08
+
+### Fixed
+
+- 路由普通写入改为原子 `POST /v1/admin/routes/transaction`；整表 `PUT /v1/admin/routes` 不再暴露。
+- 服务入口创建/更新使用边级 `route_operations`，入口元数据与路由变更在同一 SQLite 事务中提交。
+- Provider 单项更新/删除不再通过内部整表重建，删除时只清理失效路由分支，保留有效分支与历史记录。
+- 边身份使用 `[left, right, match, upstream_model]` 的 canonical JSON 表示，兼容唯一的旧边 ID。
+
+### Verification
+
+- 全 workspace Rust 测试、`ts-rs` 类型门禁、UI 69 项测试、TypeScript lint 和生产构建通过。
+- 全 workspace `cargo fmt` 已执行，Clippy 使用 `-D warnings` 验证；GitHub Release 将本版本标记为预发布修复预览。
+
+### 用户叙事与对照场景
+
+#### 配置修改：从整表覆盖到单资源原子变更
+
+- **起点**：用户在路由、入口或提供商页面修改一个对象。
+- **问题**：整表读改写可能覆盖并发或无关配置，失败后还可能留下非法路由图。
+- **操作**：UI 提交边级操作或单 provider 变更；daemon 在快照副本/SQLite 事务中校验完整图后一次提交。
+- **结果**：环、未知引用、重复边、入口路由越权和 provider 删除悬空分支都会在提交前拒绝，旧快照与运行时 Router 保持不变。
+- **对照**：显式 JSON/TOML 导入仍是带确认的批量恢复路径；普通 UI、CLI、Agent 不再使用整表覆盖。
+- **边界**：本版不引入额外 ETag/version 实体；写入由当前 daemon 的 SQLite 写锁串行保护。
+
 ## [0.10.1] - 2026-10-07
 
 ### Fixed

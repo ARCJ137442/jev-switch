@@ -163,7 +163,7 @@ export const en = {
   'rt.title': 'Route table',
   'rt.empty': 'No routes — click Add row or import the example',
   'rt.del': 'Del',
-  'rt.footer': 'Changes PUT /v1/admin/routes after 400ms debounce · cycle → reject in red',
+  'rt.footer': 'Changes submit an atomic route transaction after 400ms debounce · cycles are rejected in red',
   'rt.dup': 'Duplicate route — same left → right pair already exists',
 
   /* edge inspector */

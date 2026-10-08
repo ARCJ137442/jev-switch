@@ -100,7 +100,7 @@ pub enum OnError {
 /// 字段与 contracts/03 §2 表逐一对齐；默认值：`match=exact`、`priority=0`、
 /// `sticky=none`、`on_error=next`、`upstream_model=空`（发上游前不改写 model）。
 ///
-/// A7 ts-rs：admin `GET/PUT /v1/admin/routes` 与 UI 共用本类型一份真值
+/// A7 ts-rs：admin route reads and atomic transactions 与 UI 共用本类型一份真值
 /// （core 加 feature `ts-rs` 导出 —— 不在 daemon 镜像第二份 `RouteView`）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
@@ -443,7 +443,7 @@ impl Router {
             .next()
             .ok_or_else(|| RouterError::UnknownModel(model.to_string()))?;
         self.upstream(&first.upstream_id)
-            .ok_or_else(|| RouterError::UnknownUpstream(first.upstream_id))
+            .ok_or(RouterError::UnknownUpstream(first.upstream_id))
     }
 
     /// 按 id 取已注册上游（handler 逐候选调用）。
@@ -624,7 +624,7 @@ mod tests {
 
     fn ups(ids: &[(&str, &'static [QuestionType])]) -> HashMap<String, Box<dyn UpstreamAdapter>> {
         ids.iter()
-            .map(|(id, qts)| (id.to_string(), mock(id, *qts)))
+            .map(|(id, qts)| (id.to_string(), mock(id, qts)))
             .collect()
     }
 
@@ -878,16 +878,20 @@ mod tests {
             ]),
         );
         router.note_success("sess-1", "laya");
-        let mut ctx = RouteCtx::default();
-        ctx.sticky_key = Some("sess-1".into());
+        let ctx = RouteCtx {
+            sticky_key: Some("sess-1".into()),
+            ..Default::default()
+        };
         let c = router.select("jev", &ctx).unwrap();
         // 记忆命中 laya（sticky=session 边）→ 提到首位，尽管 priority 30 > 10
         assert_eq!(c[0].upstream_id, "laya");
         assert_eq!(c[1].upstream_id, "vercel");
 
         // 不同 key 不粘
-        let mut ctx2 = RouteCtx::default();
-        ctx2.sticky_key = Some("sess-2".into());
+        let ctx2 = RouteCtx {
+            sticky_key: Some("sess-2".into()),
+            ..Default::default()
+        };
         let c2 = router.select("jev", &ctx2).unwrap();
         assert_eq!(c2[0].upstream_id, "vercel");
 
@@ -1070,8 +1074,10 @@ mod tests {
             },
         ]);
         // 拓扑变更 → 粘性记忆清空，select 按 priority 回到 vercel 首位
-        let mut ctx = RouteCtx::default();
-        ctx.sticky_key = Some("sess-1".into());
+        let ctx = RouteCtx {
+            sticky_key: Some("sess-1".into()),
+            ..Default::default()
+        };
         let c = r.select("jev", &ctx).unwrap();
         assert_eq!(c[0].upstream_id, "vercel", "热替换后 sticky 记忆应失效");
     }

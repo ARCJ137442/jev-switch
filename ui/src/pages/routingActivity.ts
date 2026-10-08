@@ -8,7 +8,7 @@ export interface ActivityRoute {
   left: string;
   match: 'exact' | 'prefix';
   right: string;
-  upstream_model?: string;
+  upstream_model?: string | null;
 }
 
 interface OutcomeSample {

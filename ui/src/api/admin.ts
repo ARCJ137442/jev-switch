@@ -12,6 +12,8 @@ import type { HostCommandControlResponse as GeneratedHostCommandControlResponse 
 import type { ProviderInput } from '../generated/ProviderInput';
 import type { ProbeResult } from '../generated/ProbeResult';
 import type { ProviderModelsResult } from '../generated/ProviderModelsResult';
+import type { RouteMutation as GeneratedRouteMutation } from '../generated/RouteMutation';
+import type { RouteEdge as GeneratedRouteEdge } from '../generated/RouteEdge';
 import type { LanAccessResponse as GeneratedLanAccessResponse } from '../generated/LanAccessResponse';
 import type { GatewayControlResponse as GeneratedGatewayControlResponse } from '../generated/GatewayControlResponse';
 import type { TelemetrySnapshot } from '../generated/TelemetrySnapshot';
@@ -526,13 +528,13 @@ export const putGatewayControl = (running: boolean) => request<GatewayControlRes
   body: JSON.stringify({ running }),
 });
 
-/* ---------- routes（contracts/03 §2 / contracts/05 GET·PUT /v1/admin/routes） ---------- */
+/* ---------- routes（GET compatibility view + atomic transaction writes） ---------- */
 
 export interface Route {
   left: string;
   match: 'exact' | 'prefix';
   right: string;
-  upstream_model?: string;
+  upstream_model?: string | null;
   priority: number;
   sticky?: 'none' | 'session';
   on_error?: 'next' | 'fail';
@@ -541,6 +543,8 @@ export interface Route {
 export interface RoutesResponse {
   routes: Route[];
 }
+
+export type RouteMutation = GeneratedRouteMutation;
 
 /** 带 400 语义的 admin 错误（环 → cycleEdges 供 UI 标红） */
 export class AdminApiError extends Error {
@@ -575,6 +579,12 @@ export function edgeKey(left: string, right: string): string {
   return `${left}=>${right}`;
 }
 
+/** Canonical mutation identity keeps same-target model ports distinct. */
+export function routeEdgeId(route: Route): string {
+  const match = route.match === 'prefix' ? 'prefix' : 'exact';
+  return JSON.stringify([route.left, route.right, match, route.upstream_model ?? null]);
+}
+
 /** 归一化：固定键序 + 默认值（保证 JSON 深比较/UNSAVED 判定稳定） */
 export function normalizeRoute(r: Route): Route {
   const out: Route = {
@@ -591,7 +601,19 @@ export function normalizeRoute(r: Route): Route {
   return out;
 }
 
-/** 本地环检（design/01 §6.2：PUT 前检环；服务端 400 时同样返回边键集合） */
+function toRouteEdge(route: Route): GeneratedRouteEdge {
+  return {
+    left: route.left,
+    match: route.match,
+    right: route.right,
+    upstream_model: route.upstream_model ?? null,
+    priority: route.priority,
+    sticky: route.sticky ?? 'none',
+    on_error: route.on_error ?? 'next',
+  };
+}
+
+/** 本地环检（transaction 前检环；服务端 400 时同样返回边键集合） */
 export function findCyclicEdgeKeys(routes: Route[]): string[] {
   const cycle = findCycle(routes);
   if (cycle === null) return [];
@@ -663,15 +685,27 @@ export async function putRoutes(routes: Route[]): Promise<RoutesResponse> {
     mockRoutes = normalized.map((r) => ({ ...r }));
     return { routes: mockRoutes.map((r) => ({ ...r })) };
   }
+  const current = (await listRoutes()).routes.map(normalizeRoute);
+  const currentById = new Map(current.map((route) => [routeEdgeId(route), route]));
+  const nextById = new Map(normalized.map((route) => [routeEdgeId(route), route]));
+  const operations: RouteMutation[] = [];
+  for (const [id] of currentById) {
+    if (!nextById.has(id)) operations.push({ op: 'delete', edge_id: id });
+  }
+  for (const [id, route] of nextById) {
+    const previous = currentById.get(id);
+    if (!previous) operations.push({ op: 'create', route: toRouteEdge(route) });
+    else if (JSON.stringify(previous) !== JSON.stringify(route)) operations.push({ op: 'update', edge_id: id, route: toRouteEdge(route) });
+  }
+  if (operations.length === 0) return { routes: current };
   try {
-    return await request<RoutesResponse>('/v1/admin/routes', {
-      method: 'PUT',
+    return await request<RoutesResponse>('/v1/admin/routes/transaction', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ routes: normalized }),
+      body: JSON.stringify({ operations }),
     });
   } catch (e) {
-    // 已对齐 A7 实际文案：`路由配置存在环 (cycle): a -> b -> a`（含「环」→ 命中）；
-    // right 非法 400（「既不是已注册 provider…」）不命中 → 按普通失败回滚，语义正确
+    // 旧整表 PUT 已不再暴露；保留环错误的前端标记与可读提示。
     const msg = (e as Error).message;
     if (msg.includes('环')) throw new AdminApiError(msg, 400, findCyclicEdgeKeys(normalized));
     throw e;

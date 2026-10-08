@@ -33,7 +33,7 @@ pub fn load_all(conn: &Connection) -> Result<Vec<ServiceEndpoint>> {
     )?;
 
     let endpoints = stmt
-        .query_map([], |row| ServiceEndpoint::from_row(row))?
+        .query_map([], ServiceEndpoint::from_row)?
         .collect::<Result<Vec<_>>>()?;
 
     Ok(endpoints)
@@ -46,9 +46,7 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<ServiceEndpoint>>
          FROM service_endpoints WHERE id = ?",
     )?;
 
-    let result = stmt
-        .query_row([id], |row| ServiceEndpoint::from_row(row))
-        .optional()?;
+    let result = stmt.query_row([id], ServiceEndpoint::from_row).optional()?;
 
     Ok(result)
 }
@@ -264,7 +262,7 @@ mod route_persistence_tests {
             sticky: Sticky::Session,
             on_error: OnError::Fail,
         };
-        replace_endpoint_routes(&conn, "public", &[first.clone()]).unwrap();
+        replace_endpoint_routes(&conn, "public", std::slice::from_ref(&first)).unwrap();
         assert_eq!(load_routes(&conn).unwrap(), vec![first]);
 
         let replacement = RouteEdge {
@@ -276,7 +274,7 @@ mod route_persistence_tests {
             sticky: Sticky::None,
             on_error: OnError::Next,
         };
-        replace_endpoint_routes(&conn, "public", &[replacement.clone()]).unwrap();
+        replace_endpoint_routes(&conn, "public", std::slice::from_ref(&replacement)).unwrap();
         assert_eq!(load_routes(&conn).unwrap(), vec![replacement]);
     }
 }

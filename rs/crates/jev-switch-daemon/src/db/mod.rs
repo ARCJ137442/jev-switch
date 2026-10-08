@@ -55,7 +55,13 @@ pub fn config_fingerprint(path: &Path) -> String {
         .and_then(|value| {
             let table = value.as_table()?;
             let mut relevant = toml::Table::new();
-            for key in ["providers", "routes", "router", "allow_host_commands", "allow_shell_commands"] {
+            for key in [
+                "providers",
+                "routes",
+                "router",
+                "allow_host_commands",
+                "allow_shell_commands",
+            ] {
                 if let Some(value) = table.get(key) {
                     relevant.insert(key.into(), value.clone());
                 }

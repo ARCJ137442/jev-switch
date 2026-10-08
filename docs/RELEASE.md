@@ -6,7 +6,7 @@
 
 ## 当前版本与下一次发版
 
-截至 2026-10-07，最新正式版为 [`v0.10.1`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.10.1)。本版本加入 provider 级受控模型生命周期、readiness、按候选 on-demand 启动、独立审计、主机命令安全开关、提供商自动探测和公开脚本配置指南；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与可用时的稳定签名 Android APK。Windows Standalone 已用本地 Laya、StartLux 和 OneJev 完成生命周期人工验收；Android、云端权限和 Agent scope 仍以各自证据为准。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
+截至 2026-10-08，上一正式版为 [`v0.10.1`](https://github.com/ARCJ137442/jev-switch/releases/tag/v0.10.1)，当前预发布修复预览版本为 `v0.10.2`。本次预览加入原子配置写入、入口边级路由操作、provider 单对象写入和完整非法图回滚验证；Release 仍包含 Windows Standalone/Portable/MSI/NSIS、Linux/Windows CLI、Docker 与可用时的稳定签名 Android APK。Windows Standalone 的本地 Laya、StartLux 和 OneJev 生命周期人工验收属于 v0.10.1 证据；Android、云端权限和 Agent scope 仍以各自证据为准。Windows 单实例按版本隔离，EXE/窗口/托盘使用黑底白色 `J`；Android 正式包使用专属稳定签名。Android 配置必须与 `ui/package.json`、`tauri.conf.json` 和 Rust Cargo 版本同步。
 
 后续 Release 必须由用户确认版本号；tag 与以下五处去掉 `v` 后必须完全一致：
 

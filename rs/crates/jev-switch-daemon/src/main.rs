@@ -138,6 +138,7 @@ fn check_health_at(addr: SocketAddr) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::items_after_test_module)]
 #[cfg(test)]
 mod healthcheck_tests {
     use super::check_health_at;

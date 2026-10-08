@@ -6,7 +6,7 @@
 
 [package]
 name = "jev-switch-shell"
-version = "0.10.1"
+version = "0.10.2"
 edition = "2021"
 description = "Jev-Switch 桌面壳（Tauri 2 · Windows 优先）"
 license = "MIT OR Apache-2.0"

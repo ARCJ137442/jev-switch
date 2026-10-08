@@ -235,20 +235,14 @@ enum StrategyConfig {
   "strategy_config": {
     "type": "follow_global"
   },
-  "routes": [
+  "route_operations": [
     {
-      "left": "jev",
-      "right": "vercel",
-      "upstream_model": "typesafe-ai/jev",
-      "priority": 10,
-      "match": "exact"
+      "op": "create",
+      "route": {"left": "jev", "right": "vercel", "upstream_model": "typesafe-ai/jev", "priority": 10, "match": "exact"}
     },
     {
-      "left": "jev",
-      "right": "laya",
-      "upstream_model": "laya-english",
-      "priority": 20,
-      "match": "exact"
+      "op": "create",
+      "route": {"left": "jev", "right": "laya", "upstream_model": "laya-english", "priority": 20, "match": "exact"}
     }
   ]
 }
@@ -268,8 +262,8 @@ enum StrategyConfig {
 ```
 
 **说明**:
-- `routes` 字段可选：不提供时只创建入口，不创建路由
-- 提供 `routes` 时，同时创建入口和路由（原子性操作）
+- `route_operations` 字段可选：不提供时只创建入口，不创建路由
+- 提供边级 `create/update/delete` 操作时，同时创建入口和修改路由（原子性操作）；不接受 `routes` 整表字段
 
 ---
 

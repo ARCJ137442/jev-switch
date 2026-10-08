@@ -2,8 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'rea
 import { Check, Copy, Pencil, Plus, Power, RefreshCw, Trash2, X } from 'lucide-react';
 import { createEndpoint, deleteEndpoint, listEndpoints, updateDefaultStrategy, updateEndpoint,
   type ServiceEndpointView, type StrategyConfig } from '../../api/endpoints';
-import { listProviders, listRoutes, type AdminProvider } from '../../api/admin';
-import type { RouteEdge } from '../../generated/RouteEdge';
+import { listProviders, listRoutes, routeEdgeId, type AdminProvider } from '../../api/admin';
+import type { RouteMutation } from '../../generated/RouteMutation';
+import type { RouteEdge, RouteEdge as GeneratedRouteEdge } from '../../generated/RouteEdge';
 import { useI18n } from '../../i18n';
 import { useToast } from '../../app/feedback';
 import { useStatusBarItems } from '../../app/statusBar';
@@ -139,10 +140,31 @@ function EndpointEditor({ entry, providers, allRoutes, onClose, onSaved }: Edito
     event.preventDefault(); if (busy) return;
     if (rows.some(r => !r.right.trim())) { setError(t('entry.routeTargetRequired')); return; }
     setBusy(true); setError(null);
-    const outgoing = rows.map(r => ({ ...r, left: id.trim(), right: r.right.trim(), upstream_model: r.upstream_model?.trim() || null }));
+    const nextId = id.trim();
+    const outgoing = rows.map(r => ({ ...r, left: nextId, right: r.right.trim(), upstream_model: r.upstream_model?.trim() || null }));
     try {
-      if (entry) await updateEndpoint(entry.id, { id: id.trim(), strategy_config: strategy, routes: outgoing });
-      else await createEndpoint({ id: id.trim(), strategy_config: strategy, routes: outgoing });
+      const previous = entry ? allRoutes.filter(route => route.left === entry.id) : [];
+      const routeOperations: RouteMutation[] = [];
+      const toGeneratedEdge = (route: RouteEdge): GeneratedRouteEdge => ({
+        left: route.left,
+        match: route.match,
+        right: route.right,
+        upstream_model: route.upstream_model ?? null,
+        priority: route.priority,
+        sticky: route.sticky ?? 'none',
+        on_error: route.on_error ?? 'next',
+      });
+      const previousById = new Map(previous.map(route => [routeEdgeId(route), route]));
+      const nextById = new Map(outgoing.map(route => [routeEdgeId(route), route]));
+      for (const [edgeId] of previousById) {
+        if (!nextById.has(edgeId) || (entry && entry.id !== nextId)) routeOperations.push({ op: 'delete', edge_id: edgeId });
+      }
+      for (const [edgeId, route] of nextById) {
+        if (!previousById.has(edgeId) || (entry && entry.id !== nextId)) routeOperations.push({ op: 'create', route: toGeneratedEdge(route) });
+        else if (JSON.stringify(previousById.get(edgeId)) !== JSON.stringify(route)) routeOperations.push({ op: 'update', edge_id: edgeId, route: toGeneratedEdge(route) });
+      }
+      if (entry) await updateEndpoint(entry.id, { id: nextId, strategy_config: strategy, route_operations: routeOperations });
+      else await createEndpoint({ id: nextId, strategy_config: strategy, route_operations: routeOperations });
       onSaved();
     } catch (e) { setError(message(e)); setBusy(false); }
   };

@@ -197,7 +197,7 @@ pub(crate) fn current_mode(state: &AppState) -> crate::config::RunMode {
 /// 出现在进程内 oneshot/单元测试（无 TCP 对端），按本机信任保持
 /// `local_mode_requires_no_auth_anywhere` 既有语义。
 pub(crate) fn addr_is_loopback(addr: Option<&std::net::SocketAddr>) -> bool {
-    addr.map_or(true, |a| a.ip().is_loopback())
+    addr.is_none_or(|a| a.ip().is_loopback())
 }
 
 fn ip_is_private_lan(ip: std::net::IpAddr) -> bool {
@@ -349,9 +349,7 @@ pub async fn require_admin_session(
         let loopback = req
             .extensions()
             .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-            .map_or(true, |axum::extract::ConnectInfo(addr)| {
-                addr.ip().is_loopback()
-            });
+            .is_none_or(|axum::extract::ConnectInfo(addr)| addr.ip().is_loopback());
         if loopback {
             return next.run(req).await;
         }

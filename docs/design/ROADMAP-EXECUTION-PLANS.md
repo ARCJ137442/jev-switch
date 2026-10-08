@@ -17,7 +17,7 @@
 2. **当前工作树并行主线**：DAG GraphDocument/策略历史闭环，以及 Dashboard 第一阶段组件布局编辑器。
 3. **后续收口/独立方向**：Windows 证据与性能基线、Android 跨设备回归、服务发现、数据目录迁移、本地模型提供商生命周期、模型画像与属性路由、TUI、全链路性能 p50/p95/p99 和路由顾问。
 
-本地模型提供商生命周期的详细设计已落盘到[本地模型提供商生命周期计划](LOCAL-MODEL-LIFECYCLE-PLAN.md)，通用 Agent 配置面见[配置能力注册表计划](CONFIG-CAPABILITY-REGISTRY-PLAN.md)：0.10.x 已完成结构化 argv、readiness、startup_check、按候选 on_demand 门控、provider 互斥、所有权快照、独立审计、主机命令开关和 Provider 高级 UI；scope 写入、跨 daemon 进程组回收、真实服务和平台验收仍待实现，尚未进入正式 Release。
+本地模型提供商生命周期的详细设计已落盘到[本地模型提供商生命周期计划](LOCAL-MODEL-LIFECYCLE-PLAN.md)，通用 Agent 配置面见[配置能力注册表计划](CONFIG-CAPABILITY-REGISTRY-PLAN.md)：0.10.x 已完成结构化 argv、readiness、startup_check、按候选 on_demand 门控、provider 互斥、所有权快照、独立审计、主机命令开关和 Provider 高级 UI；scope 写入、跨 daemon 进程组回收、真实服务和平台验收仍待实现，尚未进入正式 Release。配置写入已落地[原子配置写入计划](ATOMIC-CONFIG-WRITE-PLAN.md)的路由事务和入口边操作；版本冲突与更大范围 Graph transaction 仅在确有需求时再排期。
 
 模型画像与属性路由的需求已归档到[模型画像与属性路由计划](MODEL-PROFILES-ATTRIBUTE-ROUTING-PLAN.md)：它与 Capabilities、lifecycle、DAG/failover 分层，先做静态/动态 × 自动/人工证据和确定性硬过滤，不自动放宽隐私/模态约束。
 

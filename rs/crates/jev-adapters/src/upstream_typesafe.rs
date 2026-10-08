@@ -484,8 +484,10 @@ mod tests {
         assert!(TYPESAFE_CAPABILITIES.supports(QuestionType::Choice));
         assert!(TYPESAFE_CAPABILITIES.supports(QuestionType::Score));
         assert!(TYPESAFE_CAPABILITIES.supports(QuestionType::Noul));
-        assert!(TYPESAFE_CAPABILITIES.has_confidence);
-        assert!(TYPESAFE_CAPABILITIES.has_usage);
+        const {
+            assert!(TYPESAFE_CAPABILITIES.has_confidence);
+            assert!(TYPESAFE_CAPABILITIES.has_usage);
+        }
         assert!(TYPESAFE_CAPABILITIES.is_retryable_status(429));
         assert!(TYPESAFE_CAPABILITIES.is_retryable_status(529));
         assert!(!TYPESAFE_CAPABILITIES.is_retryable_status(401));

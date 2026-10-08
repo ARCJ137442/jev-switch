@@ -8,8 +8,8 @@
 //!   `api_key` 省略 = 保留原 key；显式空串 = 清除（回退 `api_key_env`）
 //! - `GET  /v1/admin/routes` → `{routes:[RouteEdge]}`（运行时边表 —— 含旧 `[router]`
 //!   合并结果，config 载入边集合作为真值）
-//! - `PUT  /v1/admin/routes` → 整表替换：字段校验 → **检环 400**（文案含 环/cycle）
-//!   → right 引用校验 → 落盘 → `Registry::replace_edges` 热替换（无重启）
+//! - `POST /v1/admin/routes/transaction` → 原子 create/update/delete 事务；整表 PUT 不暴露
+//!   → 在副本上校验 → 单次落盘 → `Registry::replace_edges` 热替换（无重启）
 //! - `POST /v1/admin/providers/{id}/probe` → `{ok,latency_ms,status,error}`
 //! - `POST /v1/admin/providers/{id}/models` → 从上游模型目录获取模型 ID（不运行推理）
 //! - `GET /v1/admin/capabilities` → UI/Agent 配置能力发现（只读）
@@ -24,7 +24,7 @@
 //!
 //! Phase 4.2: 服务入口配置端点（见 endpoints 子模块）：
 //! - `GET  /v1/admin/endpoints` → 获取所有服务入口 + 健康状态 + 调用统计
-//! - `POST /v1/admin/endpoints` → 创建服务入口 + 可选路由
+//! - `POST /v1/admin/endpoints` → 创建服务入口 + 可选边级路由操作
 //! - `PUT  /v1/admin/endpoints/{id}` → 更新策略/启用状态，支持修改 ID
 //! - `DELETE /v1/admin/endpoints/{id}` → 删除入口 + 级联删除路由
 //! - `GET  /v1/admin/config/default_strategy` → 获取全局默认策略
@@ -38,10 +38,9 @@
 //! - **密码永不回传**：mode/password 响应只出布尔警示字段，无 password 键
 //!
 //! 落盘策略（Q5=a 读改写同一文件，其余段不动 —— toml::Value 往返）：
-//! - providers PUT：替换 `providers` 表；删除 provider 时同步收缩 `routes`，其余段原样保留
-//! - routes PUT：写 `[[routes]]` 并**移除整个旧 `[router]` 表** —— 整表替换语义下
-//!   旧扁平映射全部视为已被新表覆盖（payload 若来自 GET 即合并真值；残留任一条
-//!   都会在下次加载时重复合并出多余边 / 复活已删边）。**注释不随 toml 往返保留**
+//! - providers PUT/DELETE：只修改目标 provider 及受影响路由；批量变更只走显式确认导入
+//! - route transaction：只修改 SQLite runtime snapshot；不改写 TOML，也不接受整表 PUT。
+//!   旧扁平映射只在显式导入/兼容加载时处理。**注释不随 toml 往返保留**
 //!   （toml crate 不保注释 —— A7 报告备案项）。
 //! - mode/password/listen PUT：写对应单键，其余段原样（同上注释不保）。
 
@@ -73,7 +72,7 @@ use std::time::{Duration, Instant};
 DTO（ts-rs 导出 → ui/src/generated/；RouteEdge 来自 jev-core 一份真值）
 ══════════════════════════════════════════════════════════════════ */
 
-/// GET/PUT 响应视图 —— **字段集即红线 2 字面**：无 `api_key`。
+/// GET/PUT provider 响应视图 —— **字段集即红线 2 字面**：无 `api_key`。
 /// `api_key_masked` 仅返回 `sk-****a1b2` 一类掩码；没有有效 key 时返回空串，需结合 `api_key_set` 判断。
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(
@@ -166,17 +165,6 @@ pub struct ProviderInput {
     #[serde(default)]
     #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
     pub lifecycle: Option<ProviderLifecycleConfig>,
-}
-
-/// Internal compatibility body for the atomic provider replacement helper.
-#[derive(Debug, Clone, serde::Deserialize)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(::ts_rs::TS),
-    ts(export, export_to = "../../../../ui/src/generated/")
-)]
-pub struct PutProvidersBody {
-    pub providers: Vec<ProviderInput>,
 }
 
 /// Registered configuration capabilities exposed to human and Agent clients.
@@ -520,7 +508,7 @@ pub async fn provider_lifecycle_stop(
     }
 }
 
-/// `GET/PUT /v1/admin/routes` 共用体（`RouteEdge` = jev-core 导出，一份真值）。
+/// `GET /v1/admin/routes` 响应（`RouteEdge` = jev-core 导出，一份真值）。
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(
     feature = "ts-rs",
@@ -529,6 +517,33 @@ pub async fn provider_lifecycle_stop(
 )]
 pub struct RoutesDoc {
     pub routes: Vec<jev_core::router::RouteEdge>,
+}
+
+/// 原子路由事务。客户端只提交要发生的边操作，不提交完整边表。
+#[derive(Debug, Clone, serde::Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(::ts_rs::TS),
+    ts(export, export_to = "../../../../ui/src/generated/")
+)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum RouteMutation {
+    Create {
+        route: jev_core::router::RouteEdge,
+    },
+    Update {
+        edge_id: String,
+        route: jev_core::router::RouteEdge,
+    },
+    Delete {
+        edge_id: String,
+    },
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RouteTransactionRequest {
+    pub operations: Vec<RouteMutation>,
 }
 
 /// `POST /v1/admin/providers/{id}/probe` 响应（contracts/05 §2 字面四键）。
@@ -705,21 +720,18 @@ fn lifecycle_request_id() -> u64 {
     NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
-pub(crate) fn load_config(state: &AppState) -> Result<Config, Response> {
+#[allow(clippy::result_large_err)]
+fn load_config_from_conn(
+    state: &AppState,
+    conn: &rusqlite::Connection,
+) -> Result<Config, Response> {
     let mut config = Config::load(&state.config_path).map_err(|e| {
         err_plain(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("config load failed: {e}"),
         )
     })?;
-    let conn = state.db_conn.lock().map_err(|e| {
-        err(
-            state,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("database lock failed: {e}"),
-        )
-    })?;
-    crate::db::restore_or_seed_runtime_config(&conn, &mut config, &state.config_path).map_err(
+    crate::db::restore_or_seed_runtime_config(conn, &mut config, &state.config_path).map_err(
         |e| {
             err(
                 state,
@@ -731,7 +743,19 @@ pub(crate) fn load_config(state: &AppState) -> Result<Config, Response> {
     Ok(config)
 }
 
-/// 刷新已知密钥集（GET/PUT providers 后调用 —— 外部手改的 key 也纳入 redact）。
+#[allow(clippy::result_large_err)]
+pub(crate) fn load_config(state: &AppState) -> Result<Config, Response> {
+    let conn = state.db_conn.lock().map_err(|e| {
+        err(
+            state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("database lock failed: {e}"),
+        )
+    })?;
+    load_config_from_conn(state, &conn)
+}
+
+/// 刷新已知密钥集（provider 读写后调用 —— 外部手改的 key 也纳入 redact）。
 fn refresh_known_keys(state: &AppState, cfg: &Config) {
     let mut guard = state.known_keys.write().expect("known_keys lock");
     for id in cfg.providers.keys() {
@@ -811,6 +835,7 @@ fn providers_doc(cfg: &Config, keys: &[String]) -> ProvidersDoc {
 }
 
 /// 读配置文件为 `toml::Value`（读改写用 —— 其余段原样保真；注释不保留）。
+#[allow(clippy::result_large_err)]
 pub(crate) fn read_value(path: &Path) -> Result<toml::Value, Response> {
     let raw = std::fs::read_to_string(path).map_err(|e| {
         err_plain(
@@ -828,6 +853,7 @@ pub(crate) fn read_value(path: &Path) -> Result<toml::Value, Response> {
 
 /// 落盘 + 权限收紧（0600 文件；0700 仅限默认配置目录 `~/.jev-switch` ——
 /// `JEV_SWITCH_CONFIG` 可能指向仓库内示例，不乱 chmod 其父目录）。
+#[allow(clippy::result_large_err)]
 pub(crate) fn write_value(path: &Path, value: &toml::Value) -> Result<(), Response> {
     let s = toml::to_string(value).map_err(|e| {
         err_plain(
@@ -865,169 +891,98 @@ pub async fn get_providers(State(state): State<AppState>) -> Response {
     Json(providers_doc(&cfg, &keys)).into_response()
 }
 
-/// 整表替换写入 + 落盘（0600）；响应 masked（红线 7 —— 不 echo 明文）。
-///
-/// 逐项语义（H3 交接备注①）：`api_key` **省略 = 保留原 key**、`""` = 清除、
-/// 非空 = 替换；`api_key_env` 同理（省略保留）。入参未列出的 provider 被移除。
-pub(crate) async fn replace_providers_snapshot(State(state): State<AppState>, body: Bytes) -> Response {
-    let input: PutProvidersBody = match serde_json::from_slice(&body) {
-        Ok(v) => v,
-        Err(e) => {
-            return err(
-                &state,
-                StatusCode::BAD_REQUEST,
-                format!("invalid body: {e}"),
-            )
-        }
-    };
-
-    // 字段校验
-    let mut seen: BTreeSet<String> = BTreeSet::new();
-    for p in &input.providers {
-        if p.id.trim().is_empty() {
-            return err(&state, StatusCode::BAD_REQUEST, "provider id 不得为空");
-        }
-        if p.kind.trim().is_empty() {
-            return err(
-                &state,
-                StatusCode::BAD_REQUEST,
-                format!("provider '{}' kind 不得为空", p.id),
-            );
-        }
-        if !matches!(
-            p.kind.as_str(),
-            "vercel" | "laya" | "typesafe" | "openrouter"
-        ) {
-            return err(
-                &state,
-                StatusCode::BAD_REQUEST,
-                format!(
-                    "provider '{}' kind '{}' 不受支持；可选值：vercel、laya、typesafe、openrouter",
-                    p.id, p.kind
-                ),
-            );
-        }
-        if p.base.trim().is_empty() {
-            return err(
-                &state,
-                StatusCode::BAD_REQUEST,
-                format!("provider '{}' base 不得为空", p.id),
-            );
-        }
-        if !seen.insert(p.id.clone()) {
-            return err(
-                &state,
-                StatusCode::BAD_REQUEST,
-                format!("provider id 重复: {}", p.id),
-            );
-        }
+fn validate_provider_input(input: &ProviderInput) -> Result<(), String> {
+    if input.id.trim().is_empty() {
+        return Err("provider id 不得为空".into());
     }
+    if input.kind.trim().is_empty() {
+        return Err(format!("provider '{}' kind 不得为空", input.id));
+    }
+    if !matches!(
+        input.kind.as_str(),
+        "vercel" | "laya" | "typesafe" | "openrouter"
+    ) {
+        return Err(format!(
+            "provider '{}' kind '{}' 不受支持；可选值：vercel、laya、typesafe、openrouter",
+            input.id, input.kind
+        ));
+    }
+    if input.base.trim().is_empty() {
+        return Err(format!("provider '{}' base 不得为空", input.id));
+    }
+    Ok(())
+}
 
-    let existing = match load_config(&state) {
-        Ok(c) => c,
-        Err(r) => return r,
-    };
-
-    let mut cfg = existing.clone();
-    let mut providers = HashMap::new();
-    for p in &input.providers {
-        let old = existing.providers.get(&p.id);
-        let api_key: Option<String> = match &p.api_key {
-            Some(s) if s.is_empty() => None,             // 显式空 = 清除
-            Some(s) => Some(s.clone()),                  // 新值
-            None => old.and_then(|o| o.api_key.clone()), // 省略 = 保留原 key
-        };
-        let api_key_env: Option<String> = p
-            .api_key_env
-            .clone()
-            .or_else(|| old.and_then(|o| o.api_key_env.clone()));
-
-        let name = p
+fn provider_config_from_input(
+    input: &ProviderInput,
+    old: Option<&ProviderConfig>,
+) -> ProviderConfig {
+    ProviderConfig {
+        kind: input.kind.clone(),
+        base: input.base.clone(),
+        name: input
             .name
             .clone()
-            .or_else(|| old.and_then(|o| o.name.clone()))
-            .filter(|v| !v.trim().is_empty());
-        let account = p
+            .or_else(|| old.and_then(|v| v.name.clone()))
+            .filter(|v| !v.trim().is_empty()),
+        account: input
             .account
             .clone()
-            .or_else(|| old.and_then(|o| o.account.clone()))
-            .filter(|v| !v.trim().is_empty());
-        let models = p
+            .or_else(|| old.and_then(|v| v.account.clone()))
+            .filter(|v| !v.trim().is_empty()),
+        models: input
             .models
             .iter()
-            .map(|m| m.trim())
-            .filter(|m| !m.is_empty())
+            .map(|model| model.trim())
+            .filter(|model| !model.is_empty())
             .map(String::from)
-            .collect();
-        providers.insert(
-            p.id.clone(),
-            ProviderConfig {
-                kind: p.kind.clone(),
-                base: p.base.clone(),
-                name,
-                account,
-                models,
-                api_key,
-                api_key_env,
-                enabled: p.enabled,
-                forward_extensions: p
-                    .forward_extensions
-                    .or_else(|| old.map(|o| o.forward_extensions))
-                    .unwrap_or(false),
-                lifecycle: p
-                    .lifecycle
-                    .clone()
-                    .or_else(|| old.map(|o| o.lifecycle.clone()))
-                    .unwrap_or_default(),
-            },
-        );
+            .collect(),
+        api_key: match &input.api_key {
+            Some(value) if value.is_empty() => None,
+            Some(value) => Some(value.clone()),
+            None => old.and_then(|v| v.api_key.clone()),
+        },
+        api_key_env: input
+            .api_key_env
+            .clone()
+            .or_else(|| old.and_then(|v| v.api_key_env.clone())),
+        enabled: input.enabled,
+        forward_extensions: input
+            .forward_extensions
+            .or_else(|| old.map(|v| v.forward_extensions))
+            .unwrap_or(false),
+        lifecycle: input
+            .lifecycle
+            .clone()
+            .or_else(|| old.map(|v| v.lifecycle.clone()))
+            .unwrap_or_default(),
     }
-    for (provider_id, provider) in &providers {
-        if let Err(reason) = provider.lifecycle.validate() {
-            return lifecycle_error(
-                &state,
-                StatusCode::BAD_REQUEST,
-                &format!("invalid_lifecycle_configuration:{provider_id}:{reason}"),
-            );
-        }
+}
+
+fn prepare_provider_config(
+    cfg: &mut Config,
+    previous: &HashMap<String, ProviderConfig>,
+) -> Result<(), String> {
+    for (provider_id, provider) in &cfg.providers {
+        provider
+            .lifecycle
+            .validate()
+            .map_err(|reason| format!("invalid_lifecycle_configuration:{provider_id}:{reason}"))?;
     }
-    let removed_providers: BTreeSet<String> = existing
-        .providers
+    let removed: BTreeSet<String> = previous
         .keys()
-        .filter(|id| !providers.contains_key(*id))
+        .filter(|id| !cfg.providers.contains_key(*id))
         .cloned()
         .collect();
-    cfg.providers = providers;
     cfg.router.clear();
-    cfg.routes = existing.route_edges();
-    prune_routes_for_removed_providers(&mut cfg.routes, &cfg.providers, &removed_providers);
-    if let Err(message) = validate_route_graph(&cfg.routes, &cfg.providers) {
-        return err(
-            &state,
-            StatusCode::BAD_REQUEST,
-            format!("provider update rejected: {message}"),
-        );
-    }
-    let conn = match state.db_conn.lock() {
-        Ok(conn) => conn,
-        Err(e) => {
-            return err(
-                &state,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("database lock failed: {e}"),
-            )
-        }
-    };
-    if let Err(e) = crate::db::persist_runtime_config(&conn, &cfg, &state.config_path) {
-        return err(
-            &state,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("save provider snapshot failed: {e}"),
-        );
-    }
-    drop(conn);
+    prune_routes_for_removed_providers(&mut cfg.routes, &cfg.providers, &removed);
+    validate_route_graph(&cfg.routes, &cfg.providers)
+        .map_err(|message| format!("provider update rejected: {message}"))
+}
+
+fn finish_provider_config_update(state: &AppState, cfg: Config) -> Response {
     state.lifecycle.configure(&cfg);
-    refresh_known_keys(&state, &cfg);
+    refresh_known_keys(state, &cfg);
     state
         .registry
         .replace_upstreams(crate::build_runtime_upstreams_with_lifecycle(
@@ -1035,74 +990,40 @@ pub(crate) async fn replace_providers_snapshot(State(state): State<AppState>, bo
             &state.telemetry,
             state.lifecycle.clone(),
         ));
-    if let Err(message) = crate::admin::endpoints::refresh_endpoint_routes(&state, &[]) {
+    if let Err(message) = crate::admin::endpoints::refresh_endpoint_routes(state, &[]) {
         return err(
-            &state,
+            state,
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("refresh merged route graph after provider update failed: {message}"),
         );
     }
-    let keys = known_keys_snapshot(&state);
+    let keys = known_keys_snapshot(state);
     Json(providers_doc(&cfg, &keys)).into_response()
 }
 
-fn provider_input_from_config(id: &str, provider: &ProviderConfig) -> ProviderInput {
-    ProviderInput {
-        id: id.to_string(),
-        name: provider.name.clone(),
-        account: provider.account.clone(),
-        kind: provider.kind.clone(),
-        base: provider.base.clone(),
-        enabled: provider.enabled,
-        models: provider.models.clone(),
-        api_key: None,
-        api_key_env: None,
-        forward_extensions: Some(provider.forward_extensions),
-        lifecycle: Some(provider.lifecycle.clone()),
+fn provider_update_error(state: &AppState, message: String) -> Response {
+    if message.starts_with("invalid_lifecycle_configuration:") {
+        lifecycle_error(state, StatusCode::BAD_REQUEST, &message)
+    } else {
+        err(state, StatusCode::BAD_REQUEST, message)
     }
 }
 
-fn provider_table_body(providers: Vec<ProviderInput>) -> Vec<u8> {
-    let values: Vec<serde_json::Value> = providers
-        .into_iter()
-        .map(|provider| {
-            let mut value = serde_json::Map::new();
-            value.insert("id".into(), serde_json::json!(provider.id));
-            value.insert("name".into(), serde_json::json!(provider.name));
-            value.insert("account".into(), serde_json::json!(provider.account));
-            value.insert("kind".into(), serde_json::json!(provider.kind));
-            value.insert("base".into(), serde_json::json!(provider.base));
-            value.insert("enabled".into(), serde_json::json!(provider.enabled));
-            value.insert("models".into(), serde_json::json!(provider.models));
-            if let Some(api_key) = provider.api_key {
-                value.insert("api_key".into(), serde_json::json!(api_key));
-            }
-            if let Some(api_key_env) = provider.api_key_env {
-                value.insert("api_key_env".into(), serde_json::json!(api_key_env));
-            }
-            value.insert(
-                "forward_extensions".into(),
-                serde_json::json!(provider.forward_extensions),
-            );
-            value.insert("lifecycle".into(), serde_json::json!(provider.lifecycle));
-            serde_json::Value::Object(value)
-        })
-        .collect();
-    serde_json::to_vec(&serde_json::json!({ "providers": values }))
-        .expect("provider update request must serialize")
-}
-
-/// Update exactly one provider. The implementation internally reuses the
-/// validated table transaction, but the public API never accepts a replacement
-/// provider list.
+/// Update exactly one provider in the current SQLite snapshot.
 pub async fn put_provider(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
     body: Bytes,
 ) -> Response {
-    let mut input: ProviderInput = match serde_json::from_slice(&body) {
+    let input: ProviderInput = match serde_json::from_slice(&body) {
         Ok(value) => value,
-        Err(error) => return err(&state, StatusCode::BAD_REQUEST, format!("invalid body: {error}")),
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid body: {error}"),
+            )
+        }
     };
     if input.id != id {
         return err(
@@ -1111,51 +1032,85 @@ pub async fn put_provider(
             "provider path id and body id must match",
         );
     }
-    let config = match load_config(&state) {
+    if let Err(message) = validate_provider_input(&input) {
+        return err(&state, StatusCode::BAD_REQUEST, message);
+    }
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {error}"),
+            )
+        }
+    };
+    let mut config = match load_config_from_conn(&state, &conn) {
         Ok(config) => config,
         Err(response) => return response,
     };
-    let mut providers: Vec<ProviderInput> = config
-        .providers
-        .iter()
-        .map(|(provider_id, provider)| provider_input_from_config(provider_id, provider))
-        .collect();
-    if let Some(existing) = providers.iter_mut().find(|provider| provider.id == id) {
-        input.api_key = None;
-        input.api_key_env = None;
-        *existing = input;
-    } else {
-        providers.push(input);
+    let previous = config.providers.clone();
+    let old = config.providers.get(&id);
+    let provider = provider_config_from_input(&input, old);
+    config.providers.insert(id.clone(), provider);
+    if let Err(message) = prepare_provider_config(&mut config, &previous) {
+        return provider_update_error(&state, message);
     }
-    let body = provider_table_body(providers);
-    replace_providers_snapshot(State(state), Bytes::from(body)).await
+    if let Err(error) = crate::db::persist_runtime_config(&conn, &config, &state.config_path) {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("save provider snapshot failed: {error}"),
+        );
+    }
+    drop(conn);
+    finish_provider_config_update(&state, config)
 }
 
-/// Delete exactly one provider. Batch replacement is deliberately not exposed
-/// as an ordinary admin API; explicit JSON/TOML import remains the batch path.
+/// Delete exactly one provider in the current SQLite snapshot.
 pub async fn delete_provider(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    let config = match load_config(&state) {
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {error}"),
+            )
+        }
+    };
+    let mut config = match load_config_from_conn(&state, &conn) {
         Ok(config) => config,
         Err(response) => return response,
     };
     if !config.providers.contains_key(&id) {
-        return err(&state, StatusCode::NOT_FOUND, format!("provider '{id}' not found"));
+        return err(
+            &state,
+            StatusCode::NOT_FOUND,
+            format!("provider '{id}' not found"),
+        );
     }
-    let providers = config
-        .providers
-        .iter()
-        .filter(|(provider_id, _)| *provider_id != &id)
-        .map(|(provider_id, provider)| provider_input_from_config(provider_id, provider))
-        .collect();
-    let body = provider_table_body(providers);
-    replace_providers_snapshot(State(state), Bytes::from(body)).await
+    let previous = config.providers.clone();
+    config.providers.remove(&id);
+    if let Err(message) = prepare_provider_config(&mut config, &previous) {
+        return err(&state, StatusCode::BAD_REQUEST, message);
+    }
+    if let Err(error) = crate::db::persist_runtime_config(&conn, &config, &state.config_path) {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("save provider snapshot failed: {error}"),
+        );
+    }
+    drop(conn);
+    finish_provider_config_update(&state, config)
 }
 
 /* ══════════════════════════════════════════════════════════════════
-GET / PUT · routes
+GET / POST · routes
 ══════════════════════════════════════════════════════════════════ */
 
 /// 运行时边表（含旧 `[router]` 合并结果 —— config 载入边集合作为真值）。
@@ -1273,6 +1228,186 @@ pub(crate) fn validate_route_graph(
     Ok(())
 }
 
+fn route_edge_id(edge: &RouteEdge) -> String {
+    let match_mode = match edge.r#match {
+        MatchMode::Exact => "exact",
+        MatchMode::Prefix => "prefix",
+    };
+    serde_json::to_string(&(
+        edge.left.as_str(),
+        edge.right.as_str(),
+        match_mode,
+        edge.upstream_model.as_deref(),
+    ))
+    .expect("route edge identity must serialize")
+}
+
+/// Resolve the canonical JSON edge identity; the old `left=>right` form is
+/// accepted only when it identifies one unambiguous legacy edge.
+fn route_edge_index(routes: &[RouteEdge], edge_id: &str) -> Option<usize> {
+    if let Some(index) = routes
+        .iter()
+        .position(|edge| route_edge_id(edge) == edge_id)
+    {
+        return Some(index);
+    }
+    let legacy_matches: Vec<usize> = routes
+        .iter()
+        .enumerate()
+        .filter_map(|(index, edge)| {
+            let by_provider = format!("{}=>{}", edge.left, edge.right);
+            let by_model = edge
+                .upstream_model
+                .as_ref()
+                .map(|model| format!("{}=>{}", edge.left, model));
+            (edge_id == by_provider || by_model.as_deref() == Some(edge_id)).then_some(index)
+        })
+        .collect();
+    if legacy_matches.len() == 1 {
+        Some(legacy_matches[0])
+    } else {
+        None
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum RouteMutationFailure {
+    Conflict(String),
+    NotFound(String),
+}
+
+pub(crate) fn apply_route_mutations(
+    routes: &mut Vec<RouteEdge>,
+    operations: &[RouteMutation],
+) -> Result<(), RouteMutationFailure> {
+    for operation in operations {
+        match operation {
+            RouteMutation::Create { route } => {
+                let edge_id = route_edge_id(route);
+                if route_edge_index(routes, &edge_id).is_some() {
+                    return Err(RouteMutationFailure::Conflict(format!(
+                        "route edge already exists: {edge_id}"
+                    )));
+                }
+                routes.push(route.clone());
+            }
+            RouteMutation::Update { edge_id, route } => {
+                let Some(index) = route_edge_index(routes, edge_id) else {
+                    return Err(RouteMutationFailure::NotFound(format!(
+                        "route edge not found: {edge_id}"
+                    )));
+                };
+                let next_id = route_edge_id(route);
+                let current_id = route_edge_id(&routes[index]);
+                if next_id != current_id && route_edge_index(routes, &next_id).is_some() {
+                    return Err(RouteMutationFailure::Conflict(format!(
+                        "route edge already exists: {next_id}"
+                    )));
+                }
+                routes[index] = route.clone();
+            }
+            RouteMutation::Delete { edge_id } => {
+                let Some(index) = route_edge_index(routes, edge_id) else {
+                    return Err(RouteMutationFailure::NotFound(format!(
+                        "route edge not found: {edge_id}"
+                    )));
+                };
+                routes.remove(index);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Apply route mutations to a private copy, validate the complete resulting graph,
+/// then persist and hot-replace it once. No caller can submit an entire replacement
+/// table through the public admin write surface.
+pub async fn route_transaction(State(state): State<AppState>, body: Bytes) -> Response {
+    let request: RouteTransactionRequest = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("invalid route transaction: {error}"),
+            )
+        }
+    };
+    if request.operations.is_empty() {
+        return err(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "route transaction requires at least one operation",
+        );
+    }
+
+    let conn = match state.db_conn.lock() {
+        Ok(conn) => conn,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("database lock failed: {error}"),
+            )
+        }
+    };
+    let snapshot = match crate::db::load_runtime_snapshot(&conn) {
+        Ok(Some(snapshot)) => snapshot,
+        Ok(None) => {
+            return err(
+                &state,
+                StatusCode::CONFLICT,
+                "runtime config snapshot is missing",
+            )
+        }
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("route snapshot read failed: {error}"),
+            )
+        }
+    };
+    let mut routes = snapshot.routes.clone();
+    if let Err(failure) = apply_route_mutations(&mut routes, &request.operations) {
+        return match failure {
+            RouteMutationFailure::Conflict(message) => err(&state, StatusCode::CONFLICT, message),
+            RouteMutationFailure::NotFound(message) => err(&state, StatusCode::NOT_FOUND, message),
+        };
+    }
+    if let Err(message) = validate_route_graph(&routes, &snapshot.providers) {
+        return err(&state, StatusCode::BAD_REQUEST, message);
+    }
+    let nodes = match crate::db::derive_runtime_nodes(&conn, &routes, &snapshot.providers) {
+        Ok(nodes) => nodes,
+        Err(error) => {
+            return err(
+                &state,
+                StatusCode::BAD_REQUEST,
+                format!("derive graph nodes failed: {error}"),
+            )
+        }
+    };
+    let next_snapshot = crate::db::RuntimeConfigSnapshot {
+        providers: snapshot.providers,
+        allow_host_commands: snapshot.allow_host_commands,
+        allow_shell_commands: snapshot.allow_shell_commands,
+        nodes,
+        routes: routes.clone(),
+        source_toml_fingerprint: snapshot.source_toml_fingerprint,
+    };
+    if let Err(error) = crate::db::save_runtime_snapshot(&conn, &next_snapshot) {
+        return err(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("save route transaction failed: {error}"),
+        );
+    }
+    drop(conn);
+    state.registry.replace_edges(routes.clone());
+    Json(RoutesDoc { routes }).into_response()
+}
+
 /// Remove provider-owned route branches after an all-table provider replacement.
 ///
 /// A route can point at an alias rather than directly at a provider. When the last
@@ -1322,67 +1457,9 @@ fn prune_routes_for_removed_providers(
     routes.retain(|edge| {
         !removed_providers.contains(&edge.left)
             && !removed_providers.contains(&edge.right)
-            && !(affected.contains(&edge.right) && !resolvable.contains(&edge.right))
+            && (!affected.contains(&edge.right) || resolvable.contains(&edge.right))
     });
     original_count.saturating_sub(routes.len())
-}
-
-/// 整表替换（contracts/05 §2）：校验 → 落盘 → 热替换（无重启）。
-pub async fn put_routes(State(state): State<AppState>, body: Bytes) -> Response {
-    let doc: RoutesDoc = match serde_json::from_slice(&body) {
-        Ok(v) => v,
-        Err(e) => {
-            return err(
-                &state,
-                StatusCode::BAD_REQUEST,
-                format!("invalid body: {e}"),
-            )
-        }
-    };
-    let existing = match load_config(&state) {
-        Ok(c) => c,
-        Err(r) => return r,
-    };
-    if let Err(message) = validate_route_graph(&doc.routes, &existing.providers) {
-        return err(&state, StatusCode::BAD_REQUEST, message);
-    }
-
-    // SQLite snapshot is the single runtime source. Legacy TOML is changed only through
-    // the explicit export endpoint so an external hand edit remains detectable.
-    let mut cfg = existing;
-    cfg.router.clear();
-    cfg.routes = doc.routes.clone();
-    {
-        let conn = match state.db_conn.lock() {
-            Ok(conn) => conn,
-            Err(e) => {
-                return err(
-                    &state,
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("database lock failed: {e}"),
-                )
-            }
-        };
-        if let Err(e) = crate::db::persist_runtime_config(&conn, &cfg, &state.config_path) {
-            return err(
-                &state,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("save route snapshot failed: {e}"),
-            );
-        }
-    }
-
-    // 5. Runtime update follows the durable snapshot commit.
-    state.registry.replace_edges(doc.routes.clone());
-    if let Err(e) = crate::admin::endpoints::refresh_endpoint_routes(&state, &[]) {
-        return err(
-            &state,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("refresh merged route graph failed: {e}"),
-        );
-    }
-
-    Json(doc).into_response()
 }
 
 /// Report whether the legacy editable TOML differs from the imported SQLite source baseline.
@@ -2290,6 +2367,7 @@ pub struct PutPasswordResponse {
 ///
 /// 密码值**绝不进日志/tracing/响应**。失败 → 三键错误体 500（调用方不得继续
 /// 激活 mode —— fail-closed 优先）。
+#[allow(clippy::result_large_err)]
 pub(crate) fn set_admin_password(state: &AppState, new_password: &str) -> Result<(), Response> {
     let mut value = read_value(&state.config_path)?;
     match value.as_table_mut() {
@@ -3360,7 +3438,7 @@ priority = 10
         .await;
         assert_eq!(status, 200, "{body}");
         assert!(
-            body.contains("no-store") == false,
+            !body.contains("no-store"),
             "the JSON response itself should not echo backup content"
         );
         let (provider_status, provider_body) =
@@ -3432,18 +3510,28 @@ enabled = true
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
-    /* ── 单测③：PUT routes 成环 → 400（文案含 环/cycle） ────────── */
+    /* ── 原子 route transaction 成环 → 400（文案含 环/cycle） ──── */
 
     #[tokio::test]
     async fn put_routes_cycle_is_400_with_cycle_message() {
         let path = temp_config("cycle", CFG_WITH_KEY);
-        let (app, _state) = app_at(path.clone());
+        let (app, state) = app_at(path.clone());
+        let before = crate::db::load_runtime_snapshot(&state.db_conn.lock().unwrap())
+            .unwrap()
+            .unwrap()
+            .routes;
 
-        let body = r#"{"routes":[
-            {"left":"a","right":"b","priority":1},
-            {"left":"b","right":"a","priority":2}
+        let body = r#"{"operations":[
+            {"op":"create","route":{"left":"a","right":"b","priority":1}},
+            {"op":"create","route":{"left":"b","right":"a","priority":2}}
         ]}"#;
-        let (status, resp) = send(app, "PUT", "/v1/admin/routes", Some(body.into())).await;
+        let (status, resp) = send(
+            app,
+            "POST",
+            "/v1/admin/routes/transaction",
+            Some(body.into()),
+        )
+        .await;
         assert_eq!(status, 400, "resp={resp}");
         assert!(
             resp.contains("环") || resp.contains("cycle"),
@@ -3456,10 +3544,30 @@ enabled = true
             !on_disk.contains("left = \"a\""),
             "环配置不得落盘: {on_disk}"
         );
+        let after = crate::db::load_runtime_snapshot(&state.db_conn.lock().unwrap())
+            .unwrap()
+            .unwrap()
+            .routes;
+        assert_eq!(after, before, "失败事务不得改变 SQLite runtime snapshot");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
-    /* ── 单测④：PUT routes 成功 → 运行时 Router 热更 ────────────── */
+    #[tokio::test]
+    async fn legacy_routes_put_is_not_exposed() {
+        let path = temp_config("legacy-routes-put", CFG_WITH_KEY);
+        let (app, _state) = app_at(path.clone());
+        let (status, body) = send(
+            app,
+            "PUT",
+            "/v1/admin/routes",
+            Some(r#"{"routes":[]}"#.into()),
+        )
+        .await;
+        assert_eq!(status, 405, "整表 routes PUT 必须被移除: {body}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /* ── 原子 route transaction 成功 → 运行时 Router 热更 ──────── */
 
     #[tokio::test]
     async fn put_routes_success_hot_replaces_runtime_router() {
@@ -3473,10 +3581,17 @@ enabled = true
             .select("jev", &jev_core::router::RouteCtx::default());
         assert!(before.is_ok(), "热更前 jev 应可选路");
 
-        let body = r#"{"routes":[
-            {"left":"new-model","right":"vercel","upstream_model":"typesafe-ai/jev","priority":7}
+        let body = r#"{"operations":[
+            {"op":"delete","edge_id":"jev=>vercel"},
+            {"op":"create","route":{"left":"new-model","right":"vercel","upstream_model":"typesafe-ai/jev","priority":7}}
         ]}"#;
-        let (status, resp) = send(app, "PUT", "/v1/admin/routes", Some(body.into())).await;
+        let (status, resp) = send(
+            app,
+            "POST",
+            "/v1/admin/routes/transaction",
+            Some(body.into()),
+        )
+        .await;
         assert_eq!(status, 200, "resp={resp}");
 
         // 运行时热更生效：新边命中、旧边消失（无重启）
@@ -3747,7 +3862,8 @@ enabled = true
 
         // 只翻 enabled、不带 api_key → 原 key 保留
         let body = r#"{"id":"vercel","kind":"vercel","base":"https://example.invalid/v4/eval","enabled":false}"#;
-        let (status, resp) = send(app, "PUT", "/v1/admin/providers/vercel", Some(body.into())).await;
+        let (status, resp) =
+            send(app, "PUT", "/v1/admin/providers/vercel", Some(body.into())).await;
         assert_eq!(status, 200, "{resp}");
         // 响应 masked、enabled 已翻转
         assert!(!resp.contains(FAKE_KEY), "PUT 响应不得 echo 明文: {resp}");
@@ -3786,16 +3902,23 @@ enabled = true
         let path = temp_config("put-delete-provider", CFG_WITH_KEY);
         let (app, state) = app_at(path.clone());
 
-        let graph = r#"{"routes":[
-            {"left":"jev","right":"fallback","match":"exact","priority":10},
-            {"left":"fallback","right":"vercel","match":"exact","priority":10},
-            {"left":"fallback","right":"laya","match":"exact","priority":20},
-            {"left":"unrelated","right":"laya","match":"exact","priority":10},
-            {"left":"vercel","right":"laya","match":"exact","priority":5},
-            {"left":"jev2","right":"vercel","match":"exact","priority":5}
+        let graph = r#"{"operations":[
+            {"op":"delete","edge_id":"jev=>vercel"},
+            {"op":"delete","edge_id":"laya-english=>laya"},
+            {"op":"create","route":{"left":"jev","right":"fallback","match":"exact","priority":10}},
+            {"op":"create","route":{"left":"fallback","right":"vercel","match":"exact","priority":10}},
+            {"op":"create","route":{"left":"fallback","right":"laya","match":"exact","priority":20}},
+            {"op":"create","route":{"left":"unrelated","right":"laya","match":"exact","priority":10}},
+            {"op":"create","route":{"left":"vercel","right":"laya","match":"exact","priority":5}},
+            {"op":"create","route":{"left":"jev2","right":"vercel","match":"exact","priority":5}}
         ]}"#;
-        let (route_status, route_response) =
-            send(app.clone(), "PUT", "/v1/admin/routes", Some(graph.into())).await;
+        let (route_status, route_response) = send(
+            app.clone(),
+            "POST",
+            "/v1/admin/routes/transaction",
+            Some(graph.into()),
+        )
+        .await;
         assert_eq!(route_status, 200, "{route_response}");
 
         let (status, response) =
@@ -3910,8 +4033,13 @@ enabled = true
         let body = r#"{"id":"vercel","kind":"vercel","base":"https://example.invalid/v4/eval","enabled":true,
              "lifecycle":{"controllable":true,"process_policy":"persistent","mode":"startup_check",
                "program":"C:/Tools/OpenJev/openjev.exe","args":["--port","11436"]}}"#;
-        let (put_status, _) =
-            send(app.clone(), "PUT", "/v1/admin/providers/vercel", Some(body.into())).await;
+        let (put_status, _) = send(
+            app.clone(),
+            "PUT",
+            "/v1/admin/providers/vercel",
+            Some(body.into()),
+        )
+        .await;
         assert_eq!(put_status, 200);
         let (get_status, response) = send(app, "GET", "/v1/admin/providers", None).await;
         assert_eq!(get_status, 200);
@@ -3993,7 +4121,8 @@ enabled = true
         let (status, resp) = send(app, "PUT", "/v1/admin/providers/a", Some(dup.into())).await;
         assert_eq!(status, 400, "{resp}");
 
-        let unsupported = r#"{"id":"a","kind":"vercel-gateway","base":"https://example.invalid","enabled":true}"#;
+        let unsupported =
+            r#"{"id":"a","kind":"vercel-gateway","base":"https://example.invalid","enabled":true}"#;
         let (status, resp) = send(
             build_app(state.clone()),
             "PUT",
@@ -4039,8 +4168,14 @@ enabled = true
         let (app, _state) = app_at(path.clone());
 
         // right 既非 provider（vercel/laya）也非新表 exact left → 400
-        let body = r#"{"routes":[{"left":"jev","right":"ghost","priority":1}]}"#;
-        let (status, resp) = send(app, "PUT", "/v1/admin/routes", Some(body.into())).await;
+        let body = r#"{"operations":[{"op":"create","route":{"left":"jev","right":"ghost","priority":1}}]}"#;
+        let (status, resp) = send(
+            app,
+            "POST",
+            "/v1/admin/routes/transaction",
+            Some(body.into()),
+        )
+        .await;
         assert_eq!(status, 400, "{resp}");
         assert!(resp.contains("ghost"), "{resp}");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
@@ -4053,11 +4188,17 @@ enabled = true
         let path = temp_config("alias", CFG_WITH_KEY);
         let (app, _state) = app_at(path.clone());
 
-        let body = r#"{"routes":[
-            {"left":"jev","right":"jev-fast","priority":5},
-            {"left":"jev-fast","right":"vercel","priority":10}
+        let body = r#"{"operations":[
+            {"op":"create","route":{"left":"jev","right":"jev-fast","priority":5}},
+            {"op":"create","route":{"left":"jev-fast","right":"vercel","priority":10}}
         ]}"#;
-        let (status, resp) = send(app, "PUT", "/v1/admin/routes", Some(body.into())).await;
+        let (status, resp) = send(
+            app,
+            "POST",
+            "/v1/admin/routes/transaction",
+            Some(body.into()),
+        )
+        .await;
         assert_eq!(status, 200, "{resp}");
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }

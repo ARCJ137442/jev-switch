@@ -198,7 +198,7 @@ mod tests {
         // daemon 装配路径经 UpstreamAdapter trait 取能力（注册制接线）
         let u = VercelUpstream::new("http://127.0.0.1:1/x".into(), "k".into()).unwrap();
         let cap: Capabilities = UpstreamAdapter::capabilities(&u);
-        assert_eq!(cap.noul_via_boolean, false);
+        assert!(!cap.noul_via_boolean);
         assert!(cap.retryable_status.contains(&429));
         assert_eq!(VercelProtocol.dialect(), "typesafe_jev");
     }

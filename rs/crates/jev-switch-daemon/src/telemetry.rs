@@ -279,6 +279,12 @@ impl Telemetry {
     }
 }
 
+impl Default for Telemetry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn daemon_resources() -> ResourceSnapshot {
     let mut system = System::new();
     let pid = Pid::from_u32(std::process::id());

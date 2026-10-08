@@ -109,7 +109,7 @@ impl GraphDocument {
             ids.insert(edge.left.clone());
             ids.insert(edge.right.clone());
         }
-        for id in providers.intersection(&public) {
+        if let Some(id) = providers.intersection(&public).next() {
             return Err(GraphValidationError::ProviderPublicCollision(id.clone()));
         }
 
@@ -122,11 +122,7 @@ impl GraphDocument {
     /// Compatibility migration helper. It intentionally does not apply the
     /// stricter target-model validation, so an existing route snapshot can be
     /// surfaced for diagnostics before the user opts into graph validation.
-    pub fn derive_nodes<I, J>(
-        edges: &[RouteEdge],
-        provider_ids: I,
-        public_ids: J,
-    ) -> Vec<GraphNode>
+    pub fn derive_nodes<I, J>(edges: &[RouteEdge], provider_ids: I, public_ids: J) -> Vec<GraphNode>
     where
         I: IntoIterator,
         I::Item: Into<String>,
@@ -151,9 +147,11 @@ impl GraphDocument {
                 };
                 GraphNode {
                     provider_id: (kind == GraphNodeKind::Provider).then(|| id.to_string()),
-                    public_models: (kind == GraphNodeKind::Public)
-                        .then(|| vec![id.to_string()])
-                        .unwrap_or_default(),
+                    public_models: if kind == GraphNodeKind::Public {
+                        vec![id.to_string()]
+                    } else {
+                        Vec::new()
+                    },
                     id: id.to_string(),
                     kind,
                     enabled: true,
@@ -172,12 +170,18 @@ impl GraphDocument {
                 return Err(GraphValidationError::DuplicateNode(node.id.clone()));
             }
             match node.kind {
-                GraphNodeKind::Provider if node.provider_id.as_deref() != Some(node.id.as_str()) => {
-                    return Err(GraphValidationError::ProviderReferenceMismatch(node.id.clone()));
+                GraphNodeKind::Provider
+                    if node.provider_id.as_deref() != Some(node.id.as_str()) =>
+                {
+                    return Err(GraphValidationError::ProviderReferenceMismatch(
+                        node.id.clone(),
+                    ));
                 }
                 GraphNodeKind::Provider => {}
                 _ if node.provider_id.is_some() => {
-                    return Err(GraphValidationError::UnexpectedProviderReference(node.id.clone()));
+                    return Err(GraphValidationError::UnexpectedProviderReference(
+                        node.id.clone(),
+                    ));
                 }
                 _ => {}
             }
@@ -197,13 +201,14 @@ impl GraphDocument {
                 .get(&edge.left)
                 .is_some_and(|node| node.kind == GraphNodeKind::Provider)
             {
-                return Err(GraphValidationError::ProviderHasOutgoingEdges(edge.left.clone()));
+                return Err(GraphValidationError::ProviderHasOutgoingEdges(
+                    edge.left.clone(),
+                ));
             }
         }
 
-        check_acyclic(&self.edges).map_err(|error| {
-            GraphValidationError::Cycle(error.to_string())
-        })?;
+        check_acyclic(&self.edges)
+            .map_err(|error| GraphValidationError::Cycle(error.to_string()))?;
         Ok(())
     }
 
@@ -239,7 +244,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(graph.node("jev").unwrap().kind, GraphNodeKind::Public);
-        assert_eq!(graph.node("fallback").unwrap().kind, GraphNodeKind::Internal);
+        assert_eq!(
+            graph.node("fallback").unwrap().kind,
+            GraphNodeKind::Internal
+        );
         let provider = graph.node("typesafe").unwrap();
         assert_eq!(provider.kind, GraphNodeKind::Provider);
         assert_eq!(provider.provider_id.as_deref(), Some("typesafe"));

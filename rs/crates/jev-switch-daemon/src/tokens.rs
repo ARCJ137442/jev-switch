@@ -184,18 +184,13 @@ pub struct EventsPage {
     pub has_more: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum HistoryView {
     #[serde(alias = "entry")]
+    #[default]
     Entry,
     Provider,
-}
-
-impl Default for HistoryView {
-    fn default() -> Self {
-        Self::Entry
-    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -674,7 +669,7 @@ fn request_events_filtered(
             scanned_cursor.unwrap_or(query.since)
         }
     });
-    let next_before = events.first().map(|event| event.id).or_else(|| {
+    let next_before = events.first().map(|event| event.id).or({
         if descending {
             scanned_cursor
         } else {

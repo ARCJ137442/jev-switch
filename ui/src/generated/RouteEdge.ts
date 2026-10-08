@@ -9,7 +9,7 @@ import type { Sticky } from "./Sticky";
  * 字段与 contracts/03 §2 表逐一对齐；默认值：`match=exact`、`priority=0`、
  * `sticky=none`、`on_error=next`、`upstream_model=空`（发上游前不改写 model）。
  *
- * A7 ts-rs：admin `GET/PUT /v1/admin/routes` 与 UI 共用本类型一份真值
+ * A7 ts-rs：admin route reads and atomic transactions 与 UI 共用本类型一份真值
  * （core 加 feature `ts-rs` 导出 —— 不在 daemon 镜像第二份 `RouteView`）。
  */
 export type RouteEdge = { 

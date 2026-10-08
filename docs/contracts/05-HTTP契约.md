@@ -11,9 +11,9 @@
 | `GET` | `/v1/models` | 模型与能力 |
 | `POST` | `/v1/systemone` | Jev 决策 |
 | `GET` | `/v1/admin/providers` | 提供商列表（**密文密钥**） |
-| `PUT` | `/v1/admin/providers` | 写入提供商（含新密钥） |
+| `PUT` | `/v1/admin/providers/{id}` | 写入单个提供商（含新密钥） |
 | `GET` | `/v1/admin/routes` | 模型路由 DAG |
-| `PUT` | `/v1/admin/routes` | 写回 DAG（整表替换） |
+| `POST` | `/v1/admin/routes/transaction` | 原子 create/update/delete 路由事务 |
 | `GET` | `/v1/admin/graph` | 统一 DAG 节点只读投影（Phase 1） |
 | `GET` | `/v1/admin/capabilities` | UI/Agent 配置能力只读发现 |
 | `POST` | `/v1/admin/providers/{id}/probe` | 健康探测 |
@@ -144,7 +144,7 @@ PUT  /v1/admin/host-commands   {"enabled": boolean, "shell_enabled"?: boolean}
 
 这些端点受现有 admin 会话门保护；桌面 LAN 开放时只有 loopback 走本机所有者直通，其他 LAN/cloud 请求需管理员会话或 admin token。执行同时要求全局 `allow_host_commands=true` 与 provider `lifecycle.controllable=true`；Shell 解释器还要求独立的 `allow_shell_commands=true`，默认关闭并单独确认。非 Shell 程序使用结构化 `program`/`args`；Shell 允许后也只执行显式登记的解释器和参数。`start` 只有 readiness 成功才返回 `running`；unknown、超时、命令失败均返回稳定的 `code/message/remediation` 错误。`startup_check` 与 `on_demand` 只在明确 `stopped` 或请求前置时触发，生命周期所有权和审计独立存储，不进入调用历史；细粒度 Agent scope、跨 daemon 进程组回收、UI 和平台验收仍在后续阶段。
 
-### `GET/PUT /v1/admin/routes`
+### `GET /v1/admin/routes` 与 `POST /v1/admin/routes/transaction`
 
 ```json
 {
@@ -158,7 +158,9 @@ PUT  /v1/admin/host-commands   {"enabled": boolean, "shell_enabled"?: boolean}
 }
 ```
 
-`PUT` = **整表替换**；写入 toml；DAG 含环则 `400`。
+路由写入只接受 `POST /v1/admin/routes/transaction` 的边级 `create/update/delete` 操作；普通 `PUT /v1/admin/routes` 返回 `405`，不再暴露整表替换。入口创建/更新使用同一组 `route_operations`，与入口元数据在一个 SQLite 事务中提交。显式 JSON/TOML 备份导入仍是带确认的批量恢复边界，不属于普通配置写入。任意校验失败或持久化失败都必须保持旧 SQLite 快照、内存 Router 和公开模型目录不变。详细迁移与验收见[原子配置写入计划](../design/ATOMIC-CONFIG-WRITE-PLAN.md)。
+
+事务中的 `edge_id` 使用 `[left, right, match, upstream_model]` 的 JSON 身份；服务端仅在唯一匹配时兼容旧的 `left=>right` 形式。
 
 `GET /v1/admin/graph` 返回当前运行时快照的 typed node projection：`public`（入口）、`internal`（中间节点）和 `provider`（出口）。它与 `/v1/admin/routes` 共享同一运行时快照；当前只读，provider 凭据不出现在节点文档中。
 

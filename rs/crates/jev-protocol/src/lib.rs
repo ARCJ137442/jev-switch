@@ -1215,10 +1215,12 @@ mod tests {
     #[test]
     fn request_extensions_are_optional_and_round_trip() {
         let plain: JevRequest =
-            serde_json::from_str(r#"{"model":"m","state":null,"questions":{}}"#)
-                .unwrap();
+            serde_json::from_str(r#"{"model":"m","state":null,"questions":{}}"#).unwrap();
         assert!(plain.extensions.is_none());
-        assert!(serde_json::to_value(&plain).unwrap().get("extensions").is_none());
+        assert!(serde_json::to_value(&plain)
+            .unwrap()
+            .get("extensions")
+            .is_none());
 
         let multimodal: JevRequest = serde_json::from_str(
             r#"{

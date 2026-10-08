@@ -67,9 +67,15 @@ enum ProbeState {
 }
 
 enum AttachedProcessSnapshot {
-    Running { pid: Option<u32>, execution_id: String },
+    Running {
+        pid: Option<u32>,
+        execution_id: String,
+    },
     Exited(Option<String>),
-    Error { pid: Option<u32>, execution_id: String },
+    Error {
+        pid: Option<u32>,
+        execution_id: String,
+    },
 }
 
 static EXECUTION_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -457,8 +463,13 @@ impl LifecycleManager {
         // launchers that own a child server process; killing only the wrapper
         // would leave the actual model server running.
         if let Some(program) = provider.lifecycle.stop_program.as_deref() {
-            let mut command =
-                build_command(program, &provider.lifecycle.stop_args, provider_id, provider, config)?;
+            let mut command = build_command(
+                program,
+                &provider.lifecycle.stop_args,
+                provider_id,
+                provider,
+                config,
+            )?;
             if let Some(dir) = &provider.lifecycle.working_dir {
                 command.current_dir(dir);
             }
@@ -701,16 +712,24 @@ impl LifecycleManager {
                 let (probe, message) = self.probe(provider_id, provider, config).await;
                 Some(status_value(
                     provider_id,
-                    if probe == ProbeState::Ready { "running" } else { "starting" },
-                    if probe == ProbeState::Ready { "ready" } else { "pending" },
+                    if probe == ProbeState::Ready {
+                        "running"
+                    } else {
+                        "starting"
+                    },
+                    if probe == ProbeState::Ready {
+                        "ready"
+                    } else {
+                        "pending"
+                    },
                     true,
                     configured,
                     true,
                     pid,
                     Some(execution_id),
-                    message.as_deref().or_else(|| {
-                        (probe != ProbeState::Ready).then_some("readiness_pending")
-                    }),
+                    message
+                        .as_deref()
+                        .or_else(|| (probe != ProbeState::Ready).then_some("readiness_pending")),
                 ))
             }
             AttachedProcessSnapshot::Exited(code) => {
@@ -978,6 +997,7 @@ impl LifecycleManager {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn status_value(
     provider_id: &str,
     state: &str,
@@ -1274,8 +1294,10 @@ mod tests {
     #[tokio::test]
     async fn status_reports_in_flight_operation_after_page_reload() {
         let manager = LifecycleManager::default();
-        let mut config = Config::default();
-        config.allow_host_commands = true;
+        let config = Config {
+            allow_host_commands: true,
+            ..Default::default()
+        };
         let execution_id = "lifecycle-laya-test".to_string();
         let lease = manager
             .acquire("laya", "start", Some(execution_id.clone()))
@@ -1303,14 +1325,18 @@ mod tests {
     async fn shell_programs_are_rejected_by_default_even_when_the_global_gate_is_open() {
         let manager = LifecycleManager::default();
         let mut provider = provider();
-        provider.lifecycle.program = Some(if cfg!(windows) {
-            "C:/Windows/System32/cmd.exe"
-        } else {
-            "/bin/sh"
-        }
-        .into());
-        let mut config = Config::default();
-        config.allow_host_commands = true;
+        provider.lifecycle.program = Some(
+            if cfg!(windows) {
+                "C:/Windows/System32/cmd.exe"
+            } else {
+                "/bin/sh"
+            }
+            .into(),
+        );
+        let config = Config {
+            allow_host_commands: true,
+            ..Default::default()
+        };
         let error = manager
             .start("local", &provider, &config)
             .await
@@ -1320,24 +1346,34 @@ mod tests {
 
     #[test]
     fn explicitly_allowed_shell_programs_use_structured_arguments() {
-        let mut config = Config::default();
-        config.allow_host_commands = true;
-        config.allow_shell_commands = true;
+        let config = Config {
+            allow_host_commands: true,
+            allow_shell_commands: true,
+            ..Default::default()
+        };
         let provider = provider();
         let program = if cfg!(windows) {
             "C:/Windows/System32/cmd.exe"
         } else {
             "/bin/sh"
         };
-        build_command(program, &["/C".into(), "echo Jev".into()], "local", &provider, &config)
-            .expect("an explicit shell opt-in should allow the registered interpreter");
+        build_command(
+            program,
+            &["/C".into(), "echo Jev".into()],
+            "local",
+            &provider,
+            &config,
+        )
+        .expect("an explicit shell opt-in should allow the registered interpreter");
     }
 
     #[tokio::test]
     async fn configured_service_without_a_probe_is_unknown_not_stopped() {
         let manager = LifecycleManager::default();
-        let mut config = Config::default();
-        config.allow_host_commands = true;
+        let config = Config {
+            allow_host_commands: true,
+            ..Default::default()
+        };
         let mut provider = provider();
         provider.base = "file:///tmp/laya".into();
         provider.lifecycle.program = Some("C:/Tools/jev-test-service.exe".into());

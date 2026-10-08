@@ -2,7 +2,7 @@
 //!
 //! 6 个 RESTful 端点：
 //! - GET /v1/admin/endpoints — 获取所有服务入口 + 健康状态
-//! - POST /v1/admin/endpoints — 创建服务入口 + 可选路由
+//! - POST /v1/admin/endpoints — 创建服务入口 + 可选边级路由操作
 //! - PUT /v1/admin/endpoints/{id} — 更新策略/启用状态
 //! - DELETE /v1/admin/endpoints/{id} — 删除入口 + 级联删除路由
 //! - GET /v1/admin/config/default_strategy — 获取全局默认策略
@@ -192,6 +192,7 @@ pub struct EndpointsResponse {
 
 /// POST /v1/admin/endpoints 请求（创建时可选路由）
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(::ts_rs::TS),
@@ -202,11 +203,12 @@ pub struct CreateEndpointRequest {
     pub strategy_config: StrategyConfig,
     #[serde(default)]
     #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
-    pub routes: Option<Vec<jev_core::router::RouteEdge>>,
+    pub route_operations: Option<Vec<super::RouteMutation>>,
 }
 
 /// PUT /v1/admin/endpoints/{id} 请求
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(::ts_rs::TS),
@@ -224,7 +226,7 @@ pub struct UpdateEndpointRequest {
     pub enabled: Option<bool>,
     #[serde(default)]
     #[cfg_attr(feature = "ts-rs", ts(optional = nullable))]
-    pub routes: Option<Vec<jev_core::router::RouteEdge>>,
+    pub route_operations: Option<Vec<super::RouteMutation>>,
 }
 
 /// DELETE /v1/admin/endpoints/{id} 响应
@@ -352,17 +354,89 @@ pub(crate) fn refresh_endpoint_routes(
     Ok(())
 }
 
-fn validate_endpoint_routes(
+fn validate_endpoint_route_operations(
     id: &str,
-    routes: &[jev_core::router::RouteEdge],
+    previous_id: &str,
+    operations: &[super::RouteMutation],
 ) -> Result<(), String> {
-    if routes
-        .iter()
-        .any(|edge| edge.left != id || edge.left.trim().is_empty() || edge.right.trim().is_empty())
-    {
-        return Err("each endpoint route must have this endpoint as its left node and a non-empty right node".into());
+    for operation in operations {
+        match operation {
+            super::RouteMutation::Create { route } | super::RouteMutation::Update { route, .. } => {
+                if (route.left != id && route.left != previous_id)
+                    || route.left.trim().is_empty()
+                    || route.right.trim().is_empty()
+                {
+                    return Err("endpoint route operations must use this endpoint as left and a non-empty right node".into());
+                }
+            }
+            super::RouteMutation::Delete { edge_id } => {
+                if route_edge_owner(edge_id).as_deref() != Some(id)
+                    && route_edge_owner(edge_id).as_deref() != Some(previous_id)
+                {
+                    return Err(
+                        "endpoint route delete may only target this endpoint's edges".into(),
+                    );
+                }
+            }
+        }
+        if let super::RouteMutation::Update { edge_id, .. } = operation {
+            if route_edge_owner(edge_id).as_deref() != Some(id)
+                && route_edge_owner(edge_id).as_deref() != Some(previous_id)
+            {
+                return Err("endpoint route update may only target this endpoint's edges".into());
+            }
+        }
     }
     Ok(())
+}
+
+fn route_edge_owner(edge_id: &str) -> Option<String> {
+    serde_json::from_str::<(String, String, String, Option<String>)>(edge_id)
+        .map(|(left, _, _, _)| left)
+        .ok()
+        .or_else(|| edge_id.split_once("=>").map(|(left, _)| left.to_string()))
+}
+
+fn remap_endpoint_edge_id(edge_id: &str, previous_id: &str, next_id: &str) -> String {
+    if let Ok((left, right, match_mode, model)) =
+        serde_json::from_str::<(String, String, String, Option<String>)>(edge_id)
+    {
+        if left == previous_id {
+            return serde_json::to_string(&(next_id, right, match_mode, model))
+                .expect("route edge identity must serialize");
+        }
+    }
+    edge_id
+        .strip_prefix(&format!("{previous_id}=>"))
+        .map(|right| format!("{next_id}=>{right}"))
+        .unwrap_or_else(|| edge_id.to_string())
+}
+
+fn normalize_endpoint_route_operations(
+    id: &str,
+    previous_id: &str,
+    operations: &[super::RouteMutation],
+) -> Vec<super::RouteMutation> {
+    operations
+        .iter()
+        .map(|operation| match operation {
+            super::RouteMutation::Create { route } => {
+                let mut route = route.clone();
+                route.left = id.to_string();
+                super::RouteMutation::Create { route }
+            }
+            super::RouteMutation::Update { edge_id, route } => {
+                let mut route = route.clone();
+                route.left = id.to_string();
+                let edge_id = remap_endpoint_edge_id(edge_id, previous_id, id);
+                super::RouteMutation::Update { edge_id, route }
+            }
+            super::RouteMutation::Delete { edge_id } => {
+                let edge_id = remap_endpoint_edge_id(edge_id, previous_id, id);
+                super::RouteMutation::Delete { edge_id }
+            }
+        })
+        .collect()
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -446,7 +520,7 @@ pub async fn list_endpoints(State(state): State<AppState>) -> Response {
     .into_response()
 }
 
-/// POST /v1/admin/endpoints — 创建服务入口 + 可选路由（原子性）
+/// POST /v1/admin/endpoints — 创建服务入口 + 可选路由操作（原子性）
 pub async fn create_endpoint(State(state): State<AppState>, body: Bytes) -> Response {
     let req: CreateEndpointRequest = match serde_json::from_slice(&body) {
         Ok(v) => v,
@@ -467,6 +541,11 @@ pub async fn create_endpoint(State(state): State<AppState>, body: Bytes) -> Resp
     }
     if let Err(message) = req.strategy_config.validate() {
         return err(&state, StatusCode::BAD_REQUEST, message);
+    }
+    if let Some(operations) = &req.route_operations {
+        if let Err(message) = validate_endpoint_route_operations(&req.id, &req.id, operations) {
+            return err(&state, StatusCode::BAD_REQUEST, message);
+        }
     }
 
     // 验证 ID 不重复
@@ -516,12 +595,6 @@ pub async fn create_endpoint(State(state): State<AppState>, body: Bytes) -> Resp
     }
 
     // Snapshot routes and endpoint metadata are one SQLite transaction.
-    if let Some(routes) = &req.routes {
-        if let Err(message) = validate_endpoint_routes(&req.id, routes) {
-            let _ = tx.rollback();
-            return err(&state, StatusCode::BAD_REQUEST, message);
-        }
-    }
     let mut snapshot = match crate::db::load_runtime_snapshot(&tx) {
         Ok(Some(snapshot)) => snapshot,
         Ok(None) => {
@@ -541,14 +614,35 @@ pub async fn create_endpoint(State(state): State<AppState>, body: Bytes) -> Resp
             );
         }
     };
-    snapshot.routes.retain(|edge| edge.left != req.id);
-    snapshot
-        .routes
-        .extend(req.routes.clone().unwrap_or_default());
+    if let Some(operations) = &req.route_operations {
+        if let Err(failure) = super::apply_route_mutations(&mut snapshot.routes, operations) {
+            let _ = tx.rollback();
+            return match failure {
+                super::RouteMutationFailure::Conflict(message) => {
+                    err(&state, StatusCode::CONFLICT, message)
+                }
+                super::RouteMutationFailure::NotFound(message) => {
+                    err(&state, StatusCode::NOT_FOUND, message)
+                }
+            };
+        }
+    }
     if let Err(message) = super::validate_route_graph(&snapshot.routes, &snapshot.providers) {
         let _ = tx.rollback();
         return err(&state, StatusCode::BAD_REQUEST, message);
     }
+    snapshot.nodes =
+        match crate::db::derive_runtime_nodes(&tx, &snapshot.routes, &snapshot.providers) {
+            Ok(nodes) => nodes,
+            Err(error) => {
+                let _ = tx.rollback();
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("derive endpoint graph failed: {error}"),
+                );
+            }
+        };
     if let Err(e) = crate::db::save_runtime_snapshot(&tx, &snapshot) {
         let _ = tx.rollback();
         return err(
@@ -595,11 +689,11 @@ pub async fn create_endpoint(State(state): State<AppState>, body: Bytes) -> Resp
         );
     }
 
-    let routes_count = req
+    let routes_count = snapshot
         .routes
-        .as_ref()
-        .map(|routes| routes.len() as u32)
-        .unwrap_or(0);
+        .iter()
+        .filter(|edge| edge.left == req.id)
+        .count() as u32;
     Json(ServiceEndpointView {
         id: req.id.clone(),
         strategy_config: req.strategy_config,
@@ -697,8 +791,8 @@ pub async fn update_endpoint(
             format!("endpoint id already exists: {final_id}"),
         );
     }
-    if let Some(routes) = &req.routes {
-        if let Err(message) = validate_endpoint_routes(&final_id, routes) {
+    if let Some(operations) = &req.route_operations {
+        if let Err(message) = validate_endpoint_route_operations(&final_id, &id, operations) {
             return err(&state, StatusCode::BAD_REQUEST, message);
         }
     }
@@ -750,14 +844,36 @@ pub async fn update_endpoint(
             }
         }
     }
-    if let Some(routes) = &req.routes {
-        snapshot.routes.retain(|edge| edge.left != final_id);
-        snapshot.routes.extend(routes.clone());
+    if let Some(operations) = &req.route_operations {
+        let operations = normalize_endpoint_route_operations(&final_id, &id, operations);
+        if let Err(failure) = super::apply_route_mutations(&mut snapshot.routes, &operations) {
+            let _ = tx.rollback();
+            return match failure {
+                super::RouteMutationFailure::Conflict(message) => {
+                    err(&state, StatusCode::CONFLICT, message)
+                }
+                super::RouteMutationFailure::NotFound(message) => {
+                    err(&state, StatusCode::NOT_FOUND, message)
+                }
+            };
+        }
     }
     if let Err(message) = super::validate_route_graph(&snapshot.routes, &snapshot.providers) {
         let _ = tx.rollback();
         return err(&state, StatusCode::BAD_REQUEST, message);
     }
+    snapshot.nodes =
+        match crate::db::derive_runtime_nodes(&tx, &snapshot.routes, &snapshot.providers) {
+            Ok(nodes) => nodes,
+            Err(error) => {
+                let _ = tx.rollback();
+                return err(
+                    &state,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("derive endpoint graph failed: {error}"),
+                );
+            }
+        };
     if let Err(e) = crate::db::save_runtime_snapshot(&tx, &snapshot) {
         let _ = tx.rollback();
         return err(
@@ -933,7 +1049,7 @@ pub async fn delete_endpoint(
                 endpoints.remove(&id);
             }
             drop(conn);
-            if let Err(e) = refresh_endpoint_routes(&state, &[id.clone()]) {
+            if let Err(e) = refresh_endpoint_routes(&state, std::slice::from_ref(&id)) {
                 return err(
                     &state,
                     StatusCode::INTERNAL_SERVER_ERROR,

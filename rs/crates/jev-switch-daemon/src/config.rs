@@ -198,7 +198,7 @@ pub fn resolve_admin_password(file_password: Option<&str>, env: Option<&str>) ->
         .map(String::from)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(
     feature = "ts-rs",
@@ -207,17 +207,12 @@ pub fn resolve_admin_password(file_password: Option<&str>, env: Option<&str>) ->
 )]
 pub enum ProcessPolicy {
     /// Keep a process started by Jev-Switch alive when the daemon exits.
+    #[default]
     Persistent,
     /// Stop a process owned by this daemon during a normal daemon shutdown.
     Session,
     /// The external supervisor owns the process; only an explicit stop command may act on it.
     External,
-}
-
-impl Default for ProcessPolicy {
-    fn default() -> Self {
-        Self::Persistent
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

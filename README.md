@@ -134,7 +134,7 @@ Jev-Switch 是路由网关，不在本机运行模型推理。每次调用的请
 
 ## 当前验收状态
 
-**当前正式版本（2026-10-07）：**`v0.10.1` 增加 provider 级受控服务启停、readiness、自动探测、生命周期审计和公开本地服务脚本指南。Laya、StartLux 与 OneJev 的服务启停脚本由外部环境维护，Jev Switch 只执行 UI 中登记的通用命令并反馈状态；云端 provider 继续保持手工管理。版本边界与验证证据见[0.10.1 发布核验](docs/verification/v0.10.1-release-2026-10-07.md)与[发版手册](docs/RELEASE.md)。
+**当前代码版本（2026-10-08）：**`v0.10.2` 是原子配置写入预发布修复预览；上一正式版 `v0.10.1` 增加 provider 级受控服务启停、readiness、自动探测、生命周期审计和公开本地服务脚本指南。Laya、StartLux 与 OneJev 的服务启停脚本由外部环境维护，Jev Switch 只执行 UI 中登记的通用命令并反馈状态；云端 provider 继续保持手工管理。版本边界与验证证据见[发版手册](docs/RELEASE.md)。
 
 Release dry-run 的 Windows 便携包已冷启动；壳、daemon 与服务端 UI 资源都和同批构建清单相符，并复用了已有用户配置。2026-09-26 的 AppData 核验包含 2 个提供商、9 条路由、7 个公开入口和 34 条调用历史。调用历史摘要优先呈现 request ID、入口/路由、HTTP 状态、耗时、token 与上游次数，原始 JSON 收在折叠详情中。
 

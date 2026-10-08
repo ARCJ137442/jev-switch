@@ -150,6 +150,21 @@ fn edge_to(
     }
 }
 
+fn endpoint_create_payload(
+    id: &str,
+    strategy: serde_json::Value,
+    routes: Vec<RouteEdge>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": id,
+        "strategy_config": strategy,
+        "route_operations": routes
+            .into_iter()
+            .map(|route| serde_json::json!({"op":"create", "route": route}))
+            .collect::<Vec<_>>()
+    })
+}
+
 async fn send(app: axum::Router, method: &str, uri: &str, body: &str) -> (u16, String) {
     let response = app
         .oneshot(
@@ -331,7 +346,15 @@ async fn endpoint_routes_are_persisted_replaced_and_disabled_at_runtime() {
     .await;
     assert_eq!(status, 400);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
-    let create = serde_json::json!({"id":"public-a","strategy_config":{"type":"failover"},"routes":[edge_model("public-a", "m1", 0), edge_model("public-a", "m2", 1)] }).to_string();
+    let create = endpoint_create_payload(
+        "public-a",
+        serde_json::json!({"type":"failover"}),
+        vec![
+            edge_model("public-a", "m1", 0),
+            edge_model("public-a", "m2", 1),
+        ],
+    )
+    .to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &create).await;
     assert_eq!(status, 200, "{body}");
     let created: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -388,8 +411,12 @@ async fn endpoint_routes_are_persisted_replaced_and_disabled_at_runtime() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
 
-    let update = serde_json::json!({"id":"public-b","enabled":false,"routes":[edge("public-b")] })
-        .to_string();
+    let update = serde_json::json!({"id":"public-b","enabled":false,"route_operations":[
+        {"op":"delete","edge_id":"public-a=>m1"},
+        {"op":"delete","edge_id":"public-a=>m2"},
+        {"op":"create","route":edge("public-b")}
+    ]})
+    .to_string();
     let (status, body) = send(app.clone(), "PUT", "/v1/admin/endpoints/public-a", &update).await;
     assert_eq!(status, 200, "{body}");
     assert_eq!(
@@ -506,20 +533,24 @@ async fn endpoint_writes_reject_invalid_graphs_without_changing_runtime_or_stora
     let registry = state.registry.clone();
     let endpoints = state.service_endpoints.clone();
     let app = build_app(state);
-    let create = serde_json::json!({"id":"stable","strategy_config":{"type":"failover"},"routes":[edge_model("stable","m1",0)]}).to_string();
+    let create = endpoint_create_payload(
+        "stable",
+        serde_json::json!({"type":"failover"}),
+        vec![edge_model("stable", "m1", 0)],
+    )
+    .to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &create).await;
     assert_eq!(status, 200, "{body}");
     // The cycle introduced later spans an existing intermediate node, so validating
     // only the submitted endpoint's outgoing edges would still miss it.
-    let graph = vec![
-        edge_model("stable", "m1", 0),
-        edge_to("alias", "stable", None, 0, jev_core::router::Sticky::None),
-    ];
     let (status, body) = send(
         app.clone(),
-        "PUT",
-        "/v1/admin/routes",
-        &serde_json::json!({"routes":graph}).to_string(),
+        "POST",
+        "/v1/admin/routes/transaction",
+        &serde_json::json!({"operations":[
+            {"op":"create","route":edge_to("alias","stable",None,0,jev_core::router::Sticky::None)}
+        ]})
+        .to_string(),
     )
     .await;
     assert_eq!(status, 200, "{body}");
@@ -531,27 +562,32 @@ async fn endpoint_writes_reject_invalid_graphs_without_changing_runtime_or_stora
         (
             "POST",
             "/v1/admin/endpoints",
+            serde_json::json!({"id":"legacy","strategy_config":{"type":"failover"},"routes":[edge_to("legacy","fake",None,0,jev_core::router::Sticky::None)]}),
+        ),
+        (
+            "POST",
+            "/v1/admin/endpoints",
             serde_json::json!({"id":"  ","strategy_config":{"type":"failover"}}),
         ),
         (
             "POST",
             "/v1/admin/endpoints",
-            serde_json::json!({"id":"bad","strategy_config":{"type":"failover"},"routes":[edge_to("bad","ghost",None,0,jev_core::router::Sticky::None)]}),
+            serde_json::json!({"id":"bad","strategy_config":{"type":"failover"},"route_operations":[{"op":"create","route":edge_to("bad","ghost",None,0,jev_core::router::Sticky::None)}]}),
         ),
         (
             "POST",
             "/v1/admin/endpoints",
-            serde_json::json!({"id":"bad","strategy_config":{"type":"failover"},"routes":[edge_to("bad","bad",None,0,jev_core::router::Sticky::None)]}),
+            serde_json::json!({"id":"bad","strategy_config":{"type":"failover"},"route_operations":[{"op":"create","route":edge_to("bad","bad",None,0,jev_core::router::Sticky::None)}]}),
         ),
         (
             "PUT",
             "/v1/admin/endpoints/stable",
-            serde_json::json!({"enabled":false,"routes":[edge_to("stable","alias",None,0,jev_core::router::Sticky::None)]}),
+            serde_json::json!({"enabled":false,"route_operations":[{"op":"create","route":edge_to("stable","alias",None,0,jev_core::router::Sticky::None)}]}),
         ),
         (
             "PUT",
             "/v1/admin/endpoints/stable",
-            serde_json::json!({"id":"renamed","enabled":false,"routes":[edge_to("renamed","ghost",None,0,jev_core::router::Sticky::None)]}),
+            serde_json::json!({"id":"renamed","enabled":false,"route_operations":[{"op":"create","route":edge_to("renamed","ghost",None,0,jev_core::router::Sticky::None)}]}),
         ),
         (
             "PUT",
@@ -590,7 +626,7 @@ async fn endpoint_writes_reject_invalid_graphs_without_changing_runtime_or_stora
             "the original entry must remain callable: {body}"
         );
     }
-    assert_eq!(calls.load(Ordering::SeqCst), 6);
+    assert_eq!(calls.load(Ordering::SeqCst), 7);
     let (status, _) = send(app.clone(), "DELETE", "/v1/admin/endpoints/alias", "").await;
     assert_eq!(
         status, 404,
@@ -598,7 +634,15 @@ async fn endpoint_writes_reject_invalid_graphs_without_changing_runtime_or_stora
     );
     assert_eq!(registry.router().edges(), before.as_slice());
 
-    let create = serde_json::json!({"id":"consumer","strategy_config":{"type":"failover"},"routes":[edge_to("consumer","alias",None,0,jev_core::router::Sticky::None),edge_model("consumer","m1",5)]}).to_string();
+    let create = endpoint_create_payload(
+        "consumer",
+        serde_json::json!({"type":"failover"}),
+        vec![
+            edge_to("consumer", "alias", None, 0, jev_core::router::Sticky::None),
+            edge_model("consumer", "m1", 5),
+        ],
+    )
+    .to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &create).await;
     assert_eq!(status, 200, "{body}");
     let (status, body) = send(app.clone(), "DELETE", "/v1/admin/endpoints/stable", "").await;
@@ -661,17 +705,27 @@ async fn persisted_endpoint_route_is_restored_by_new_build_state() {
     let cfg = jev_switch_daemon::config::Config::load(&config_path).unwrap();
     let first_state = jev_switch_daemon::build_state(cfg, config_path.clone());
     let first_app = build_app(first_state);
-    let create = serde_json::json!({"id":"persistent-model","strategy_config":{"type":"failover"},"routes":[edge_model("persistent-model", "m1", 20)] }).to_string();
+    let create = endpoint_create_payload(
+        "persistent-model",
+        serde_json::json!({"type":"failover"}),
+        vec![edge_model("persistent-model", "m1", 20)],
+    )
+    .to_string();
     let (status, body) = send(first_app.clone(), "POST", "/v1/admin/endpoints", &create).await;
     assert_eq!(status, 200, "{body}");
     // Edit the published graph into a two-hop alias route and a direct fallback route.
-    let graph = serde_json::json!({"routes":[
-        edge_model("persistent-model", "m1", 10),
-        edge_to("persistent-model", "fallback-main", None, 7, jev_core::router::Sticky::Session),
-        edge_to("fallback-main", "fake", Some("m2"), 10, jev_core::router::Sticky::Session),
+    let graph = serde_json::json!({"operations":[
+        {"op":"create","route":edge_to("persistent-model", "fallback-main", None, 7, jev_core::router::Sticky::Session)},
+        {"op":"create","route":edge_to("fallback-main", "fake", Some("m2"), 10, jev_core::router::Sticky::Session)}
     ]})
     .to_string();
-    let (status, body) = send(first_app.clone(), "PUT", "/v1/admin/routes", &graph).await;
+    let (status, body) = send(
+        first_app.clone(),
+        "POST",
+        "/v1/admin/routes/transaction",
+        &graph,
+    )
+    .await;
     assert_eq!(status, 200, "{body}");
     let (status, body) = send(first_app.clone(), "GET", "/v1/admin/routes", "").await;
     assert_eq!(status, 200, "{body}");
@@ -769,7 +823,12 @@ async fn rejected_toml_import_keeps_database_runtime_and_restart_snapshot_unchan
     let db = state.db_conn.clone();
     let registry = state.registry.clone();
     let app = build_app(state);
-    let create = serde_json::json!({"id":"atomic-public","strategy_config":{"type":"failover"},"routes":[edge_model("atomic-public","m1",0)]}).to_string();
+    let create = endpoint_create_payload(
+        "atomic-public",
+        serde_json::json!({"type":"failover"}),
+        vec![edge_model("atomic-public", "m1", 0)],
+    )
+    .to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &create).await;
     assert_eq!(status, 200, "{body}");
     let saved = jev_switch_daemon::db::load_runtime_snapshot(&db.lock().unwrap())
@@ -945,7 +1004,12 @@ async fn endpoint_and_global_strategy_settings_drive_real_scheduler_paths() {
         edge_model("strategy-public", "m2", 1),
     ];
 
-    let race = serde_json::json!({"id":"strategy-public","strategy_config":{"type":"race","timeout_ms":1000},"routes":routes}).to_string();
+    let race = endpoint_create_payload(
+        "strategy-public",
+        serde_json::json!({"type":"race","timeout_ms":1000}),
+        routes,
+    )
+    .to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &race).await;
     assert_eq!(status, 200, "{body}");
     let (status, body) = send(app.clone(), "POST", "/v1/systemone", request).await;
@@ -1129,7 +1193,12 @@ async fn managed_tokens_enforce_roles_and_isolate_stats_and_events() {
         "list must never reveal secrets"
     );
 
-    let create = serde_json::json!({"id":"token-public","strategy_config":{"type":"failover"},"routes":[edge_model("token-public","m1",0)]}).to_string();
+    let create = endpoint_create_payload(
+        "token-public",
+        serde_json::json!({"type":"failover"}),
+        vec![edge_model("token-public", "m1", 0)],
+    )
+    .to_string();
     let (status, body) = send_bearer(
         app.clone(),
         "POST",

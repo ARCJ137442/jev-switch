@@ -55,7 +55,7 @@ fn noul_request(model: &str) -> JevRequest {
 /// wiremock 上的「Vercel 方言」200 响应（boolean + probability ——
 /// 走 VercelProtocol::incoming 归一为标准 JevResponse）。
 fn vercel_ok_template() -> ResponseTemplate {
-    ResponseTemplate::new(200).set_body_json(&serde_json::json!({
+    ResponseTemplate::new(200).set_body_json(serde_json::json!({
         "answers": { "q": { "type": "boolean", "probability": 0.73, "boolean": true } },
         "model": "typesafe-ai/jev"
     }))

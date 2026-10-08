@@ -20,6 +20,15 @@ use std::{
 use tokio::sync::Notify;
 use tower::ServiceExt;
 
+fn route_operations(routes: serde_json::Value) -> Vec<serde_json::Value> {
+    routes
+        .as_array()
+        .expect("route fixture array")
+        .iter()
+        .map(|route| serde_json::json!({"op":"create", "route":route}))
+        .collect()
+}
+
 struct Fake {
     calls: Arc<AtomicU32>,
 }
@@ -221,7 +230,7 @@ async fn endpoint_delete_keeps_token_history_with_foreign_keys_enabled_and_after
         "left": "history-public", "match": "exact", "right": "fake", "upstream_model": "m1",
         "priority": 0, "sticky": "none", "on_error": "next"
     }]);
-    let create = serde_json::json!({"id":"history-public","strategy_config":{"type":"failover"},"routes":routes}).to_string();
+    let create = serde_json::json!({"id":"history-public","strategy_config":{"type":"failover"},"route_operations":route_operations(routes)}).to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &create, None).await;
     assert_eq!(status, 200, "{body}");
 
@@ -309,26 +318,24 @@ async fn endpoint_delete_keeps_token_history_with_foreign_keys_enabled_and_after
     let original_log: serde_json::Value = {
         let conn = db.lock().unwrap();
         let mut stmt = conn.prepare("SELECT id,timestamp,endpoint_id,route_key,upstream_provider,upstream_model,success,latency_ms,error_message,token_id,cost_usd,upstream_calls,usage_json FROM call_logs ORDER BY id").unwrap();
-        let row = stmt
-            .query_row([], |row| {
-                Ok(serde_json::json!([
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                    row.get::<_, i64>(6)?,
-                    row.get::<_, i64>(7)?,
-                    row.get::<_, Option<String>>(8)?,
-                    row.get::<_, String>(9)?,
-                    row.get::<_, Option<f64>>(10)?,
-                    row.get::<_, Option<i64>>(11)?,
-                    row.get::<_, Option<String>>(12)?
-                ]))
-            })
-            .unwrap();
-        row
+        stmt.query_row([], |row| {
+            Ok(serde_json::json!([
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, String>(9)?,
+                row.get::<_, Option<f64>>(10)?,
+                row.get::<_, Option<i64>>(11)?,
+                row.get::<_, Option<String>>(12)?
+            ]))
+        })
+        .unwrap()
     };
     assert_eq!(original_log[0], event_id);
 
@@ -640,7 +647,7 @@ async fn accepted_inflight_call_is_persisted_if_endpoint_is_deleted_before_compl
     let db = state.db_conn.clone();
     let app = build_app(state);
     let routes = serde_json::json!([{"left":"inflight-public","match":"exact","right":"fake","upstream_model":"m1","priority":0,"sticky":"none","on_error":"next"}]);
-    let create = serde_json::json!({"id":"inflight-public","strategy_config":{"type":"failover"},"routes":routes}).to_string();
+    let create = serde_json::json!({"id":"inflight-public","strategy_config":{"type":"failover"},"route_operations":route_operations(routes)}).to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &create, None).await;
     assert_eq!(status, 200, "{body}");
 
@@ -742,7 +749,7 @@ async fn failed_call_history_persists_sanitized_route_trace_and_retry_decision()
         "left":"failed-trace-public", "match":"exact", "right":"fake", "upstream_model":"m1",
         "priority":0, "sticky":"none", "on_error":"fail"
     }]);
-    let create = serde_json::json!({"id":"failed-trace-public","strategy_config":{"type":"failover"},"routes":routes}).to_string();
+    let create = serde_json::json!({"id":"failed-trace-public","strategy_config":{"type":"failover"},"route_operations":route_operations(routes)}).to_string();
     let (status, body) = send(app.clone(), "POST", "/v1/admin/endpoints", &create, None).await;
     assert_eq!(status, 200, "{body}");
 

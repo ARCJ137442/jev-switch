@@ -351,7 +351,18 @@ async fn main() -> Result<()> {
             format,
             None,
         )?,
-        Command::Events { since, before, limit, view, endpoint_id, provider_id, from_ms, to_ms, success, request_id } => {
+        Command::Events {
+            since,
+            before,
+            limit,
+            view,
+            endpoint_id,
+            provider_id,
+            from_ms,
+            to_ms,
+            success,
+            request_id,
+        } => {
             if limit == 0 || limit > MAX_EVENT_LIMIT {
                 bail!("event limit must be between 1 and {MAX_EVENT_LIMIT}");
             }
@@ -361,13 +372,27 @@ async fn main() -> Result<()> {
                 query.append_pair("since", &since.to_string());
                 query.append_pair("limit", &limit.to_string());
                 query.append_pair("view", &view);
-                if let Some(value) = before { query.append_pair("before", &value.to_string()); }
-                if let Some(value) = endpoint_id { query.append_pair("endpoint_id", &value); }
-                if let Some(value) = provider_id { query.append_pair("provider_id", &value); }
-                if let Some(value) = from_ms { query.append_pair("from_ms", &value.to_string()); }
-                if let Some(value) = to_ms { query.append_pair("to_ms", &value.to_string()); }
-                if let Some(value) = success { query.append_pair("success", &value.to_string()); }
-                if let Some(value) = request_id { query.append_pair("request_id", &value); }
+                if let Some(value) = before {
+                    query.append_pair("before", &value.to_string());
+                }
+                if let Some(value) = endpoint_id {
+                    query.append_pair("endpoint_id", &value);
+                }
+                if let Some(value) = provider_id {
+                    query.append_pair("provider_id", &value);
+                }
+                if let Some(value) = from_ms {
+                    query.append_pair("from_ms", &value.to_string());
+                }
+                if let Some(value) = to_ms {
+                    query.append_pair("to_ms", &value.to_string());
+                }
+                if let Some(value) = success {
+                    query.append_pair("success", &value.to_string());
+                }
+                if let Some(value) = request_id {
+                    query.append_pair("request_id", &value);
+                }
             }
             let path = url.to_string();
             print_value(
